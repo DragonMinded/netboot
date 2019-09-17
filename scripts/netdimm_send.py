@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Triforce Netfirm Toolbox, put into the public domain.
 # Please attribute properly, but only if you want.
 import argparse
