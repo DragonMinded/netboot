@@ -8,7 +8,7 @@ import zlib
 
 from Crypto.Cipher import DES
 from contextlib import contextmanager
-from typing import Generator, List, Optional
+from typing import Callable, Generator, List, Optional
 
 
 class NetDimmException(Exception):
@@ -36,7 +36,7 @@ class NetDimm:
             raise NetDimmException(f"Invalid NetDimm version {version}")
         self.version: str = version or self.NETDIMM_VERSION_3_01
 
-    def send(self, data: bytes, key: Optional[bytes] = None) -> None:
+    def send(self, data: bytes, key: Optional[bytes] = None, progress_callback: Optional[Callable[[int, int], None]] = None) -> None:
         with self.__connection():
             # display "now loading..."
             self.__set_mode(0, 1)
@@ -49,7 +49,7 @@ class NetDimm:
                 self.__set_key_code(b"\x00" * 8)
 
             # uploads file. Also sets "dimm information" (file length and crc32)
-            self.__upload_file(data, key)
+            self.__upload_file(data, key, progress_callback or (lambda _cur, _tot: None))
 
     def reboot(self) -> None:
         with self.__connection():
@@ -93,8 +93,12 @@ class NetDimm:
         #       - all Type-3 triforces,
         #       - pre-type3 triforces jumpered to satellite mode.
         # - it *should* work on naomi and chihiro, but due to lack of hardware, i didn't try.
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.connect((self.ip, 10703))
+        try:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.connect((self.ip, 10703))
+        except Exception as e:
+            raise NetDimmException("Could not connect to NetDimm") from e
+
         try:
             yield
         finally:
@@ -119,7 +123,7 @@ class NetDimm:
     def __set_information(self, crc: int, length: int) -> None:
         self.__write(struct.pack("<IIII", 0x1900000C, crc & 0xFFFFFFFF, length, 0))
 
-    def __upload_file(self, data: bytes, key: Optional[bytes] = None) -> None:
+    def __upload_file(self, data: bytes, key: Optional[bytes], progress_callback: Optional[Callable[[int, int], None]]) -> None:
         # upload a file into DIMM memory, and optionally encrypt for the given key.
         # note that the re-encryption is obsoleted by just setting a zero-key, which
         # is a magic to disable the decryption.
@@ -135,6 +139,9 @@ class NetDimm:
 
         while True:
             self.__print("%08x %d%%\r" % (addr, int(float(addr * 100) / float(total))), newline=False)
+            if progress_callback:
+                progress_callback(addr, total)
+
             current = data[addr:(addr + 0x8000)]
             if not current:
                 break
@@ -144,6 +151,8 @@ class NetDimm:
             crc = zlib.crc32(current, crc)
             addr += len(current)
 
+        if addr != total:
+            raise Exception("Logic error!")
         self.__print("length: %08x" % addr)
         crc = ~crc
         self.__upload(addr, b"12345678", 1)
