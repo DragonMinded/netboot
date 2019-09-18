@@ -15,14 +15,14 @@ python3 -m pip install -r requirements.txt
 Invoke the script like so to see options:
 
 ```
-python3 netdimm_send.py --help
+python3 -m scripts.netdimm_send --help
 ```
 
 You can invoke it identically to the original triforcetools.py as well. Assuming your NetDimm is at 192.168.1.1, the following will load the ROM named `my_favorite_game.bin` from the current directory:
 
 
 ```
-python3 netdimm_send.py 192.168.1.1 my_favorite_game.bin
+python3 -m scripts.netdimm_send 192.168.1.1 my_favorite_game.bin
 ```
 
 ## Developing
