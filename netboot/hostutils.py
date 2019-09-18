@@ -75,13 +75,18 @@ class Host:
         except NetDimmException:
             return False
 
+    def tick(self) -> None:
+        """
+        Tick the host mechanism forward. When transferring, this will update
+        the status and progress.
+        """
+        self.__update_progress()
+
     @property
     def status(self) -> str:
         """
         Given a host, returns the status of any active transfer.
         """
-        self.__update_progress()
-
         if self.laststatus is not None:
             # If we have a status, that's the current deal
             return self.laststatus
@@ -96,6 +101,8 @@ class Host:
         """
         Given a host, returns the current progress (amount sent, total)
         of any active transfer. If a transfer is not active, throws.
+        Note that you should check the result of status before calling
+        progress, so you know whether or not an exception will be raised.
         """
         if self.proc is None or self.laststatus is not None:
             raise HostException("There is no active transfer")
