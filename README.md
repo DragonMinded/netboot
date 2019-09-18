@@ -12,7 +12,9 @@ python3 -m pip install -r requirements.txt
 
 ## Script Invocation
 
-Invoke the script like so to see options:
+### netdimm_send
+
+This script handles sending a single binary to a single cabinet, assuming it is on and ready for connection. Invoke the script like so to see options:
 
 ```
 python3 -m scripts.netdimm_send --help
@@ -20,21 +22,30 @@ python3 -m scripts.netdimm_send --help
 
 You can invoke it identically to the original triforcetools.py as well. Assuming your NetDimm is at 192.168.1.1, the following will load the ROM named `my_favorite_game.bin` from the current directory:
 
-
 ```
 python3 -m scripts.netdimm_send 192.168.1.1 my_favorite_game.bin
 ```
+
+### netdimm_ensure
+
+This script will monitor a cabinet, and send a single binary to that cabinet whenever it powers on. It will run indefinitely, waiting for the cabinet to power on before sending, and then waiting again for the cabinet to be powered off and back on again before sending again. Invoke the script like so to see options:
+
+```
+python3 -m scripts.netdimm_ensure --help
+```
+
+It works identically to netdimm_send, except for it only supports a zero PIC, and it tries its best to always ensure the cabinet has the right game. Run it just like you would netdimm_send.
 
 ## Developing
 
 The tools here are fully typed, and should be kept that way. To verify type hints, run the following:
 
 ```
-mypy --strict scripts/
+mypy --strict .
 ```
 
 The tools are also lint clean (save for line length lints which are useless drivel). To verify lint, run the following:
 
 ```
-flake8 --ignore E501 scripts/
+flake8 --ignore E501 .
 ```

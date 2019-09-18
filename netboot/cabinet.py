@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Optional, Tuple
 
 from netboot.hostutils import Host
 
@@ -9,8 +9,8 @@ class Cabinet:
     STATE_SEND_CURRENT_GAME = "send_game"
     STATE_WAIT_FOR_CABINET_POWER_OFF = "wait_power_off"
 
-    def __init__(self, ip: str, filename: str) -> None:
-        self.host: Host = Host(ip)
+    def __init__(self, ip: str, filename: str, target: Optional[str] = None, version: Optional[str] = None) -> None:
+        self.host: Host = Host(ip, target=target, version=version)
         self.__current_filename: str = filename
         self.__new_filename: str = filename
         self.__state: Tuple[str, int] = (self.STATE_STARTUP, 0)
