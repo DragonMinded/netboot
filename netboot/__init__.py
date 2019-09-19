@@ -1,6 +1,6 @@
 from netboot.netboot import NetDimm, NetDimmException
 from netboot.hostutils import Host, HostException
-from netboot.cabinet import Cabinet
+from netboot.cabinet import Cabinet, CabinetManager
 
 __all__ = [
     "NetDimm",
@@ -8,4 +8,5 @@ __all__ = [
     "Host",
     "HostException",
     "Cabinet",
+    "CabinetManager",
 ]
