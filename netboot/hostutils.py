@@ -1,8 +1,10 @@
 import multiprocessing
 import multiprocessing.synchronize
 import os
+import psutil  # type: ignore
 import queue
 import subprocess
+import sys
 from typing import Optional, Tuple, TYPE_CHECKING
 
 from netboot.netboot import NetDimm, NetDimmException
@@ -12,8 +14,11 @@ if TYPE_CHECKING:
     from typing import Any  # noqa
 
 
-def _send_file_to_host(host: str, filename: str, target: str, version: str, progress_queue: "multiprocessing.Queue[Tuple[str, Any]]") -> None:
+def _send_file_to_host(host: str, filename: str, target: str, version: str, parent_pid: int, progress_queue: "multiprocessing.Queue[Tuple[str, Any]]") -> None:
     def capture_progress(sent: int, total: int) -> None:
+        # See if we need to bail out since our parent disappeared
+        if not psutil.pid_exists(parent_pid):
+            sys.exit(1)
         progress_queue.put(("progress", (sent, total)))
 
     try:
@@ -160,7 +165,7 @@ class Host:
             self.__laststatus = None
 
             # Start the send
-            self.__proc = multiprocessing.Process(target=_send_file_to_host, args=(self.ip, filename, self.target, self.version, self.__queue))
+            self.__proc = multiprocessing.Process(target=_send_file_to_host, args=(self.ip, filename, self.target, self.version, os.getpid(), self.__queue))
             self.__proc.start()
 
             # Don't yield control back until we have got the first response from the process
