@@ -129,23 +129,27 @@ class CabinetManager:
         with open(yaml_file, "r") as fp:
             data = yaml.safe_load(fp)
 
+        if data is None:
+            # Assume this is an empty file
+            return CabinetManager([])
+
         if not isinstance(data, dict):
-            raise CabinetException("Invalid YAML file format, missing list of cabinets!")
+            raise CabinetException(f"Invalid YAML file format for {yaml_file}, missing list of cabinets!")
 
         cabinets: List[Cabinet] = []
         for ip, cab in data.items():
             try:
                 ip = str(ipaddress.IPv4Address(ip))
             except ValueError:
-                raise CabinetException(f"IP address {ip} is not valid!")
+                raise CabinetException("Invalid YAML file format for {yaml_file}, IP address {ip} is not valid!")
 
             if not isinstance(cab, dict):
-                raise CabinetException("Invalid YAML file format, missing cabinet details!")
+                raise CabinetException(f"Invalid YAML file format for {yaml_file}, missing cabinet details for {ip}!")
             for key in ["description", "filename"]:
                 if key not in cab:
-                    raise CabinetException(f"Invalid YAML file format, missing {key} for {ip}!")
+                    raise CabinetException(f"Invalid YAML file format for {yaml_file}, missing {key} for {ip}!")
             if not os.path.isfile(cab['filename']):
-                raise CabinetException(f"Invalid YAML file format, file {cab['filename']} for {ip} is not a file!")
+                raise CabinetException(f"Invalid YAML file format for {yaml_file}, file {cab['filename']} for {ip} is not a file!")
 
             cabinets.append(
                 Cabinet(

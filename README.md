@@ -41,7 +41,7 @@ It works identically to netdimm_send, except for it only supports a zero PIC, an
 The tools here are fully typed, and should be kept that way. To verify type hints, run the following:
 
 ```
-mypy --strict .
+mypy --strict -m netboot -m scripts
 ```
 
 The tools are also lint clean (save for line length lints which are useless drivel). To verify lint, run the following:
