@@ -36,6 +36,9 @@ class NetDimm:
             raise NetDimmException(f"Invalid NetDimm version {version}")
         self.version: str = version or self.NETDIMM_VERSION_3_01
 
+    def __repr__(self) -> str:
+        return f"NetDimm(ip={repr(self.ip)}, target={repr(self.target)}, version={repr(self.version)})"
+
     def send(self, data: bytes, key: Optional[bytes] = None, progress_callback: Optional[Callable[[int, int], None]] = None) -> None:
         with self.__connection():
             # display "now loading..."

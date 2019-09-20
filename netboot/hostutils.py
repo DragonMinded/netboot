@@ -56,6 +56,9 @@ class Host:
             raise NetDimmException(f"Invalid NetDimm version {version}")
         self.version: str = version or NetDimm.NETDIMM_VERSION_3_01
 
+    def __repr__(self) -> str:
+        return f"Host(ip={repr(self.ip)}, target={repr(self.target)}, version={repr(self.version)})"
+
     @property
     def alive(self) -> bool:
         """

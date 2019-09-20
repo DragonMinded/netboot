@@ -1,5 +1,8 @@
+import ipaddress
+import os.path
 import threading
 import time
+import yaml
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from netboot.hostutils import Host
@@ -22,6 +25,9 @@ class Cabinet:
         self.__current_filename: str = filename
         self.__new_filename: str = filename
         self.__state: Tuple[str, int] = (self.STATE_STARTUP, 0)
+
+    def __repr__(self) -> str:
+        return f"Cabinet(ip={repr(self.ip)}, description={repr(self.description)}, filename={repr(self.filename)}, target={repr(self.target)}, version={repr(self.version)})"
 
     @property
     def ip(self) -> str:
@@ -115,6 +121,61 @@ class CabinetManager:
         self.__thread.setDaemon(True)
         self.__thread.start()
 
+    def __repr__(self) -> str:
+        return f"CabinetManager([{', '.join(repr(cab) for cab in self.cabinets)}])"
+
+    @staticmethod
+    def from_yaml(yaml_file: str) -> "CabinetManager":
+        with open(yaml_file, "r") as fp:
+            data = yaml.safe_load(fp)
+
+        if not isinstance(data, dict):
+            raise CabinetException("Invalid YAML file format, missing list of cabinets!")
+
+        cabinets: List[Cabinet] = []
+        for ip, cab in data.items():
+            try:
+                ip = str(ipaddress.IPv4Address(ip))
+            except ValueError:
+                raise CabinetException(f"IP address {ip} is not valid!")
+
+            if not isinstance(cab, dict):
+                raise CabinetException("Invalid YAML file format, missing cabinet details!")
+            for key in ["description", "filename"]:
+                if key not in cab:
+                    raise CabinetException(f"Invalid YAML file format, missing {key} for {ip}!")
+            if not os.path.isfile(cab['filename']):
+                raise CabinetException(f"Invalid YAML file format, file {cab['filename']} for {ip} is not a file!")
+
+            cabinets.append(
+                Cabinet(
+                    ip=ip,
+                    description=str(cab['description']),
+                    filename=str(cab['filename']),
+                    target=str(cab['target']) if 'target' in cab else None,
+                    version=str(cab['version']) if 'version' in cab else None,
+                )
+            )
+
+        return CabinetManager(cabinets)
+
+    def to_yaml(self, yaml_file: str) -> None:
+        data: Dict[str, Dict[str, str]] = {}
+
+        with self.__lock:
+            cabinets: List[Cabinet] = sorted([cab for _, cab in self.__cabinets.items()], key=lambda cab: cab.ip)
+
+        for cab in cabinets:
+            data[cab.ip] = {
+                'description': cab.description,
+                'target': cab.target,
+                'version': cab.version,
+                'filename': cab.filename,
+            }
+
+        with open(yaml_file, "w") as fp:
+            yaml.dump(data, fp)
+
     def __poll_thread(self) -> None:
         while True:
             with self.__lock:
@@ -128,7 +189,7 @@ class CabinetManager:
     @property
     def cabinets(self) -> List[Cabinet]:
         with self.__lock:
-            return [cab for _, cab in self.__cabinets.items()]
+            return sorted([cab for _, cab in self.__cabinets.items()], key=lambda cab: cab.ip)
 
     def cabinet(self, ip: str) -> Cabinet:
         with self.__lock:

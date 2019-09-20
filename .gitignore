@@ -2,3 +2,4 @@
 *.swo
 .mypy_cache/
 __pycache__/
+*.yaml
