@@ -20,10 +20,10 @@ class NetDimm:
     TARGET_NAOMI = "naomi"
     TARGET_TRIFORCE = "triforce"
 
-    NETDIMM_VERSION_1_07 = "1.07"
-    NETDIMM_VERSION_2_03 = "2.03"
-    NETDIMM_VERSION_2_15 = "2.15"
-    NETDIMM_VERSION_3_01 = "3.01"
+    TARGET_VERSION_1_07 = "1.07"
+    TARGET_VERSION_2_03 = "2.03"
+    TARGET_VERSION_2_15 = "2.15"
+    TARGET_VERSION_3_01 = "3.01"
 
     def __init__(self, ip: str, target: Optional[str] = None, version: Optional[str] = None, quiet: bool = False) -> None:
         self.ip: str = ip
@@ -32,9 +32,9 @@ class NetDimm:
         if target is not None and target not in [self.TARGET_CHIHIRO, self.TARGET_NAOMI, self.TARGET_TRIFORCE]:
             raise NetDimmException(f"Invalid target platform {target}")
         self.target: str = target or self.TARGET_NAOMI
-        if version is not None and version not in [self.NETDIMM_VERSION_1_07, self.NETDIMM_VERSION_2_03, self.NETDIMM_VERSION_2_15, self.NETDIMM_VERSION_3_01]:
+        if version is not None and version not in [self.TARGET_VERSION_1_07, self.TARGET_VERSION_2_03, self.TARGET_VERSION_2_15, self.TARGET_VERSION_3_01]:
             raise NetDimmException(f"Invalid NetDimm version {version}")
-        self.version: str = version or self.NETDIMM_VERSION_3_01
+        self.version: str = version or self.TARGET_VERSION_3_01
 
     def __repr__(self) -> str:
         return f"NetDimm(ip={repr(self.ip)}, target={repr(self.target)}, version={repr(self.version)})"
@@ -177,13 +177,13 @@ class NetDimm:
         # - look for string: "CLogo::CheckBootId: skipped."
         # - binary-search for lower 16bit of address
         addr = {
-            self.NETDIMM_VERSION_1_07: 0x8000d8a0,
-            self.NETDIMM_VERSION_2_03: 0x8000CC6C,
-            self.NETDIMM_VERSION_2_15: 0x8000CC6C,
-            self.NETDIMM_VERSION_3_01: 0x8000dc5c,
+            self.TARGET_VERSION_1_07: 0x8000d8a0,
+            self.TARGET_VERSION_2_03: 0x8000CC6C,
+            self.TARGET_VERSION_2_15: 0x8000CC6C,
+            self.TARGET_VERSION_3_01: 0x8000dc5c,
         }[self.version]
 
-        if self.version == self.NETDIMM_VERSION_3_01:
+        if self.version == self.TARGET_VERSION_3_01:
             self.__poke4(addr + 0, 0x4800001C)
         else:
             self.__poke4(addr + 0, 0x4e800020)

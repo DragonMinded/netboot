@@ -60,9 +60,9 @@ class Host:
         if target is not None and target not in [NetDimm.TARGET_CHIHIRO, NetDimm.TARGET_NAOMI, NetDimm.TARGET_TRIFORCE]:
             raise NetDimmException(f"Invalid target platform {target}")
         self.target: str = target or NetDimm.TARGET_NAOMI
-        if version is not None and version not in [NetDimm.NETDIMM_VERSION_1_07, NetDimm.NETDIMM_VERSION_2_03, NetDimm.NETDIMM_VERSION_2_15, NetDimm.NETDIMM_VERSION_3_01]:
+        if version is not None and version not in [NetDimm.TARGET_VERSION_1_07, NetDimm.TARGET_VERSION_2_03, NetDimm.TARGET_VERSION_2_15, NetDimm.TARGET_VERSION_3_01]:
             raise NetDimmException(f"Invalid NetDimm version {version}")
-        self.version: str = version or NetDimm.NETDIMM_VERSION_3_01
+        self.version: str = version or NetDimm.TARGET_VERSION_3_01
 
     def __repr__(self) -> str:
         return f"Host(ip={repr(self.ip)}, target={repr(self.target)}, version={repr(self.version)})"
