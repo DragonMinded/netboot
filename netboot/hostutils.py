@@ -5,6 +5,8 @@ import psutil  # type: ignore
 import queue
 import subprocess
 import sys
+import threading
+import time
 from typing import Optional, Tuple, TYPE_CHECKING
 
 from netboot.netboot import NetDimm, NetDimmException
@@ -43,11 +45,15 @@ class Host:
 
     def __init__(self, ip: str, target: Optional[str] = None, version: Optional[str] = None) -> None:
         self.ip: str = ip
+        self.alive: bool = False
         self.__queue: "multiprocessing.Queue[Tuple[str, Any]]" = multiprocessing.Queue()
         self.__lock: multiprocessing.synchronize.Lock = multiprocessing.Lock()
         self.__proc: Optional[multiprocessing.Process] = None
         self.__lastprogress: Tuple[int, int] = (-1, -1)
         self.__laststatus: Optional[str] = None
+        self.__thread: threading.Thread = threading.Thread(target=self.__poll_thread)
+        self.__thread.setDaemon(True)
+        self.__thread.start()
 
         if target is not None and target not in [NetDimm.TARGET_CHIHIRO, NetDimm.TARGET_NAOMI, NetDimm.TARGET_TRIFORCE]:
             raise NetDimmException(f"Invalid target platform {target}")
@@ -59,20 +65,19 @@ class Host:
     def __repr__(self) -> str:
         return f"Host(ip={repr(self.ip)}, target={repr(self.target)}, version={repr(self.version)})"
 
-    @property
-    def alive(self) -> bool:
-        """
-        Given a host, returns True if the host is alive, or False if the
-        host is not replying to ping.
-        """
+    def __poll_thread(self) -> None:
+        while True:
+            with open(os.devnull, 'w') as DEVNULL:
+                try:
+                    subprocess.check_call(["ping", "-c1", "-W1", self.ip], stdout=DEVNULL, stderr=DEVNULL)
+                    alive = True
+                except subprocess.CalledProcessError:
+                    alive = False
 
-        # No need to lock here, since this is its own thing that doesn't interact.
-        with open(os.devnull, 'w') as DEVNULL:
-            try:
-                subprocess.check_call(["ping", "-c1", "-W1", self.ip], stdout=DEVNULL, stderr=DEVNULL)
-                return True
-            except subprocess.CalledProcessError:
-                return False
+            with self.__lock:
+                self.alive = alive
+
+            time.sleep(1)
 
     def reboot(self) -> bool:
         """
