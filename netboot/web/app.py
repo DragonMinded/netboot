@@ -4,11 +4,17 @@ import traceback
 from functools import wraps
 from typing import Callable, Dict, Any
 
-from flask import Flask, Response, make_response, jsonify as flask_jsonify
+from flask import Flask, Response, render_template, make_response, jsonify as flask_jsonify
 from netboot import Cabinet, CabinetManager, DirectoryManager
 
 
-app = Flask(__name__)
+current_directory: str = os.path.abspath(os.path.dirname(__file__))
+
+app = Flask(
+    __name__,
+    static_folder=os.path.join(current_directory, 'static'),
+    template_folder=os.path.join(current_directory, 'templates'),
+)
 
 
 def jsonify(func: Callable) -> Callable:
@@ -27,7 +33,9 @@ def jsonify(func: Callable) -> Callable:
 
 @app.route('/')
 def home() -> Response:
-    return make_response("Hello, world!", 200)
+    manager = app.config['CabinetManager']
+    cabinets = manager.cabinets
+    return make_response(render_template('index.html', cabinets=[cabinet_to_dict(cab) for cab in cabinets]), 200)
 
 
 def cabinet_to_dict(cab: Cabinet) -> Dict[str, str]:
