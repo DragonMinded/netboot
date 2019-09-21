@@ -41,7 +41,11 @@ class NetDimm:
 
     def send(self, data: bytes, key: Optional[bytes] = None, progress_callback: Optional[Callable[[int, int], None]] = None) -> None:
         with self.__connection():
-            # display "now loading..."
+            # First, signal back to calling code that we've started
+            if progress_callback:
+                progress_callback(0, len(data))
+
+            # Display "now loading..." on the cabinet screen
             self.__set_mode(0, 1)
 
             if key:

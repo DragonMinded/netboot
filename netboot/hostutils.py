@@ -43,6 +43,8 @@ class Host:
     STATUS_COMPLETED = "completed"
     STATUS_FAILED = "failed"
 
+    SUCCESS_SECONDS = 3
+
     def __init__(self, ip: str, target: Optional[str] = None, version: Optional[str] = None) -> None:
         self.ip: str = ip
         self.alive: bool = False
@@ -66,18 +68,30 @@ class Host:
         return f"Host(ip={repr(self.ip)}, target={repr(self.target)}, version={repr(self.version)})"
 
     def __poll_thread(self) -> None:
+        success_count: int = 0
+
         while True:
-            with open(os.devnull, 'w') as DEVNULL:
-                try:
-                    subprocess.check_call(["ping", "-c1", "-W1", self.ip], stdout=DEVNULL, stderr=DEVNULL)
-                    alive = True
-                except subprocess.CalledProcessError:
-                    alive = False
+            # Dont bother if we're actively sending
+            if self.status != self.STATUS_TRANSFERRING:
+                with open(os.devnull, 'w') as DEVNULL:
+                    try:
+                        subprocess.check_call(["ping", "-c1", "-W1", self.ip], stdout=DEVNULL, stderr=DEVNULL)
+                        alive = True
+                    except subprocess.CalledProcessError:
+                        alive = False
 
-            with self.__lock:
-                self.alive = alive
+                # Only claim up if it response to a number of pings.
+                if alive:
+                    success_count += 1
+                    if success_count >= self.SUCCESS_SECONDS:
+                        with self.__lock:
+                            self.alive = True
+                else:
+                    success_count = 0
+                    with self.__lock:
+                        self.alive = False
 
-            time.sleep(1)
+            time.sleep(2 if success_count >= self.SUCCESS_SECONDS else 1)
 
     def reboot(self) -> bool:
         """
