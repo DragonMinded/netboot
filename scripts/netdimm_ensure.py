@@ -37,7 +37,7 @@ def main() -> int:
     args = parser.parse_args()
 
     print(f"managing {args.ip} to ensure {args.image} is always loaded")
-    cabinet = Cabinet(args.ip, args.image, target=args.target, version=args.version)
+    cabinet = Cabinet(args.ip, "No description.", args.image, target=args.target, version=args.version)
     while True:
         # Tick the state machine, display progress
         cabinet.tick()
