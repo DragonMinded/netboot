@@ -1,6 +1,9 @@
+import os
+import os.path
 import threading
+import zlib
 
-from typing import List, Sequence
+from typing import Dict, List, Mapping, Sequence
 
 
 class DirectoryException(Exception):
@@ -8,11 +11,47 @@ class DirectoryException(Exception):
 
 
 class DirectoryManager:
-    def __init__(self, directories: Sequence[str]) -> None:
+    def __init__(self, directories: Sequence[str], checksums: Mapping[str, str]) -> None:
+        self.__checksums: Dict[str, str] = dict(checksums)
         self.__directories = list(directories)
+        self.__names: Dict[str, str] = {}
         self.__lock: threading.Lock = threading.Lock()
 
     @property
     def directories(self) -> List[str]:
         with self.__lock:
             return [d for d in self.__directories]
+
+    @property
+    def checksums(self) -> Dict[str, str]:
+        with self.__lock:
+            return self.__checksums
+
+    def game_name(self, filename: str) -> str:
+        with self.__lock:
+            if filename in self.__names:
+                return self.__names[filename]
+
+            # Grab enough of the header for a match
+            with open(filename, "rb") as fp:
+                data = fp.read(0x1000)
+                length = os.fstat(fp.fileno()).st_size
+
+            # Now, check and see if we have a checksum match
+            crc = zlib.crc32(data, 0)
+            checksum = f"{crc}-{length}"
+            if checksum in self.__checksums:
+                self.__names[filename] = self.__checksums[checksum]
+                return self.__names[filename]
+
+            # Now, see if we can figure out from the header
+            if data[0:5] == b'NAOMI':
+                # We can!
+                self.__names[filename] = data[0xD0:0xF0].decode('ascii').strip()
+                self.__checksums[checksum] = self.__names[filename]
+                return self.__names[filename]
+
+            # Finally, fall back to filename, getting rid of extensions and underscores
+            self.__names[filename] = os.path.splitext(os.path.basename(filename))[0].replace('_', ' ')
+            self.__checksums[checksum] = self.__names[filename]
+            return self.__names[filename]

@@ -15,7 +15,7 @@ Vue.component('cabinet', {
         <div class='cabinet'>
             <dl>
                 <dt>Description</dt><dd>{{ cabinet.description }}</dd>
-                <dt>Game</dt><dd>{{ cabinet.filename }}</dd>
+                <dt>Game</dt><dd>{{ cabinet.game }}</dd>
                 <dt>Status</dt><dd><state v-bind:status="cabinet.status" v-bind:progress="cabinet.progress"></state></dd>
             </dl>
         </div>

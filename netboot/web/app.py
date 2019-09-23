@@ -33,18 +33,18 @@ def jsonify(func: Callable) -> Callable:
 
 @app.route('/')
 def home() -> Response:
-    manager = app.config['CabinetManager']
-    cabinets = manager.cabinets
-    return make_response(render_template('index.html', cabinets=[cabinet_to_dict(cab) for cab in cabinets]), 200)
+    cabman = app.config['CabinetManager']
+    dirman = app.config['DirectoryManager']
+    return make_response(render_template('index.html', cabinets=[cabinet_to_dict(cab, dirman) for cab in cabman.cabinets]), 200)
 
 
-def cabinet_to_dict(cab: Cabinet) -> Dict[str, str]:
+def cabinet_to_dict(cab: Cabinet, dirmanager: DirectoryManager) -> Dict[str, str]:
     status, progress = cab.state
 
     return {
         'ip': cab.ip,
         'description': cab.description,
-        'filename': cab.filename,
+        'game': dirmanager.game_name(cab.filename),
         'target': cab.target,
         'version': cab.version,
         'status': status,
@@ -55,10 +55,10 @@ def cabinet_to_dict(cab: Cabinet) -> Dict[str, str]:
 @app.route('/cabinets')
 @jsonify
 def cabinets() -> Dict[str, Any]:
-    manager = app.config['CabinetManager']
-    cabinets = manager.cabinets
+    cabman = app.config['CabinetManager']
+    dirman = app.config['DirectoryManager']
     return {
-        'cabinets': [cabinet_to_dict(cab) for cab in cabinets],
+        'cabinets': [cabinet_to_dict(cab, dirman) for cab in cabman.cabinets],
     }
 
 
@@ -102,7 +102,12 @@ def spawn_app(config_file: str) -> Flask:
         if not os.path.isdir(directory):
             raise AppException(f"Invalid YAML file format for {config_file}, {directory} is not a directory!")
 
+    if 'filenames' in data and isinstance(data, dict):
+        checksums = data['filenames']
+    else:
+        checksums = {}
+
     app.config['CabinetManager'] = CabinetManager.from_yaml(cabinet_file)
-    app.config['DirectoryManager'] = DirectoryManager(directories)
+    app.config['DirectoryManager'] = DirectoryManager(directories, checksums)
 
     return app
