@@ -18,8 +18,18 @@ class Cabinet:
     STATE_SEND_CURRENT_GAME = "send_game"
     STATE_WAIT_FOR_CABINET_POWER_OFF = "wait_power_off"
 
-    def __init__(self, ip: str, description: str, filename: str, target: Optional[str] = None, version: Optional[str] = None) -> None:
+    REGION_UNKNOWN = "japan"
+    REGION_JAPAN = "japan"
+    REGION_USA = "usa"
+    REGION_EXPORT = "export"
+    REGION_KOREA = "korea"
+    REGION_AUSTRALIA = "australia"
+
+    def __init__(self, ip: str, region: str, description: str, filename: str, target: Optional[str] = None, version: Optional[str] = None) -> None:
+        if region not in [self.REGION_JAPAN, self.REGION_USA, self.REGION_EXPORT, self.REGION_KOREA, self.REGION_AUSTRALIA]:
+            raise CabinetException(f"Unrecognized region {region}!")
         self.description: str = description
+        self.region: str = region
         self.__host: Host = Host(ip, target=target, version=version)
         self.__lock: threading.Lock = threading.Lock()
         self.__current_filename: str = filename
@@ -155,6 +165,7 @@ class CabinetManager:
                 Cabinet(
                     ip=ip,
                     description=str(cab['description']),
+                    region=str(cab['region']).lower(),
                     filename=str(cab['filename']),
                     target=str(cab['target']) if 'target' in cab else None,
                     version=str(cab['version']) if 'version' in cab else None,
@@ -172,6 +183,7 @@ class CabinetManager:
         for cab in cabinets:
             data[cab.ip] = {
                 'description': cab.description,
+                'region': cab.region,
                 'target': cab.target,
                 'version': cab.version,
                 'filename': cab.filename,

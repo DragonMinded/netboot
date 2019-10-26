@@ -44,7 +44,7 @@ def cabinet_to_dict(cab: Cabinet, dirmanager: DirectoryManager) -> Dict[str, str
     return {
         'ip': cab.ip,
         'description': cab.description,
-        'game': dirmanager.game_name(cab.filename),
+        'game': dirmanager.game_name(cab.filename, cab.region),
         'target': cab.target,
         'version': cab.version,
         'status': status,

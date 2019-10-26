@@ -4,6 +4,7 @@ import threading
 import zlib
 
 from typing import Dict, List, Mapping, Sequence
+from naomi.rom import NaomiRom
 
 
 class DirectoryException(Exception):
@@ -27,7 +28,7 @@ class DirectoryManager:
         with self.__lock:
             return self.__checksums
 
-    def game_name(self, filename: str) -> str:
+    def game_name(self, filename: str, region: str) -> str:
         with self.__lock:
             if filename in self.__names:
                 return self.__names[filename]
@@ -45,9 +46,17 @@ class DirectoryManager:
                 return self.__names[filename]
 
             # Now, see if we can figure out from the header
-            if data[0:5] == b'NAOMI':
-                # We can!
-                self.__names[filename] = data[0xD0:0xF0].decode('ascii').strip()
+            rom = NaomiRom(data)
+            if rom.valid:
+                # Arbitrarily choose USA region as default
+                naomi_region = {
+                    'japan': NaomiRom.REGION_JAPAN,
+                    'usa': NaomiRom.REGION_USA,
+                    'export': NaomiRom.REGION_EXPORT,
+                    'korea': NaomiRom.REGION_KOREA,
+                    'australia': NaomiRom.REGION_AUSTRALIA,
+                }.get(region.lower(), NaomiRom.REGION_USA)
+                self.__names[filename] = rom.names[naomi_region]
                 self.__checksums[checksum] = self.__names[filename]
                 return self.__names[filename]
 
