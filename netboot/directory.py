@@ -4,7 +4,7 @@ import threading
 import zlib
 
 from typing import Dict, List, Mapping, Sequence
-from naomi.rom import NaomiRom
+from naomi import NaomiRom
 
 
 class DirectoryException(Exception):
