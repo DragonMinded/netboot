@@ -1,0 +1,8 @@
+#! /bin/bash
+set -e
+
+sh4-linux-gnu-as --isa sh4 -o write_eeprom.o write_eeprom.s
+sh4-linux-gnu-as --isa sh4 -o springboard.o springboard.s
+sh4-linux-gnu-ld -e start --oformat binary -o write_eeprom.bin write_eeprom.o
+sh4-linux-gnu-ld -e start --oformat binary -o springboard.bin springboard.o
+rm -rf write_eeprom.o springboard.o
