@@ -134,7 +134,12 @@ class Binary:
         reverse: bool = False,
     ) -> bytes:
         # First, grab the differences
-        differences: List[Tuple[int, bytes, bytes]] = Binary._gather_differences(patches, reverse)
+        differences: List[Tuple[int, bytes, bytes]] = sorted(
+            Binary._gather_differences(patches, reverse),
+            key=lambda diff: diff[0],
+        )
+        chunks: List[bytes] = []
+        last_patch_end: int = 0
 
         # Now, apply the changes to the binary data
         for diff in differences:
@@ -151,10 +156,14 @@ class Binary:
                     f"but found {Binary._hex(binary[offset])}!"
                 )
 
-            binary = binary[:offset] + new + binary[(offset + 1):]
+            if last_patch_end < offset:
+                chunks.append(binary[last_patch_end:offset])
+            chunks.append(new)
+            last_patch_end = offset + 1
 
         # Return the new data!
-        return binary
+        chunks.append(binary[last_patch_end:])
+        return b"".join(chunks)
 
     @staticmethod
     def can_patch(
