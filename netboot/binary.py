@@ -7,6 +7,8 @@ class BinaryException(Exception):
 
 class Binary:
 
+    CHUNK_SIZE = 1024
+
     @staticmethod
     def _hex(val: int) -> str:
         out = hex(val)[2:]
@@ -23,12 +25,17 @@ class Binary:
 
         # First, get the list of differences
         differences: List[Tuple[int, bytes, bytes]] = []
-        for i in range(binlength):
-            byte1 = bin1[i]
-            byte2 = bin2[i]
 
-            if byte1 != byte2:
-                differences.append((i, bytes([byte1]), bytes([byte2])))
+        # Chunk the differences, assuming files are usually about the same,
+        # for a massive speed boost.
+        for offset in range(0, binlength, Binary.CHUNK_SIZE):
+            if bin1[offset:(offset + Binary.CHUNK_SIZE)] != bin2[offset:(offset + Binary.CHUNK_SIZE)]:
+                for i in range(Binary.CHUNK_SIZE):
+                    byte1 = bin1[offset + i]
+                    byte2 = bin2[offset + i]
+
+                    if byte1 != byte2:
+                        differences.append((offset + i, bytes([byte1]), bytes([byte2])))
 
         # Don't bother with any combination crap if we have nothing to do
         if not differences:
@@ -138,7 +145,7 @@ class Binary:
                     f"Patch offset {Binary._hex(offset)} is beyond the end of "
                     f"the binary!"
                 )
-            if binary[offset:(offset + 1)] != '*' and binary[offset:(offset + 1)] != old:
+            if old != b'*' and binary[offset:(offset + 1)] != old:
                 raise BinaryException(
                     f"Patch offset {Binary._hex(offset)} expecting {Binary._hex(old[0])} "
                     f"but found {Binary._hex(binary[offset])}!"
@@ -169,7 +176,7 @@ class Binary:
                     f"Patch offset {Binary._hex(offset)} is beyond the end of "
                     f"the binary!"
                 )
-            if binary[offset:(offset + 1)] != '*' and binary[offset:(offset + 1)] != old:
+            if old != b'*' and binary[offset:(offset + 1)] != old:
                 return (
                     False,
                     f"Patch offset {Binary._hex(offset)} expecting {Binary._hex(old[0])} "
