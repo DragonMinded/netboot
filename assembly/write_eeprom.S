@@ -104,6 +104,40 @@ add #16,pMapleCmdBuf
 mov pMapleBuffer,pMapleRegs
 add #-4,pMapleRegs
 mov.l @pMapleRegs,pMapleRegs
+# Initialize the maple bus with things we don't need to write again
+mov pMapleRegs,r0
+# Disable maple access while initializing
+mov #0,r15
+mov.l r15,@(20,r0)
+# We can't index at 0x80 or above with mov.l, so lets get a temporary location
+mov #128,r15
+extu.b r15,r15
+add r15,r0
+# Reset the hardware with sequence seen in multiple maple implementations.
+mov #97,r15
+shll8 r15
+shll16 r15
+mov #85,r14
+shll16 r14
+or r14,r15
+mov #64,r14
+shll8 r14
+or r14,r15
+mov #116,r14
+or r14,r15
+mov.l r15,@(12,r0)
+# Set up the timing control register the same as the Naomi BIOS
+mov #58,r15
+shll8 r15
+mov #152,r14
+extu.b r14,r14
+or r14,r15
+shll16 r15
+mov.l r15,@r0
+# Disable hardware trigger, we will trigger using 0x10 register
+mov pMapleRegs,r0
+mov #0,r15
+mov.l r15,@(16,r0)
 rts
 nop
 
@@ -133,14 +167,18 @@ and pMapleBuffer,r11
 # Update the command buffer with its own location for receiving the response.
 mov.l r11,@(4,pMapleBuffer)
 
-# Start the copy by writing the correct values to the correct registers
+# Prepare to kick off an actual maple bus write to trigger eeprom update.
 mov pMapleRegs,r0
-mov #0,r15
-# Disable hardware trigger, we will trigger using 0x10 register
-mov.l r15,@(16,r0)
+mov #1,r15
+
+# Wait until we can safely start transferring data (any previous DMA is done)
+wait_spin:
+mov.l @(24,r0),r14
+tst r15,r14
+bf wait_spin
+
 # Set the DMA pointer register to our physical address.
 mov.l r11,@(4,r0)
-mov #1,r15
 # Set the maple bus device enabled register.
 mov.l r15,@(20,r0)
 # Set the maple bus DMA start transfer register to kick off the write.
@@ -148,12 +186,10 @@ mov.l r15,@(24,r0)
 
 # Spin until DMA is finished (DMA start transfer register will go from 1 back to 0)
 write_spin:
-mov.l @(24,r0),r11
-tst r15,r11
+mov.l @(24,r0),r14
+tst r15,r14
 bf write_spin
 rts
-nop
-# Extra nop here so that the send_data jump below is aligned (ugh...)
 nop
 
 # Copy r2 32-bit chunks from source (r0) to destination (r1)
