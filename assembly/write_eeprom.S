@@ -1,8 +1,10 @@
 # r8  - Address of the maple bus command/response buffer.
 # r9  - Maple bus DMA buffer register address.
-# r10 - Maple bus device enable register address.
-# r11 - Maple bus DMA start transfer/status register address.
-# r12 - Address of eeprom write buffer.
+# r10 - Address of eeprom write buffer.
+
+#define pMapleBuffer r8
+#define pMapleRegs r9
+#define pMapleCmdBuf r10
 
 .section .text
 .globl start
@@ -17,11 +19,11 @@ bra send_data
 # Branch delay slot
 nop
 
-# Dummy bytes for alignment purposes
-.byte 0x00
-.byte 0x00
-.byte 0x00
-.byte 0x00
+# Mask for converting virtual to physical address.
+.byte 0xFF
+.byte 0xFF
+.byte 0xFF
+.byte 0x0F
 
 # The location where we are jumping back to once we finish executing.
 .byte 0xBB
@@ -51,7 +53,7 @@ nop
 .byte 0x5F
 .byte 0x00
 
-# Maple transfer descriptor, will be filled in at runtime, r8 points here
+# Maple transfer descriptor, will be filled in at runtime, pMapleBuffer points here
 .byte 0xFF
 .byte 0xFF
 .byte 0xFF
@@ -90,26 +92,18 @@ nop
 .byte 0xFF
 
 register_setup:
-# Grab the current PC and offset it to get the maple bus command buffer, holding it in R8
+# Grab the current PC and offset it to get the maple bus command buffer
 mova @(8,pc),r0
-mov r0,r8
-add #-40,r8
+mov r0,pMapleBuffer
+add #-40,pMapleBuffer
 # Set up the eeprom write buffer
-mov r8,r12
-add #16,r12
+mov pMapleBuffer,pMapleCmdBuf
+add #16,pMapleCmdBuf
 
-# Offset a bit more to grab the base offset for the maple bus registers, holding that in R9
-mov r8,r9
-add #-4,r9
-mov.l @r9,r9
-# Update R10 to be the DMA enable register
-mov r9,r10
-add #20,r10
-# Update R11 to be the DMA start transfer register
-mov r9,r11
-add #24,r11
-# Update R9 to be the DMA source register
-add #4,r9
+# Offset a bit more to grab the base offset for the maple bus registers
+mov pMapleBuffer,pMapleRegs
+add #-4,pMapleRegs
+mov.l @pMapleRegs,pMapleRegs
 rts
 nop
 
@@ -117,36 +111,49 @@ nop
 # pointed at by r0.
 write_eeprom:
 # Copy the eeprom write command headers to the maple buffer
-mov r8,r15
+mov pMapleBuffer,r15
 add #-16,r15
 mov.l @r15,r14
-mov.l r14,@r8
+mov.l r14,@pMapleBuffer
 mov #5,r14
-mov.b r14,@r8
+mov.b r14,@pMapleBuffer
 add #4,r15
 mov.l @r15,r14
-mov.l r14,@(8,r8)
+mov.l r14,@(8,pMapleBuffer)
 add #4,r15
 mov.l @r15,r14
-mov.l r14,@(12,r8)
+mov.l r14,@(12,pMapleBuffer)
 # Update the command with the write offset
-mov.b r0,@(13,r8)
+mov.b r0,@(13,pMapleBuffer)
+# Mask off the upper bits of our address/response so that it is always physical.
+mov pMapleBuffer,r11
+add #-24,r11
+mov.l @r11,r11
+and pMapleBuffer,r11
 # Update the command buffer with its own location for receiving the response.
-mov.l r8,@(4,r8)
+mov.l r11,@(4,pMapleBuffer)
 
 # Start the copy by writing the correct values to the correct registers
-mov.l r8,@r9
+mov pMapleRegs,r0
+mov #0,r15
+# Disable hardware trigger, we will trigger using 0x10 register
+mov.l r15,@(16,r0)
+# Set the DMA pointer register to our physical address.
+mov.l r11,@(4,r0)
 mov #1,r15
-mov.l r15,@r10
-mov.l r15,@r11
+# Set the maple bus device enabled register.
+mov.l r15,@(20,r0)
+# Set the maple bus DMA start transfer register to kick off the write.
+mov.l r15,@(24,r0)
 
 # Spin until DMA is finished (DMA start transfer register will go from 1 back to 0)
 write_spin:
-mov #1,r14
-mov.l @r11,r15
-tst r14,r15
+mov.l @(24,r0),r11
+tst r15,r11
 bf write_spin
 rts
+nop
+# Extra nop here so that the send_data jump below is aligned (ugh...)
 nop
 
 # Copy r2 32-bit chunks from source (r0) to destination (r1)
@@ -258,7 +265,7 @@ mov #0,r7
 patch_loop:
 # Copy chunk of data to be written
 mov r5,r0
-mov r12,r1
+mov pMapleCmdBuf,r1
 mov #4,r2
 bsr memcpy
 add #16,r5
@@ -279,7 +286,7 @@ mov #5,r6
 wipe_loop:
 # Wipe chunk of data to be written
 mov #255,r0
-mov r12,r1
+mov pMapleCmdBuf,r1
 bsr memset
 mov #4,r2
 # Set up and copy those bytes to eeprom
@@ -294,7 +301,7 @@ dt r6
 bf wipe_loop
 
 # Get address of where we need to jump back
-mov r8,r6
+mov pMapleBuffer,r6
 add #-20,r6
 mov.l @r6,r6
 
