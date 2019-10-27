@@ -289,10 +289,14 @@ nop
 .byte 0xAA
 
 send_data:
+# Do two complete passes like Naomi bios does.
+mov #2,r4
+nop
+send_loop:
 # Set r5 to the top of the above data chunk, so we can copy it out in 16 byte chunks
 mova @(8,pc),r0
 mov r0,r5
-add #-56,r5
+add #-60,r5
 # We have three 16-byte chunks to write
 mov #3,r6
 # We start writing to offset 0
@@ -335,6 +339,8 @@ bsr delay
 shll16 r0
 dt r6
 bf wipe_loop
+dt r4
+bf send_loop
 
 # Get address of where we need to jump back
 mov pMapleBuffer,r6
