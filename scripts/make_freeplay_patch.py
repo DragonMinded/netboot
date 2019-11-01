@@ -94,6 +94,9 @@ def main() -> int:
     patch_offset = patch_location + exec_data.offset
     patch_jumppoint = patch_location + exec_data.load_address
 
+    # I'm not sure if this is a safe spot in RAM, but choosing it for now anyway.
+    buffer_location = (exec_data.load_address - (3 * 1024)) & 0xFFFFFFE0
+
     # Calculate where the entrypoint is inside the executable
     springboard_offset = exec_data.entrypoint - exec_data.load_address
     if springboard_offset < 0 or springboard_offset >= (exec_data.length - 4):
@@ -111,6 +114,9 @@ def main() -> int:
 
     # Now, create a final springboard that jumps to the patch
     springboard = _patch_bytesequence(springboard, 0xDD, struct.pack("<I", patch_jumppoint))
+
+    # Patch a safe memory location to use as a maple command/response buffer
+    write_eeprom = _patch_bytesequence(write_eeprom, 0xEE, struct.pack("<I", buffer_location))
 
     # Now, generate a patch with this updated data overlaid on the original rom
     newdata = (
