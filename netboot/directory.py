@@ -28,6 +28,12 @@ class DirectoryManager:
         with self.__lock:
             return self.__checksums
 
+    def games(self, directory: str) -> List[str]:
+        with self.__lock:
+            if directory not in self.__directories:
+                raise Exception(f"Directory {directory} is not managed by us!")
+            return [f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))]
+
     def game_name(self, filename: str, region: str) -> str:
         with self.__lock:
             if filename in self.__names:

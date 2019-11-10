@@ -2,7 +2,7 @@ import os.path
 import yaml
 import traceback
 from functools import wraps
-from typing import Callable, Dict, Any
+from typing import Callable, Dict, List, Any
 
 from flask import Flask, Response, render_template, make_response, jsonify as flask_jsonify
 from netboot import Cabinet, CabinetManager, DirectoryManager
@@ -31,13 +31,6 @@ def jsonify(func: Callable) -> Callable:
     return decoratedfunction
 
 
-@app.route('/')
-def home() -> Response:
-    cabman = app.config['CabinetManager']
-    dirman = app.config['DirectoryManager']
-    return make_response(render_template('index.html', cabinets=[cabinet_to_dict(cab, dirman) for cab in cabman.cabinets]), 200)
-
-
 def cabinet_to_dict(cab: Cabinet, dirmanager: DirectoryManager) -> Dict[str, str]:
     status, progress = cab.state
 
@@ -49,6 +42,35 @@ def cabinet_to_dict(cab: Cabinet, dirmanager: DirectoryManager) -> Dict[str, str
         'version': cab.version,
         'status': status,
         'progress': progress,
+    }
+
+
+@app.route('/')
+def home() -> Response:
+    cabman = app.config['CabinetManager']
+    dirman = app.config['DirectoryManager']
+    return make_response(render_template('index.html', cabinets=[cabinet_to_dict(cab, dirman) for cab in cabman.cabinets]), 200)
+
+
+@app.route('/config')
+def systemconfig() -> Response:
+    # We don't look up the game names here because that requires a region which is cab-specific.
+    dirman = app.config['DirectoryManager']
+    roms: List[Dict[str, str]] = []
+    for directory in dirman.directories:
+        roms.append({'name': directory, 'files': dirman.games(directory)})
+    return make_response(render_template('systemconfig.html', roms=roms), 200)
+
+
+@app.route('/roms')
+@jsonify
+def roms() -> Dict[str, Any]:
+    dirman = app.config['DirectoryManager']
+    roms: List[Dict[str, str]] = []
+    for directory in dirman.directories:
+        roms.append({'name': directory, 'files': dirman.games(directory)})
+    return {
+        'roms': roms,
     }
 
 

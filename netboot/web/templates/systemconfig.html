@@ -1,12 +1,12 @@
 <html>
     <head>
-        <title>Overview :: NetBoot Web UI</title>
+        <title>System Config :: NetBoot Web UI</title>
         <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}"></link>
         <script src="{{ url_for('static', filename='axios.js') }}"></script>
         <script src="{{ url_for('static', filename='vue.js') }}"></script>
         <script src="{{ url_for('static', filename='app.js') }}"></script>
         <script>
-            window.cabinets = {{ cabinets|tojson|safe }};
+            window.roms = {{ roms|tojson|safe }};
             window.addEventListener("load", function(event) {
                 new Vue({el: '#app'});
             });
@@ -14,10 +14,10 @@
     </head>
     <body>
         <div id="app">
-            <cabinetlist></cabinetlist>
+            <romlist></romlist>
             <div class="config">
                 <div>
-                    <a class="button" href="{{ url_for('systemconfig') }}">Configure System</a>
+                    <a class="button" href="{{ url_for('home') }}">Back To Home</a>
                 </div>
             </div>
         </div>
