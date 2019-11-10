@@ -5,13 +5,13 @@ import os.path
 import sys
 
 from netboot import Binary
-from naomi import NaomiRom
+from naomi import force_no_attract_sound
 
 
 def main() -> int:
     # Create the argument parser
     parser = argparse.ArgumentParser(
-        description="Utility for creating a free-play patch given a Naomi ROM."
+        description="Utility for creating a forced attract sounds off patch given a Naomi ROM."
     )
     parser.add_argument(
         'bin',
@@ -32,31 +32,7 @@ def main() -> int:
     # Grab the rom, parse it
     with open(args.bin, "rb") as fp:
         data = fp.read()
-    rom = NaomiRom(data)
-    if not rom.valid:
-        print("ROM file does not appear to be a Naomi netboot ROM!", file=sys.stderr)
-        return 1
-
-    # Now, find the location of our magic string in the main executable.
-    exec_data = rom.main_executable
-    patch_location = None
-    for rloc in range(exec_data.length):
-        loc = rloc + exec_data.offset
-        if data[loc:(loc + 10)] == bytes([0x40, 0x63, 0x12, 0xe2, 0xec, 0x32, 0x3c, 0x63, 0x09, 0x43]):
-            patch_location = loc
-            break
-
-    if patch_location is None:
-        print("ROM file does not have a suitable spot for the patch!", file=sys.stderr)
-        return 1
-
-    # Now, generate a patch with this updated data overlaid on the original rom
-    newdata = (
-        data[:patch_location] +
-        bytes([0x00, 0xe3]) +
-        data[(patch_location + 2):]
-    )
-
+    newdata = force_no_attract_sound(data)
     differences = Binary.diff(data, newdata)
     if not args.patch_file:
         for line in differences:
