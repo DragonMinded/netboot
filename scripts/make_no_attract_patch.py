@@ -42,7 +42,7 @@ def main() -> int:
     patch_location = None
     for rloc in range(exec_data.length):
         loc = rloc + exec_data.offset
-        if data[loc:(loc + 10)] == bytes([0x42, 0x84, 0xEC, 0x31, 0x0C, 0x60, 0x04, 0x1E, 0x43, 0x84]):
+        if data[loc:(loc + 10)] == bytes([0x40, 0x63, 0x12, 0xe2, 0xec, 0x32, 0x3c, 0x63, 0x09, 0x43]):
             patch_location = loc
             break
 
@@ -53,7 +53,7 @@ def main() -> int:
     # Now, generate a patch with this updated data overlaid on the original rom
     newdata = (
         data[:patch_location] +
-        bytes([0x1A, 0xE0]) +
+        bytes([0x00, 0xe3]) +
         data[(patch_location + 2):]
     )
 

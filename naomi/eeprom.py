@@ -17,9 +17,7 @@ class NaomiEEPRom:
     def __init__(self, data: bytes) -> None:
         if self.__crc(data[2:]) != data[0:2]:
             raise NaomiEEPRomException("Invalid EEPROM CRC!")
-        if data[2] != len(data[2:]):
-            raise NaomiEEPRomException("Invalid EEPROM length!")
-        self.__data = data[3:]
+        self.__data = data[2:]
 
     @staticmethod
     def __cap_32(val: int) -> int:
@@ -55,7 +53,7 @@ class NaomiEEPRom:
 
     @property
     def data(self) -> bytes:
-        data = bytes([len(self.__data) + 1]) + self.__data
+        data = self.__data
         crc = NaomiEEPRom.__crc(data)
         return crc + data
 
