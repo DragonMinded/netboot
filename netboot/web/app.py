@@ -5,6 +5,7 @@ from functools import wraps
 from typing import Callable, Dict, List, Any
 
 from flask import Flask, Response, request, render_template, make_response, jsonify as flask_jsonify
+from werkzeug.routing import PathConverter
 from netboot import Cabinet, CabinetManager, DirectoryManager, PatchManager, NetDimm
 
 
@@ -15,6 +16,13 @@ app = Flask(
     static_folder=os.path.join(current_directory, 'static'),
     template_folder=os.path.join(current_directory, 'templates'),
 )
+
+
+class EverythingConverter(PathConverter):
+    regex = '.*?'
+
+
+app.url_map.converters['filename'] = EverythingConverter
 
 
 def jsonify(func: Callable) -> Callable:
@@ -67,7 +75,31 @@ def systemconfig() -> Response:
     return make_response(render_template('systemconfig.html', roms=roms, patches=patches), 200)
 
 
-@app.route('/config/<ip>')
+@app.route('/config/rom/<filename:filename>')
+def romconfig(filename: str) -> Response:
+    dirman = app.config['DirectoryManager']
+    directory, name = os.path.split(filename)
+    if directory not in dirman.directories:
+        raise Exception("This isn't a valid ROM file!")
+    if name not in dirman.games(directory):
+        raise Exception("This isn't a valid ROM file!")
+    return make_response(
+        render_template(
+            'romconfig.html',
+            filename=filename,
+            names={
+                Cabinet.REGION_JAPAN: dirman.game_name(filename, Cabinet.REGION_JAPAN),
+                Cabinet.REGION_USA: dirman.game_name(filename, Cabinet.REGION_USA),
+                Cabinet.REGION_EXPORT: dirman.game_name(filename, Cabinet.REGION_EXPORT),
+                Cabinet.REGION_KOREA: dirman.game_name(filename, Cabinet.REGION_KOREA),
+                Cabinet.REGION_AUSTRALIA: dirman.game_name(filename, Cabinet.REGION_AUSTRALIA),
+            }
+        ),
+        200
+    )
+
+
+@app.route('/config/cabinet/<ip>')
 def cabinetconfig(ip: str) -> Response:
     cabman = app.config['CabinetManager']
     dirman = app.config['DirectoryManager']
@@ -144,13 +176,35 @@ def roms() -> Dict[str, Any]:
     }
 
 
+@app.route('/roms/<filename:filename>', methods=['POST'])
+@jsonify
+def updaterom(filename: str) -> Dict[str, Any]:
+    dirman = app.config['DirectoryManager']
+    directory, name = os.path.split(filename)
+    if directory not in dirman.directories:
+        raise Exception("This isn't a valid ROM file!")
+    if name not in dirman.games(directory):
+        raise Exception("This isn't a valid ROM file!")
+    for region, name in request.json.items():
+        print(f"renaming rom {region} to {name}")
+        dirman.rename_game(filename, region, name)
+    serialize_app(app)
+    return {
+        Cabinet.REGION_JAPAN: dirman.game_name(filename, Cabinet.REGION_JAPAN),
+        Cabinet.REGION_USA: dirman.game_name(filename, Cabinet.REGION_USA),
+        Cabinet.REGION_EXPORT: dirman.game_name(filename, Cabinet.REGION_EXPORT),
+        Cabinet.REGION_KOREA: dirman.game_name(filename, Cabinet.REGION_KOREA),
+        Cabinet.REGION_AUSTRALIA: dirman.game_name(filename, Cabinet.REGION_AUSTRALIA),
+    }
+
+
 @app.route('/patches')
 @jsonify
 def patches() -> Dict[str, Any]:
     patchman = app.config['PatchManager']
     patches: List[Dict[str, str]] = []
     for directory in patchman.directories:
-        roms.append({'name': directory, 'files': patchman.patches(directory)})
+        patches.append({'name': directory, 'files': patchman.patches(directory)})
     return {
         'patches': patches,
     }

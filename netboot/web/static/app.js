@@ -20,7 +20,17 @@ Vue.component('cabinet', {
                 <dt>Game</dt><dd>{{ cabinet.game }}</dd>
                 <dt>Status</dt><dd><state v-bind:status="cabinet.status" v-bind:progress="cabinet.progress"></state></dd>
             </dl>
-            <a class="button" v-bind:href="'config/' + cabinet.ip">Configure Cabinet</a>
+            <a class="button" v-bind:href="'config/cabinet/' + cabinet.ip">Configure Cabinet</a>
+        </div>
+    `,
+});
+
+Vue.component('romlist', {
+    props: ['dir'],
+    template: `
+        <div class='directory'>
+            <div>{{ dir.name }}</div>
+            <rom v-for="rom in dir.files" v-bind:dir="dir.name" v-bind:rom="rom" v-bind:key="rom"></rom>
         </div>
     `,
 });
@@ -30,15 +40,25 @@ Vue.component('directory', {
     template: `
         <div class='directory'>
             <div>{{ dir.name }}</div>
-            <rom v-for="rom in dir.files" v-bind:rom="rom" v-bind:key="rom"></rom>
+            <file v-for="file in dir.files" v-bind:file="file" v-bind:key="file"></file>
+        </div>
+    `,
+});
+
+Vue.component('file', {
+    props: ['file'],
+    template: `
+        <div class='file'>
+            {{ file }}
         </div>
     `,
 });
 
 Vue.component('rom', {
-    props: ['rom'],
+    props: ['dir', 'rom'],
     template: `
         <div class='rom'>
+            <a class="smallbutton" v-bind:href="'config/rom/' + encodeURI(dir + '/' + rom)">Configure ROM Names</a>
             {{ rom }}
         </div>
     `,
@@ -102,6 +122,42 @@ Vue.component('cabinetconfig', {
     `,
 });
 
+Vue.component('romconfig', {
+    data: function() {
+        return {
+            names: window.names,
+            saved: false,
+        };
+    },
+    methods: {
+        changed: function() {
+            this.saved = false;
+        },
+        save: function() {
+            axios.post('/roms/' + encodeURI(filename), this.names).then(result => {
+                if (!result.data.error) {
+                    this.names = result.data;
+                    this.saved = true;
+                }
+            });
+        },
+    },
+    template: `
+        <div class='romconfig'>
+            <dl>
+                <dt>Filename</dt><dd>{{ filename }}</dd>
+                <dt>Name (japan)</dt><dd><input v-model="names.japan" @input="changed"/></dd>
+                <dt>Name (usa)</dt><dd><input v-model="names.usa" @input="changed"/></dd>
+                <dt>Name (export)</dt><dd><input v-model="names.export" @input="changed"/></dd>
+                <dt>Name (korea)</dt><dd><input v-model="names.korea" @input="changed"/></dd>
+                <dt>Name (australia)</dt><dd><input v-model="names.australia" @input="changed"/></dd>
+            </dl>
+            <button v-on:click="save">Update Names</button>
+            <span class="successindicator" v-if="saved">&check; saved</span>
+        </div>
+    `,
+});
+
 Vue.component('newcabinet', {
     data: function() {
         return {
@@ -135,7 +191,7 @@ Vue.component('newcabinet', {
                 axios.put('/cabinets/' + this.cabinet.ip, this.cabinet).then(result => {
                     if (!result.data.error) {
                         // Saved, go to cabinet screen
-                        window.location.href = '/config/' + result.data.ip;
+                        window.location.href = '/config/cabinet/' + result.data.ip;
                     } else {
                         // Cabinet IP already in use
                         this.duplicate_ip = true;
@@ -209,7 +265,7 @@ Vue.component('cabinetlist', {
     `,
 });
 
-Vue.component('romlist', {
+Vue.component('roms', {
     data: function() {
         return {
             roms: window.roms,
@@ -232,12 +288,12 @@ Vue.component('romlist', {
     template: `
         <div class='romlist'>
             <h3>Available ROMs</h3>
-            <directory v-for="rom in roms" v-bind:dir="rom" v-bind:key="rom"></directory>
+            <romlist v-for="rom in roms" v-bind:dir="rom" v-bind:key="rom"></romlist>
         </div>
     `,
 });
 
-Vue.component('patchlist', {
+Vue.component('patches', {
     data: function() {
         return {
             patches: window.patches,

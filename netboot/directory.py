@@ -71,3 +71,21 @@ class DirectoryManager:
             self.__names[local_key] = os.path.splitext(os.path.basename(filename))[0].replace('_', ' ')
             self.__checksums[checksum] = self.__names[local_key]
             return self.__names[local_key]
+
+    def rename_game(self, filename: str, region: str, name: str) -> None:
+        with self.__lock:
+            # Make the local key
+            local_key = f"{region}-{filename}"
+
+            # Grab enough of the header for a match
+            with open(filename, "rb") as fp:
+                data = fp.read(0x1000)
+                length = os.fstat(fp.fileno()).st_size
+
+            # Now, check and see if we have a checksum match
+            crc = zlib.crc32(data, 0)
+            checksum = f"{region}-{crc}-{length}"
+
+            # Update the value
+            self.__names[local_key] = name
+            self.__checksums[checksum] = self.__names[local_key]
