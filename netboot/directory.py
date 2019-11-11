@@ -32,7 +32,7 @@ class DirectoryManager:
         with self.__lock:
             if directory not in self.__directories:
                 raise Exception(f"Directory {directory} is not managed by us!")
-            return [f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))]
+            return sorted([f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))])
 
     def game_name(self, filename: str, region: str) -> str:
         with self.__lock:
@@ -46,7 +46,7 @@ class DirectoryManager:
 
             # Now, check and see if we have a checksum match
             crc = zlib.crc32(data, 0)
-            checksum = f"{crc}-{length}"
+            checksum = f"{region}-{crc}-{length}"
             if checksum in self.__checksums:
                 self.__names[filename] = self.__checksums[checksum]
                 return self.__names[filename]

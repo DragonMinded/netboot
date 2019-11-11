@@ -7,6 +7,7 @@
         <script src="{{ url_for('static', filename='app.js') }}"></script>
         <script>
             window.roms = {{ roms|tojson|safe }};
+            window.patches = {{ patches|tojson|safe }};
             window.addEventListener("load", function(event) {
                 new Vue({el: '#app'});
             });
@@ -15,6 +16,7 @@
     <body>
         <div id="app">
             <romlist></romlist>
+            <patchlist></patchlist>
             <div class="config">
                 <div>
                     <a class="button" href="{{ url_for('home') }}">Back To Home</a>

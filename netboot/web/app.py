@@ -5,7 +5,7 @@ from functools import wraps
 from typing import Callable, Dict, List, Any
 
 from flask import Flask, Response, render_template, make_response, jsonify as flask_jsonify
-from netboot import Cabinet, CabinetManager, DirectoryManager
+from netboot import Cabinet, CabinetManager, DirectoryManager, PatchManager
 
 
 current_directory: str = os.path.abspath(os.path.dirname(__file__))
@@ -59,7 +59,11 @@ def systemconfig() -> Response:
     roms: List[Dict[str, str]] = []
     for directory in dirman.directories:
         roms.append({'name': directory, 'files': dirman.games(directory)})
-    return make_response(render_template('systemconfig.html', roms=roms), 200)
+    patchman = app.config['PatchManager']
+    patches: List[Dict[str, str]] = []
+    for directory in patchman.directories:
+        patches.append({'name': directory, 'files': patchman.patches(directory)})
+    return make_response(render_template('systemconfig.html', roms=roms, patches=patches), 200)
 
 
 @app.route('/roms')
@@ -71,6 +75,18 @@ def roms() -> Dict[str, Any]:
         roms.append({'name': directory, 'files': dirman.games(directory)})
     return {
         'roms': roms,
+    }
+
+
+@app.route('/patches')
+@jsonify
+def patches() -> Dict[str, Any]:
+    patchman = app.config['PatchManager']
+    patches: List[Dict[str, str]] = []
+    for directory in patchman.directories:
+        roms.append({'name': directory, 'files': patchman.patches(directory)})
+    return {
+        'patches': patches,
     }
 
 
@@ -99,6 +115,7 @@ class AppException(Exception):
 def spawn_app(config_file: str) -> Flask:
     with open(config_file, "r") as fp:
         data = yaml.safe_load(fp)
+    config_dir = os.path.abspath(os.path.dirname(config_file))
 
     if not isinstance(data, dict):
         raise AppException(f"Invalid YAML file format for {config_file}, missing config entries!")
@@ -120,9 +137,28 @@ def spawn_app(config_file: str) -> Flask:
         directories = directory_or_list
     else:
         raise AppException(f"Invalid YAML file format for {config_file}, expected directory or list of directories for rom directory setting!")
+
+    # Allow use of relative paths (relative to config file).
+    directories = [os.path.abspath(os.path.join(config_dir, d)) for d in directories]
     for directory in directories:
         if not os.path.isdir(directory):
             raise AppException(f"Invalid YAML file format for {config_file}, {directory} is not a directory!")
+
+    if 'patch_directory' not in data:
+        raise AppException(f"Invalid YAML file format for {config_file}, missing patch directory setting!")
+    directory_or_list = data['patch_directory']
+    if isinstance(directory_or_list, str):
+        patches = [directory_or_list]
+    elif isinstance(directory_or_list, list):
+        patches = directory_or_list
+    else:
+        raise AppException(f"Invalid YAML file format for {config_file}, expected directory or list of directories for patch directory setting!")
+
+    # Allow use of relative paths (relative to config file).
+    patches = [os.path.abspath(os.path.join(config_dir, d)) for d in patches]
+    for patch in patches:
+        if not os.path.isdir(patch):
+            raise AppException(f"Invalid YAML file format for {config_file}, {patch} is not a directory!")
 
     if 'filenames' in data and isinstance(data, dict):
         checksums = data['filenames']
@@ -131,5 +167,6 @@ def spawn_app(config_file: str) -> Flask:
 
     app.config['CabinetManager'] = CabinetManager.from_yaml(cabinet_file)
     app.config['DirectoryManager'] = DirectoryManager(directories, checksums)
+    app.config['PatchManager'] = PatchManager(patches)
 
     return app

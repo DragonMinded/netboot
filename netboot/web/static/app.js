@@ -97,3 +97,31 @@ Vue.component('romlist', {
         </div>
     `,
 });
+
+Vue.component('patchlist', {
+    data: function() {
+        return {
+            patches: window.patches,
+        };
+    },
+    methods: {
+        refresh: function() {
+            axios.get('/patches').then(result => {
+                if (!result.data.error) {
+                    this.patches = result.data.patches;
+                }
+            });
+        },
+    },
+    mounted: function() {
+        setInterval(function () {
+            this.refresh();
+        }.bind(this), 5000);
+    },
+    template: `
+        <div class='patchlist'>
+            <h3>Available Patches</h3>
+            <directory v-for="patch in patches" v-bind:dir="patch" v-bind:key="patch"></directory>
+        </div>
+    `,
+});

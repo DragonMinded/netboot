@@ -1,4 +1,4 @@
-div.cabinet, div.config, div.romlist {
+div.cabinet, div.config, div.romlist, div.patchlist {
     margin: 20px;
     border: 1px solid #bbbbbb;
     padding: 20px;
@@ -23,7 +23,7 @@ div.cabinet dd {
     padding-bottom: 5px;
 }
 
-div.cabinet h3, div.romlist h3 {
+div.cabinet h3, div.romlist h3, div.patchlist h3 {
     margin: 0px 0px 5px 0px;
 }
 
