@@ -84,16 +84,49 @@ def cabinetconfig(ip: str) -> Response:
                 Cabinet.REGION_AUSTRALIA,
             ],
             targets=[
-                NetDimm.TARGET_CHIHIRO,
                 NetDimm.TARGET_NAOMI,
+                NetDimm.TARGET_CHIHIRO,
                 NetDimm.TARGET_TRIFORCE,
             ],
             versions=[
-                NetDimm.TARGET_VERSION_1_07,
-                NetDimm.TARGET_VERSION_2_03,
-                NetDimm.TARGET_VERSION_2_15,
                 NetDimm.TARGET_VERSION_3_01,
+                NetDimm.TARGET_VERSION_2_15,
+                NetDimm.TARGET_VERSION_2_03,
+                NetDimm.TARGET_VERSION_1_07,
             ],
+        ),
+        200
+    )
+
+
+@app.route('/addcabinet')
+def addcabinet() -> Response:
+    dirman = app.config['DirectoryManager']
+    roms: List[Dict[str, str]] = []
+    for directory in dirman.directories:
+        roms.extend({'name': filename, 'file': os.path.join(directory, filename)} for filename in dirman.games(directory))
+    return make_response(
+        render_template(
+            'addcabinet.html',
+            regions=[
+                Cabinet.REGION_JAPAN,
+                Cabinet.REGION_USA,
+                Cabinet.REGION_EXPORT,
+                Cabinet.REGION_KOREA,
+                Cabinet.REGION_AUSTRALIA,
+            ],
+            targets=[
+                NetDimm.TARGET_NAOMI,
+                NetDimm.TARGET_CHIHIRO,
+                NetDimm.TARGET_TRIFORCE,
+            ],
+            versions=[
+                NetDimm.TARGET_VERSION_3_01,
+                NetDimm.TARGET_VERSION_2_15,
+                NetDimm.TARGET_VERSION_2_03,
+                NetDimm.TARGET_VERSION_1_07,
+            ],
+            roms=roms,
         ),
         200
     )
@@ -142,6 +175,26 @@ def cabinet(ip: str) -> Dict[str, Any]:
     return cabinet_to_dict(cabinet, dirman)
 
 
+@app.route('/cabinets/<ip>', methods=['PUT'])
+@jsonify
+def createcabinet(ip: str) -> Dict[str, Any]:
+    cabman = app.config['CabinetManager']
+    dirman = app.config['DirectoryManager']
+    if cabman.cabinet_exists(ip):
+        raise Exception("Cabinet already exists!")
+    new_cabinet = Cabinet(
+        ip=ip,
+        region=request.json['region'],
+        description=request.json['description'],
+        filename=request.json['filename'],
+        target=request.json['target'],
+        version=request.json['version'],
+    )
+    cabman.add_cabinet(new_cabinet)
+    serialize_app(app)
+    return cabinet_to_dict(new_cabinet, dirman)
+
+
 @app.route('/cabinets/<ip>', methods=['POST'])
 @jsonify
 def updatecabinet(ip: str) -> Dict[str, Any]:
@@ -156,7 +209,7 @@ def updatecabinet(ip: str) -> Dict[str, Any]:
         target=request.json['target'],
         version=request.json['version'],
     )
-    cabman.update_cabinet(ip, new_cabinet)
+    cabman.update_cabinet(new_cabinet)
     serialize_app(app)
     return cabinet_to_dict(new_cabinet, dirman)
 

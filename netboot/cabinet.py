@@ -234,12 +234,11 @@ class CabinetManager:
                 raise CabinetException(f"There is no cabinet with the IP {ip}")
             del self.__cabinets[ip]
 
-    def update_cabinet(self, ip: str, cab: Cabinet) -> None:
+    def update_cabinet(self, cab: Cabinet) -> None:
         with self.__lock:
+            ip = cab.ip
             if ip not in self.__cabinets:
                 raise CabinetException(f"There is no cabinet with the IP {ip}")
-            if cab.ip != ip:
-                raise CabinetException(f"Cabinet IP {cab.ip} does not match {ip}")
             # Make sure we don't reboot the cabinet if we update settings.
             cab._clone_state(self.__cabinets[ip])
             self.__cabinets[ip] = cab

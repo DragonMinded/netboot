@@ -85,7 +85,87 @@ Vue.component('cabinetconfig', {
                     </select>
                 </dd>
             </dl>
-            <button v-on:click="save">Update Properties</button><span class="indicator" v-if="saved">&check; saved</span>
+            <button v-on:click="save">Update Properties</button><span class="successindicator" v-if="saved">&check; saved</span>
+        </div>
+    `,
+});
+
+Vue.component('newcabinet', {
+    data: function() {
+        return {
+            cabinet: {
+                'description': '',
+                'ip': '',
+                'region': window.regions[0],
+                'target': window.targets[0],
+                'version': window.versions[0],
+                'filename': window.roms[0].file,
+            },
+            invalid_ip: false,
+            invalid_description: false,
+            duplicate_ip: false,
+        };
+    },
+    methods: {
+        save: function() {
+            if (this.cabinet.description.length == 0){
+                this.invalid_description = true;
+            } else {
+                this.invalid_description = false;
+            }
+            if (/^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(this.cabinet.ip)) {
+                this.invalid_ip = false;
+            } else{
+                this.invalid_ip = true;
+            }
+
+            if (!this.invalid_ip && !this.invalid_description) {
+                axios.put('/cabinets/' + this.cabinet.ip, this.cabinet).then(result => {
+                    if (!result.data.error) {
+                        // Saved, go to cabinet screen
+                        window.location.href = '/config/' + result.data.ip;
+                    } else {
+                        // Cabinet IP already in use
+                        this.duplicate_ip = true;
+                    }
+                });
+            }
+        },
+    },
+    template: `
+        <div class='cabinet'>
+            <dl>
+                <dt>IP Address</dt><dd>
+                    <input v-model="cabinet.ip" />
+                    <span class="errorindicator" v-if="invalid_ip">invalid IP address</span>
+                    <span class="errorindicator" v-if="duplicate_ip">IP address already in use</span>
+                </dd>
+                <dt>Description</dt><dd>
+                    <input v-model="cabinet.description" />
+                    <span class="errorindicator" v-if="invalid_description">invalid description</span>
+                </dd>
+                <dt>Region</dt><dd>
+                    <select v-model="cabinet.region">
+                        <option v-for="region in regions" v-bind:value="region">{{ region }}</option>
+                    </select>
+                </dd>
+                <dt>Initial ROM</dt><dd>
+                    <select v-model="cabinet.filename">
+                        <option v-for="rom in roms" v-bind:value="rom.file">{{ rom.name }}</option>
+                    </select>
+                </dd>
+                <dt>Target</dt><dd>
+                    <select v-model="cabinet.target">
+                        <option v-for="target in targets" v-bind:value="target">{{ target }}</option>
+                    </select>
+                </dd>
+                <dt>NetDimm Version</dt><dd>
+                    <select v-model="cabinet.version">
+                        <option v-for="version in versions" v-bind:value="version">{{ version }}</option>
+                    </select>
+                </dd>
+            </dl>
+            <button v-on:click="save">Save Properties</button>
         </div>
     `,
 });
