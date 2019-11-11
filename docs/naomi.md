@@ -95,7 +95,7 @@ In general, you will want to initialize by writing the magic value to the Init H
 
 The maple command for reading/writing to the MIE EEPROM is `0x86`. A valid response is `0x87`. The game seems to also ask the MIE for its version using `0x82` command, but I haven't documented that as I was unconcerned with it. The `0x86` command allows you to request a full EEPROM read or write a chunk of data. Its recommended that you write in chunks smaller than the full EEPROM so that you can emulate atomicity. As documented below, there are two copies of all data in the EEPROM for just this reason. The BIOS and games both choose to write chunks of `0x10` bytes.
 
-### Reading EEPROM
+## Reading EEPROM
 
 Send an `0x86` command with the subcommand `0x01` to schedule a read. The MIE will respond with a `0x87` response, subresponse `0x02` to say that it is reading. Then, loop while sending a normal status request (`0x01` command) until the bottom byte in the response is `0xFD`. While its still working, the bottom byte in the response will be `0xFC`. Once the MIE reports that it is done, issue a `0x03` subcommand to request the entire EEPROM. The response will be 128 bytes containing the entire EEPROM contents. So, for example:
 
