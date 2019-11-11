@@ -214,6 +214,15 @@ def updatecabinet(ip: str) -> Dict[str, Any]:
     return cabinet_to_dict(new_cabinet, dirman)
 
 
+@app.route('/cabinets/<ip>', methods=['DELETE'])
+@jsonify
+def removecabinet(ip: str) -> Dict[str, Any]:
+    cabman = app.config['CabinetManager']
+    cabman.remove_cabinet(ip)
+    serialize_app(app)
+    return {}
+
+
 class AppException(Exception):
     pass
 

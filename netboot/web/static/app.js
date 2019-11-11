@@ -63,6 +63,16 @@ Vue.component('cabinetconfig', {
                 }
             });
         },
+        remove: function() {
+            if (confirm("Are you sure you want to remove this cabinet?")) {
+                axios.delete('/cabinets/' + this.cabinet.ip).then(result => {
+                    if (!result.data.error) {
+                        // Saved, go to home screen
+                        window.location.href = '/';
+                    }
+                });
+            }
+        },
     },
     template: `
         <div class='cabinet'>
@@ -85,7 +95,9 @@ Vue.component('cabinetconfig', {
                     </select>
                 </dd>
             </dl>
-            <button v-on:click="save">Update Properties</button><span class="successindicator" v-if="saved">&check; saved</span>
+            <button v-on:click="save">Update Properties</button>
+            <button v-on:click="remove">Remove Cabinet</button>
+            <span class="successindicator" v-if="saved">&check; saved</span>
         </div>
     `,
 });
