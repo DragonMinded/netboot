@@ -31,7 +31,7 @@ div.rom {
     margin-left: 15px;
 }
 
-a.button {
+a.button, button {
     display: inline-block;
     text-align: center;
     border: 1px solid #777777;
@@ -41,4 +41,8 @@ a.button {
     text-decoration: none;
     background: #4E9CAF;
     padding: 5px 15px;
+}
+
+span.indicator {
+    margin-left: 5px;
 }

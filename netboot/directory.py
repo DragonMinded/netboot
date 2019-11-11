@@ -36,8 +36,9 @@ class DirectoryManager:
 
     def game_name(self, filename: str, region: str) -> str:
         with self.__lock:
-            if filename in self.__names:
-                return self.__names[filename]
+            local_key = f"{region}-{filename}"
+            if local_key in self.__names:
+                return self.__names[local_key]
 
             # Grab enough of the header for a match
             with open(filename, "rb") as fp:
@@ -48,8 +49,8 @@ class DirectoryManager:
             crc = zlib.crc32(data, 0)
             checksum = f"{region}-{crc}-{length}"
             if checksum in self.__checksums:
-                self.__names[filename] = self.__checksums[checksum]
-                return self.__names[filename]
+                self.__names[local_key] = self.__checksums[checksum]
+                return self.__names[local_key]
 
             # Now, see if we can figure out from the header
             rom = NaomiRom(data)
@@ -62,11 +63,11 @@ class DirectoryManager:
                     'korea': NaomiRom.REGION_KOREA,
                     'australia': NaomiRom.REGION_AUSTRALIA,
                 }.get(region.lower(), NaomiRom.REGION_USA)
-                self.__names[filename] = rom.names[naomi_region]
-                self.__checksums[checksum] = self.__names[filename]
-                return self.__names[filename]
+                self.__names[local_key] = rom.names[naomi_region]
+                self.__checksums[checksum] = self.__names[local_key]
+                return self.__names[local_key]
 
             # Finally, fall back to filename, getting rid of extensions and underscores
-            self.__names[filename] = os.path.splitext(os.path.basename(filename))[0].replace('_', ' ')
-            self.__checksums[checksum] = self.__names[filename]
-            return self.__names[filename]
+            self.__names[local_key] = os.path.splitext(os.path.basename(filename))[0].replace('_', ' ')
+            self.__checksums[checksum] = self.__names[local_key]
+            return self.__names[local_key]

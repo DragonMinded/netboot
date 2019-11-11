@@ -4,8 +4,8 @@ import traceback
 from functools import wraps
 from typing import Callable, Dict, List, Any
 
-from flask import Flask, Response, render_template, make_response, jsonify as flask_jsonify
-from netboot import Cabinet, CabinetManager, DirectoryManager, PatchManager
+from flask import Flask, Response, request, render_template, make_response, jsonify as flask_jsonify
+from netboot import Cabinet, CabinetManager, DirectoryManager, PatchManager, NetDimm
 
 
 current_directory: str = os.path.abspath(os.path.dirname(__file__))
@@ -37,6 +37,7 @@ def cabinet_to_dict(cab: Cabinet, dirmanager: DirectoryManager) -> Dict[str, str
     return {
         'ip': cab.ip,
         'description': cab.description,
+        'region': cab.region,
         'game': dirmanager.game_name(cab.filename, cab.region),
         'target': cab.target,
         'version': cab.version,
@@ -64,6 +65,38 @@ def systemconfig() -> Response:
     for directory in patchman.directories:
         patches.append({'name': directory, 'files': patchman.patches(directory)})
     return make_response(render_template('systemconfig.html', roms=roms, patches=patches), 200)
+
+
+@app.route('/config/<ip>')
+def cabinetconfig(ip: str) -> Response:
+    cabman = app.config['CabinetManager']
+    dirman = app.config['DirectoryManager']
+    cabinet = cabman.cabinet(ip)
+    return make_response(
+        render_template(
+            'gameconfig.html',
+            cabinet=cabinet_to_dict(cabinet, dirman),
+            regions=[
+                Cabinet.REGION_JAPAN,
+                Cabinet.REGION_USA,
+                Cabinet.REGION_EXPORT,
+                Cabinet.REGION_KOREA,
+                Cabinet.REGION_AUSTRALIA,
+            ],
+            targets=[
+                NetDimm.TARGET_CHIHIRO,
+                NetDimm.TARGET_NAOMI,
+                NetDimm.TARGET_TRIFORCE,
+            ],
+            versions=[
+                NetDimm.TARGET_VERSION_1_07,
+                NetDimm.TARGET_VERSION_2_03,
+                NetDimm.TARGET_VERSION_2_15,
+                NetDimm.TARGET_VERSION_3_01,
+            ],
+        ),
+        200
+    )
 
 
 @app.route('/roms')
@@ -103,9 +136,29 @@ def cabinets() -> Dict[str, Any]:
 @app.route('/cabinets/<ip>')
 @jsonify
 def cabinet(ip: str) -> Dict[str, Any]:
-    manager = app.config['CabinetManager']
-    cabinet = manager.cabinet(ip)
-    return cabinet_to_dict(cabinet)
+    cabman = app.config['CabinetManager']
+    dirman = app.config['DirectoryManager']
+    cabinet = cabman.cabinet(ip)
+    return cabinet_to_dict(cabinet, dirman)
+
+
+@app.route('/cabinets/<ip>', methods=['POST'])
+@jsonify
+def updatecabinet(ip: str) -> Dict[str, Any]:
+    cabman = app.config['CabinetManager']
+    dirman = app.config['DirectoryManager']
+    old_cabinet = cabman.cabinet(ip)
+    new_cabinet = Cabinet(
+        ip=ip,
+        region=request.json['region'],
+        description=request.json['description'],
+        filename=old_cabinet.filename,
+        target=request.json['target'],
+        version=request.json['version'],
+    )
+    cabman.update_cabinet(ip, new_cabinet)
+    serialize_app(app)
+    return cabinet_to_dict(new_cabinet, dirman)
 
 
 class AppException(Exception):
@@ -168,5 +221,22 @@ def spawn_app(config_file: str) -> Flask:
     app.config['CabinetManager'] = CabinetManager.from_yaml(cabinet_file)
     app.config['DirectoryManager'] = DirectoryManager(directories, checksums)
     app.config['PatchManager'] = PatchManager(patches)
+    app.config['config_file'] = os.path.abspath(config_file)
+    app.config['cabinet_file'] = cabinet_file
 
     return app
+
+
+def serialize_app(app: Flask) -> None:
+    config = {
+        'cabinet_config': app.config['cabinet_file'],
+        'rom_directory': app.config['DirectoryManager'].directories,
+        'patch_directory': app.config['PatchManager'].directories,
+        'filenames': app.config['DirectoryManager'].checksums,
+    }
+    with open(app.config['config_file'], "w") as fp:
+        yaml.dump(config, fp)
+
+    config_dir = os.path.abspath(os.path.dirname(app.config['config_file']))
+    cabinet_file = os.path.join(config_dir, app.config['cabinet_file'])
+    app.config['CabinetManager'].to_yaml(cabinet_file)

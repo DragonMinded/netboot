@@ -20,6 +20,7 @@ Vue.component('cabinet', {
                 <dt>Game</dt><dd>{{ cabinet.game }}</dd>
                 <dt>Status</dt><dd><state v-bind:status="cabinet.status" v-bind:progress="cabinet.progress"></state></dd>
             </dl>
+            <a class="button" v-bind:href="'config/' + cabinet.ip">Configure Cabinet</a>
         </div>
     `,
 });
@@ -39,6 +40,52 @@ Vue.component('rom', {
     template: `
         <div class='rom'>
             {{ rom }}
+        </div>
+    `,
+});
+
+Vue.component('cabinetconfig', {
+    data: function() {
+        return {
+            cabinet: window.cabinet,
+            saved: false,
+        };
+    },
+    methods: {
+        changed: function() {
+            this.saved = false;
+        },
+        save: function() {
+            axios.post('/cabinets/' + this.cabinet.ip, this.cabinet).then(result => {
+                if (!result.data.error) {
+                    this.cabinet = result.data;
+                    this.saved = true;
+                }
+            });
+        },
+    },
+    template: `
+        <div class='cabinet'>
+            <dl>
+                <dt>IP Address</dt><dd>{{ cabinet.ip }}</dd>
+                <dt>Description</dt><dd><input v-model="cabinet.description" @input="changed"/></dd>
+                <dt>Region</dt><dd>
+                    <select v-model="cabinet.region" @input="changed">
+                        <option v-for="region in regions" v-bind:value="region">{{ region }}</option>
+                    </select>
+                </dd>
+                <dt>Target</dt><dd>
+                    <select v-model="cabinet.target" @input="changed">
+                        <option v-for="target in targets" v-bind:value="target">{{ target }}</option>
+                    </select>
+                </dd>
+                <dt>NetDimm Version</dt><dd>
+                    <select v-model="cabinet.version" @input="changed">
+                        <option v-for="version in versions" v-bind:value="version">{{ version }}</option>
+                    </select>
+                </dd>
+            </dl>
+            <button v-on:click="save">Update Properties</button><span class="indicator" v-if="saved">&check; saved</span>
         </div>
     `,
 });

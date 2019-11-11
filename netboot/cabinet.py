@@ -36,6 +36,15 @@ class Cabinet:
         self.__new_filename: str = filename
         self.__state: Tuple[str, int] = (self.STATE_STARTUP, 0)
 
+    def _clone_state(self, other_cabinet: "Cabinet") -> None:
+        state: Optional[Tuple[str, int]] = None
+        with other_cabinet.__lock:
+            if other_cabinet.__state[0] != self.STATE_SEND_CURRENT_GAME:
+                state = other_cabinet.__state
+        if state is not None:
+            with self.__lock:
+                self.__state = state
+
     def __repr__(self) -> str:
         return f"Cabinet(ip={repr(self.ip)}, description={repr(self.description)}, filename={repr(self.filename)}, target={repr(self.target)}, version={repr(self.version)})"
 
@@ -224,6 +233,16 @@ class CabinetManager:
             if ip not in self.__cabinets:
                 raise CabinetException(f"There is no cabinet with the IP {ip}")
             del self.__cabinets[ip]
+
+    def update_cabinet(self, ip: str, cab: Cabinet) -> None:
+        with self.__lock:
+            if ip not in self.__cabinets:
+                raise CabinetException(f"There is no cabinet with the IP {ip}")
+            if cab.ip != ip:
+                raise CabinetException(f"Cabinet IP {cab.ip} does not match {ip}")
+            # Make sure we don't reboot the cabinet if we update settings.
+            cab._clone_state(self.__cabinets[ip])
+            self.__cabinets[ip] = cab
 
     def cabinet_exists(self, ip: str) -> bool:
         with self.__lock:
