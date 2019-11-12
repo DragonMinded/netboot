@@ -3,7 +3,7 @@ import os.path
 import threading
 import time
 import yaml
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from netboot.hostutils import Host
 
@@ -25,11 +25,12 @@ class Cabinet:
     REGION_KOREA = "korea"
     REGION_AUSTRALIA = "australia"
 
-    def __init__(self, ip: str, region: str, description: str, filename: str, target: Optional[str] = None, version: Optional[str] = None) -> None:
+    def __init__(self, ip: str, region: str, description: str, filename: str, patches: Dict[str, Sequence[str]], target: Optional[str] = None, version: Optional[str] = None) -> None:
         if region not in [self.REGION_JAPAN, self.REGION_USA, self.REGION_EXPORT, self.REGION_KOREA, self.REGION_AUSTRALIA]:
             raise CabinetException(f"Unrecognized region {region}!")
         self.description: str = description
         self.region: str = region
+        self.patches: Dict[str, List[str]] = {rom: [p for p in patches[rom]] for rom in patches}
         self.__host: Host = Host(ip, target=target, version=version)
         self.__lock: threading.Lock = threading.Lock()
         self.__current_filename: str = filename
@@ -46,7 +47,7 @@ class Cabinet:
                 self.__state = state
 
     def __repr__(self) -> str:
-        return f"Cabinet(ip={repr(self.ip)}, description={repr(self.description)}, filename={repr(self.filename)}, target={repr(self.target)}, version={repr(self.version)})"
+        return f"Cabinet(ip={repr(self.ip)}, description={repr(self.description)}, filename={repr(self.filename)}, patches={repr(self.patches)} target={repr(self.target)}, version={repr(self.version)})"
 
     @property
     def ip(self) -> str:
@@ -88,7 +89,7 @@ class Cabinet:
             # if the cabinet is active, transition to self if cabinet is not.
             if current_state == self.STATE_WAIT_FOR_CABINET_POWER_ON:
                 if self.__host.alive:
-                    self.__host.send(self.__new_filename)
+                    self.__host.send(self.__new_filename, self.patches.get(self.__new_filename, []))
                     self.__state = (self.STATE_SEND_CURRENT_GAME, 0)
                 return
 
@@ -164,11 +165,17 @@ class CabinetManager:
 
             if not isinstance(cab, dict):
                 raise CabinetException(f"Invalid YAML file format for {yaml_file}, missing cabinet details for {ip}!")
-            for key in ["description", "filename"]:
+            for key in ["description", "filename", "patches"]:
                 if key not in cab:
                     raise CabinetException(f"Invalid YAML file format for {yaml_file}, missing {key} for {ip}!")
-            if not os.path.isfile(cab['filename']):
+            if not os.path.isfile(str(cab['filename'])):
                 raise CabinetException(f"Invalid YAML file format for {yaml_file}, file {cab['filename']} for {ip} is not a file!")
+            for rom, patches in cab['patches'].items():
+                if not os.path.isfile(str(rom)):
+                    raise CabinetException(f"Invalid YAML file format for {yaml_file}, file {rom} for {ip} is not a file!")
+                for patch in patches:
+                    if not os.path.isfile(str(patch)):
+                        raise CabinetException(f"Invalid YAML file format for {yaml_file}, file {patch} for {ip} is not a file!")
 
             cabinets.append(
                 Cabinet(
@@ -176,6 +183,7 @@ class CabinetManager:
                     description=str(cab['description']),
                     region=str(cab['region']).lower(),
                     filename=str(cab['filename']),
+                    patches={str(rom): [str(p) for p in cab['patches'][rom]] for rom in cab['patches']},
                     target=str(cab['target']) if 'target' in cab else None,
                     version=str(cab['version']) if 'version' in cab else None,
                 )
@@ -184,7 +192,7 @@ class CabinetManager:
         return CabinetManager(cabinets)
 
     def to_yaml(self, yaml_file: str) -> None:
-        data: Dict[str, Dict[str, str]] = {}
+        data: Dict[str, Dict[str, Union[str, Dict[str, List[str]]]]] = {}
 
         with self.__lock:
             cabinets: List[Cabinet] = sorted([cab for _, cab in self.__cabinets.items()], key=lambda cab: cab.ip)
@@ -196,6 +204,7 @@ class CabinetManager:
                 'target': cab.target,
                 'version': cab.version,
                 'filename': cab.filename,
+                'patches': cab.patches,
             }
 
         with open(yaml_file, "w") as fp:

@@ -3,7 +3,7 @@
 # Please attribute properly, but only if you want.
 import argparse
 import sys
-from netboot import NetDimm
+from netboot import Binary, NetDimm
 from typing import Optional
 
 
@@ -39,6 +39,18 @@ def main() -> int:
         type=str,
         help="NetDimm firmware version this image is going to. Defaults to '3.01', but '1.07', '2.03' and '2.15' are also valid",
     )
+    parser.add_argument(
+        '--patch-file',
+        metavar='FILE',
+        type=str,
+        action='append',
+        help=(
+            'Patch to apply to image on-the-fly while sending to the NetDimm. '
+            'Can be specified multiple times to apply multiple patches. '
+            'Patches will be applied in specified order. If not specified, the '
+            'image is sent without patching.'
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -51,8 +63,22 @@ def main() -> int:
 
     print("sending...", file=sys.stderr)
     netdimm = NetDimm(args.ip, target=args.target, version=args.version)
+
+    # Grab the binary, patch it with requested patches.
     with open(args.image, "rb") as fp:
-        netdimm.send(fp.read(), key)
+        data = fp.read()
+    for patch in args.patch_file or []:
+        with open(patch, "r") as pp:
+            differences = pp.readlines()
+        differences = [d.strip() for d in differences if d.strip()]
+        try:
+            data = Binary.patch(data, differences)
+        except Exception as e:
+            print(f"Could not patch {args.image}: {str(e)}", file=sys.stderr)
+            return 1
+
+    # Send the binary, reboot into the game.
+    netdimm.send(data, key)
     print("rebooting into game...", file=sys.stderr)
     netdimm.reboot()
     print("ok!", file=sys.stderr)

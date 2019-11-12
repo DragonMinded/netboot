@@ -7,8 +7,9 @@ import subprocess
 import sys
 import threading
 import time
-from typing import Optional, Tuple, TYPE_CHECKING
+from typing import Optional, Sequence, Tuple, TYPE_CHECKING
 
+from netboot.binary import Binary
 from netboot.netboot import NetDimm, NetDimmException
 
 
@@ -16,7 +17,7 @@ if TYPE_CHECKING:
     from typing import Any  # noqa
 
 
-def _send_file_to_host(host: str, filename: str, target: str, version: str, parent_pid: int, progress_queue: "multiprocessing.Queue[Tuple[str, Any]]") -> None:
+def _send_file_to_host(host: str, filename: str, patches: Sequence[str], target: str, version: str, parent_pid: int, progress_queue: "multiprocessing.Queue[Tuple[str, Any]]") -> None:
     def capture_progress(sent: int, total: int) -> None:
         # See if we need to bail out since our parent disappeared
         if not psutil.pid_exists(parent_pid):
@@ -25,8 +26,20 @@ def _send_file_to_host(host: str, filename: str, target: str, version: str, pare
 
     try:
         netdimm = NetDimm(host, target=target, version=version, quiet=True)
+
+        # Grab the image itself
         with open(filename, "rb") as fp:
-            netdimm.send(fp.read(), progress_callback=capture_progress)
+            data = fp.read()
+
+        # Patch it
+        for patch in patches:
+            with open(patch, "r") as pp:
+                differences = pp.readlines()
+            differences = [d.strip() for d in differences if d.strip()]
+            data = Binary.patch(data, differences)
+
+        # Send it
+        netdimm.send(data, progress_callback=capture_progress)
 
         progress_queue.put(("success", None))
     except Exception as e:
@@ -179,7 +192,7 @@ class Host:
             self.__proc = None
             return
 
-    def send(self, filename: str) -> None:
+    def send(self, filename: str, patches: Sequence[str]) -> None:
         with self.__lock:
             if self.__proc is not None:
                 raise HostException("Host has active transfer already")
@@ -187,7 +200,7 @@ class Host:
             self.__laststatus = None
 
             # Start the send
-            self.__proc = multiprocessing.Process(target=_send_file_to_host, args=(self.ip, filename, self.target, self.version, os.getpid(), self.__queue))
+            self.__proc = multiprocessing.Process(target=_send_file_to_host, args=(self.ip, filename, patches, self.target, self.version, os.getpid(), self.__queue))
             self.__proc.start()
 
             # Don't yield control back until we have got the first response from the process

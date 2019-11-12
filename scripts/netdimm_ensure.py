@@ -33,11 +33,23 @@ def main() -> int:
         type=str,
         help="NetDimm firmware version this image is going to. Defaults to '3.01', but '1.07', '2.03' and '2.15' are also valid",
     )
+    parser.add_argument(
+        '--patch-file',
+        metavar='FILE',
+        type=str,
+        action='append',
+        help=(
+            'Patch to apply to image on-the-fly while sending to the NetDimm. '
+            'Can be specified multiple times to apply multiple patches. '
+            'Patches will be applied in specified order. If not specified, the '
+            'image is sent without patching.'
+        ),
+    )
 
     args = parser.parse_args()
 
     print(f"managing {args.ip} to ensure {args.image} is always loaded")
-    cabinet = Cabinet(args.ip, "No description.", args.image, target=args.target, version=args.version)
+    cabinet = Cabinet(args.ip, Cabinet.REGION_UNKNOWN, "No description.", args.image, {args.image: args.patch_file or []}, target=args.target, version=args.version)
     while True:
         # Tick the state machine, display progress
         cabinet.tick()

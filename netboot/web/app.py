@@ -241,6 +241,7 @@ def createcabinet(ip: str) -> Dict[str, Any]:
         region=request.json['region'],
         description=request.json['description'],
         filename=request.json['filename'],
+        patches={},
         target=request.json['target'],
         version=request.json['version'],
     )
@@ -260,6 +261,7 @@ def updatecabinet(ip: str) -> Dict[str, Any]:
         region=request.json['region'],
         description=request.json['description'],
         filename=old_cabinet.filename,
+        patches=old_cabinet.patches,
         target=request.json['target'],
         version=request.json['version'],
     )
