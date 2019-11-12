@@ -2,6 +2,7 @@
 import argparse
 import os
 import sys
+from typing import List
 
 from netboot import Binary
 
@@ -52,7 +53,11 @@ def main() -> int:
         '--patch-file',
         metavar='FILE',
         type=str,
-        help='Read patches from a file instead of stdin.',
+        action='append',
+        help=(
+            'Read patches from a file instead of stdin. Can be specified multiple times '
+            'to apply multiple patches. Patches will be applied in specified order.'
+        ),
     )
     patch_parser.add_argument(
         '--reverse',
@@ -83,23 +88,27 @@ def main() -> int:
                 fp.write(os.linesep.join(differences))
     elif args.command == 'patch':
         with open(args.bin, "rb") as fp:
-            old = fp.read()
+            data = fp.read()
 
         if not args.patch_file:
-            differences = sys.stdin.readlines()
+            patch_list: List[List[str]] = [sys.stdin.readlines()]
         else:
-            with open(args.patch_file, "r") as fp:
-                differences = fp.readlines()
-        differences = [d.strip() for d in differences if d.strip()]
+            patch_list: List[List[str]] = []
+            for patch in args.patch_file:
+                with open(patch, "r") as fp:
+                    patch_list.append(fp.readlines())
 
-        try:
-            new = Binary.patch(old, differences, reverse=args.reverse)
-        except Exception as e:
-            print(f"Could not patch {args.bin}: {str(e)}", file=sys.stderr)
-            return 1
+        for differences in patch_list:
+            differences = [d.strip() for d in differences if d.strip()]
+
+            try:
+                data = Binary.patch(data, differences, reverse=args.reverse)
+            except Exception as e:
+                print(f"Could not patch {args.bin}: {str(e)}", file=sys.stderr)
+                return 1
 
         with open(args.out, "wb") as fp:
-            fp.write(new)
+            fp.write(data)
 
         print(f"Patched {args.bin} and wrote to {args.out}.")
     else:
