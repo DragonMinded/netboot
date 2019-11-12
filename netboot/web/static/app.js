@@ -58,7 +58,7 @@ Vue.component('rom', {
     props: ['dir', 'rom'],
     template: `
         <div class='rom'>
-            <a class="smallbutton" v-bind:href="'config/rom/' + encodeURI(dir + '/' + rom)">Configure ROM Names</a>
+            <a class="smallbutton" v-bind:href="'config/rom/' + encodeURI(dir + '/' + rom)">Configure ROM</a>
             {{ rom }}
         </div>
     `,
@@ -154,6 +154,29 @@ Vue.component('romconfig', {
             </dl>
             <button v-on:click="save">Update Names</button>
             <span class="successindicator" v-if="saved">&check; saved</span>
+        </div>
+    `,
+});
+
+Vue.component('availablepatches', {
+    data: function() {
+        axios.get('/patches/' + encodeURI(filename), this.names).then(result => {
+            if (!result.data.error) {
+                this.patches = result.data.patches;
+                this.loading = false;
+            }
+        });
+        return {
+            loading: true,
+            patches: {}
+        };
+    },
+    template: `
+        <div class='patchlist'>
+            <h3>Available Patches For This Rom</h3>
+            <directory v-if="!loading" v-for="patch in patches" v-bind:dir="patch" v-bind:key="patch"></directory>
+            <div v-if="loading">loading...</div>
+            <div v-if="!loading && Object.keys(patches).length === 0">no applicable patches</div>
         </div>
     `,
 });

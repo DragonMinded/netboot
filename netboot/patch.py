@@ -35,7 +35,7 @@ class PatchManager:
             # Grab currently known patches
             patches: List[str] = []
             for directory in self.__directories:
-                patches.extend(f for f in os.listdir(directory))
+                patches.extend(os.path.join(directory, f) for f in os.listdir(directory))
 
             # Figure out which of these is valid for this filename
             valid_patches: List[str] = []
@@ -43,7 +43,7 @@ class PatchManager:
                 with open(patch, "r") as pp:
                     patchlines = pp.readlines()
 
-                if Binary.can_patch(data, patchlines):
+                if Binary.can_patch(data, patchlines)[0]:
                     valid_patches.append(patch)
 
             return valid_patches
