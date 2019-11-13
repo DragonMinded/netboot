@@ -160,7 +160,7 @@ Vue.component('romconfig', {
 
 Vue.component('availablepatches', {
     data: function() {
-        axios.get('/patches/' + encodeURI(filename), this.names).then(result => {
+        axios.get('/patches/' + encodeURI(filename)).then(result => {
             if (!result.data.error) {
                 this.patches = result.data.patches;
                 this.loading = false;
@@ -171,12 +171,25 @@ Vue.component('availablepatches', {
             patches: {}
         };
     },
+    methods: {
+        recalculate: function() {
+            this.loading = true;
+            axios.delete('/patches/' + encodeURI(filename)).then(result => {
+                if (!result.data.error) {
+                    this.patches = result.data.patches;
+                    this.loading = false;
+                }
+            });
+        },
+    },
     template: `
         <div class='patchlist'>
             <h3>Available Patches For This Rom</h3>
             <directory v-if="!loading" v-for="patch in patches" v-bind:dir="patch" v-bind:key="patch"></directory>
             <div v-if="loading">loading...</div>
             <div v-if="!loading && Object.keys(patches).length === 0">no applicable patches</div>
+            <div>&nbsp;</div>
+            <button v-on:click="recalculate">Recalculate Patch Files</button>
         </div>
     `,
 });
@@ -292,6 +305,7 @@ Vue.component('roms', {
     data: function() {
         return {
             roms: window.roms,
+            deleted: false,
         };
     },
     methods: {
@@ -299,6 +313,14 @@ Vue.component('roms', {
             axios.get('/roms').then(result => {
                 if (!result.data.error) {
                     this.roms = result.data.roms;
+                }
+            });
+        },
+        recalculate: function() {
+            this.deleted = false;
+            axios.delete('/patches').then(result => {
+                if (!result.data.error) {
+                    this.deleted = true;
                 }
             });
         },
@@ -312,6 +334,9 @@ Vue.component('roms', {
         <div class='romlist'>
             <h3>Available ROMs</h3>
             <romlist v-for="rom in roms" v-bind:dir="rom" v-bind:key="rom"></romlist>
+            <div>&nbsp;</div>
+            <button v-on:click="recalculate">Recalculate All Patch Files</button>
+            <span class="successindicator" v-if="deleted">&check; recalculated</span>
         </div>
     `,
 });

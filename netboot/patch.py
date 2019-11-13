@@ -2,7 +2,7 @@ import os
 import os.path
 import threading
 
-from typing import List, Sequence
+from typing import Dict, List, Optional, Sequence
 from netboot.binary import Binary
 
 
@@ -14,6 +14,7 @@ class PatchManager:
     def __init__(self, directories: Sequence[str]) -> None:
         self.__directories = list(directories)
         self.__lock: threading.Lock = threading.Lock()
+        self.__cache: Dict[str, List[str]] = {}
 
     @property
     def directories(self) -> List[str]:
@@ -26,9 +27,20 @@ class PatchManager:
                 raise Exception(f"Directory {directory} is not managed by us!")
             return sorted([f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))])
 
+    def recalculate(self, filename: Optional[str] = None) -> None:
+        with self.__lock:
+            if filename is None:
+                self.__cache = {}
+            else:
+                if filename in self.__cache:
+                    del self.__cache[filename]
+
     def patches_for_game(self, filename: str) -> List[str]:
         with self.__lock:
-            # Grab game to see if any patches are applicable
+            # First, see if we already cached this file.
+            if filename in self.__cache:
+                return self.__cache[filename]
+
             with open(filename, "rb") as fp:
                 data = fp.read()
 
@@ -46,4 +58,5 @@ class PatchManager:
                 if Binary.can_patch(data, patchlines)[0]:
                     valid_patches.append(patch)
 
+            self.__cache[filename] = valid_patches
             return valid_patches

@@ -198,10 +198,37 @@ def updaterom(filename: str) -> Dict[str, Any]:
     }
 
 
+@app.route('/patches', methods=['DELETE'])
+@jsonify
+def recalculateallpatches() -> Dict[str, Any]:
+    patchman = app.config['PatchManager']
+    patchman.recalculate()
+    return {}
+
+
 @app.route('/patches/<filename:filename>')
 @jsonify
 def applicablepatches(filename: str) -> Dict[str, Any]:
     patchman = app.config['PatchManager']
+    directories = set(patchman.directories)
+    patches_by_directory = {}
+    for patch in patchman.patches_for_game(filename):
+        dirname, filename = os.path.split(patch)
+        if dirname not in directories:
+            raise Exception("Expected all patches to be inside managed directories!")
+        if dirname not in patches_by_directory:
+            patches_by_directory[dirname] = []
+        patches_by_directory[dirname].append(filename)
+    return {
+        'patches': [{'name': dirname, 'files': patches_by_directory[dirname]} for dirname in patches_by_directory],
+    }
+
+
+@app.route('/patches/<filename:filename>', methods=['DELETE'])
+@jsonify
+def recalculateapplicablepatches(filename: str) -> Dict[str, Any]:
+    patchman = app.config['PatchManager']
+    patchman.recalculate(filename)
     directories = set(patchman.directories)
     patches_by_directory = {}
     for patch in patchman.patches_for_game(filename):
