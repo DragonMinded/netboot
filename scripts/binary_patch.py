@@ -85,7 +85,7 @@ def main() -> int:
                 print(line)
         else:
             with open(args.patch_file, "w") as fp:
-                fp.write(os.linesep.join(differences))
+                fp.write(os.linesep.join(differences) + os.linesep)
     elif args.command == 'patch':
         with open(args.bin, "rb") as fp:
             data = fp.read()

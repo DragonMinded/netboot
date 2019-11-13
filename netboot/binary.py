@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 
 class BinaryException(Exception):
@@ -45,6 +45,9 @@ class Binary:
         cur_block: Tuple[int, bytes, bytes] = differences[0]
         ret: List[str] = []
 
+        # Now, include the original byte size for later comparison/checks
+        ret.append(f"# File size: {len(bin1)}")
+
         def _hexrun(val: bytes) -> str:
             return " ".join(Binary._hex(v) for v in val)
 
@@ -81,11 +84,24 @@ class Binary:
         return ret
 
     @staticmethod
+    def _get_supposed_size(patches: List[str]) -> Optional[int]:
+        for patch in patches:
+            if patch.startswith('#'):
+                # This is a comment, ignore it, unless its a file-size comment
+                patch = patch[1:].strip().lower()
+                if patch.startswith('file size:'):
+                    return int(patch[10:].strip())
+        return None
+
+    @staticmethod
     def _gather_differences(patches: List[str], reverse: bool) -> List[Tuple[int, bytes, bytes]]:
         # First, separate out into a list of offsets and old/new bytes
         differences: List[Tuple[int, bytes, bytes]] = []
 
         for patch in patches:
+            if patch.startswith('#'):
+                # This is a comment, ignore it.
+                continue
             start_offset, patch_contents = patch.split(':', 1)
             before, after = patch_contents.split('->')
             beforevals = [
@@ -134,6 +150,12 @@ class Binary:
         reverse: bool = False,
     ) -> bytes:
         # First, grab the differences
+        file_size = Binary._get_supposed_size(patches)
+        if file_size is not None and file_size != len(binary):
+            raise BinaryException(
+                f"Patch is for binary of size {file_size} but binary is {len(binary)} "
+                f"bytes long!"
+            )
         differences: List[Tuple[int, bytes, bytes]] = sorted(
             Binary._gather_differences(patches, reverse),
             key=lambda diff: diff[0],
@@ -173,6 +195,13 @@ class Binary:
         reverse: bool = False,
     ) -> Tuple[bool, str]:
         # First, grab the differences
+        file_size = Binary._get_supposed_size(patches)
+        if file_size is not None and file_size != len(binary):
+            return (
+                False,
+                f"Patch is for binary of size {file_size} but binary is {len(binary)} "
+                f"bytes long!"
+            )
         differences: List[Tuple[int, bytes, bytes]] = Binary._gather_differences(patches, reverse)
 
         # Now, verify the changes to the binary data
