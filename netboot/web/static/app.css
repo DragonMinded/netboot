@@ -1,4 +1,4 @@
-div.cabinet, div.config, div.romlist, div.patchlist, div.romconfig {
+div.cabinet, div.config, div.romlist, div.patchlist, div.gamelist, div.romconfig, div.game {
     margin: 20px;
     border: 1px solid #bbbbbb;
     padding: 20px;
@@ -23,11 +23,19 @@ div.cabinet dd, div.romconfig dd {
     padding-bottom: 5px;
 }
 
-div.cabinet h3, div.romlist h3, div.patchlist h3, div.romconfig h3 {
+div.cabinet h3, div.romlist h3, div.patchlist h3, div.gamelist h3, div.romconfig h3, div.game h3 {
     margin: 0px 0px 5px 0px;
 }
 
-div.rom, div.file {
+div.patch {
+    padding-bottom: 5px;
+}
+
+div.patch h4 {
+    margin: 0px 0px 5px 0px;
+}
+
+div.rom, div.file, div.patches {
     margin-left: 15px;
 }
 

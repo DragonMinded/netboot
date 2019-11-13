@@ -64,6 +64,32 @@ Vue.component('rom', {
     `,
 });
 
+Vue.component('patch', {
+    props: ['patch'],
+    template: `
+        <div>
+            <input type="checkbox" v-bind:id="patch.file" v-model="patch.enabled" />
+            <label v-bind:for="patch.file">{{ patch.name }}</label>
+        </div>
+    `,
+});
+
+Vue.component('game', {
+    props: ['game'],
+    template: `
+        <div class='patch'>
+            <h4>
+                <input type="checkbox" v-bind:id="game.file" v-model="game.enabled" />
+                <label v-bind:for="game.file">{{ game.name }}</label>
+            </h4>
+            <div class="patches">
+                <patch v-for="patch in game.patches" v-bind:patch="patch" v-bind:key="patch"></patch>
+                <span v-if="game.patches.length == 0">no patches available for game</span>
+            </div>
+        </div>
+    `,
+});
+
 Vue.component('cabinetconfig', {
     data: function() {
         return {
@@ -153,6 +179,44 @@ Vue.component('romconfig', {
                 <dt>Name (australia)</dt><dd><input v-model="names.australia" @input="changed"/></dd>
             </dl>
             <button v-on:click="save">Update Names</button>
+            <span class="successindicator" v-if="saved">&check; saved</span>
+        </div>
+    `,
+});
+
+Vue.component('availablegames', {
+    data: function() {
+        axios.get('/cabinets/' + cabinet.ip + '/games').then(result => {
+            if (!result.data.error) {
+                this.games = result.data.games;
+                this.loading = false;
+            }
+        });
+        return {
+            loading: true,
+            saved: false,
+            games: {}
+        };
+    },
+    methods: {
+        save: function() {
+            this.saved = false;
+            axios.post('/cabinets/' + cabinet.ip + '/games', {games: this.games}).then(result => {
+                if (!result.data.error) {
+                    this.games = result.data.games;
+                    this.saved = true;
+                }
+            });
+        },
+    },
+    template: `
+        <div class='gamelist'>
+            <h3>Available Games For This Cabinet</h3>
+            <game v-if="!loading" v-for="game in games" v-bind:game="game" v-bind:key="game"></game>
+            <div v-if="loading">loading...</div>
+            <div v-if="!loading && Object.keys(games).length === 0">no applicable games</div>
+            <div>&nbsp;</div>
+            <button v-on:click="save">Update Games</button>
             <span class="successindicator" v-if="saved">&check; saved</span>
         </div>
     `,

@@ -225,22 +225,10 @@ def applicablepatches(filename: str) -> Dict[str, Any]:
 
 
 @app.route('/patches/<filename:filename>', methods=['DELETE'])
-@jsonify
-def recalculateapplicablepatches(filename: str) -> Dict[str, Any]:
+def recalculateapplicablepatches(filename: str) -> Response:
     patchman = app.config['PatchManager']
     patchman.recalculate(filename)
-    directories = set(patchman.directories)
-    patches_by_directory = {}
-    for patch in patchman.patches_for_game(filename):
-        dirname, filename = os.path.split(patch)
-        if dirname not in directories:
-            raise Exception("Expected all patches to be inside managed directories!")
-        if dirname not in patches_by_directory:
-            patches_by_directory[dirname] = []
-        patches_by_directory[dirname].append(filename)
-    return {
-        'patches': [{'name': dirname, 'files': patches_by_directory[dirname]} for dirname in patches_by_directory],
-    }
+    return applicablepatches(filename)
 
 
 @app.route('/patches')
@@ -322,6 +310,53 @@ def removecabinet(ip: str) -> Dict[str, Any]:
     cabman.remove_cabinet(ip)
     serialize_app(app)
     return {}
+
+
+@app.route('/cabinets/<ip>/games')
+@jsonify
+def romsforcabinet(ip: str) -> Dict[str, Any]:
+    cabman = app.config['CabinetManager']
+    dirman = app.config['DirectoryManager']
+    patchman = app.config['PatchManager']
+    cabinet = cabman.cabinet(ip)
+
+    roms: List[Dict[str, str]] = []
+    for directory in dirman.directories:
+        for filename in dirman.games(directory):
+            full_filename = os.path.join(directory, filename)
+            patches = patchman.patches_for_game(full_filename)
+            patches = [
+                {
+                    'file': patch,
+                    'enabled': patch in cabinet.patches.get(full_filename, []),
+                    'name': os.path.basename(patch),
+                }
+                for patch in patches
+            ]
+            roms.append({
+                'file': full_filename,
+                'name': dirman.game_name(full_filename, cabinet.region),
+                'enabled': full_filename in cabinet.patches,
+                'patches': patches,
+            })
+    return {'games': roms}
+
+
+@app.route('/cabinets/<ip>/games', methods=['POST'])
+def updateromsforcabinet(ip: str) -> Response:
+    cabman = app.config['CabinetManager']
+    cabinet = cabman.cabinet(ip)
+    for game in request.json['games']:
+        if not game['enabled']:
+            if game['file'] in cabinet.patches:
+                del cabinet.patches[game['file']]
+        else:
+            cabinet.patches[game['file']] = [
+                p['file'] for p in game['patches']
+                if p['enabled']
+            ]
+    serialize_app(app)
+    return romsforcabinet(ip)
 
 
 class AppException(Exception):
