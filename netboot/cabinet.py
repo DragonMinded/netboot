@@ -178,12 +178,12 @@ class CabinetManager:
 
             if not isinstance(cab, dict):
                 raise CabinetException(f"Invalid YAML file format for {yaml_file}, missing cabinet details for {ip}!")
-            for key in ["description", "filename", "patches"]:
+            for key in ["description", "filename", "roms"]:
                 if key not in cab:
                     raise CabinetException(f"Invalid YAML file format for {yaml_file}, missing {key} for {ip}!")
             if cab['filename'] is not None and not os.path.isfile(str(cab['filename'])):
                 raise CabinetException(f"Invalid YAML file format for {yaml_file}, file {cab['filename']} for {ip} is not a file!")
-            for rom, patches in cab['patches'].items():
+            for rom, patches in cab['roms'].items():
                 if not os.path.isfile(str(rom)):
                     raise CabinetException(f"Invalid YAML file format for {yaml_file}, file {rom} for {ip} is not a file!")
                 for patch in patches:
@@ -196,7 +196,7 @@ class CabinetManager:
                     description=str(cab['description']),
                     region=str(cab['region']).lower(),
                     filename=str(cab['filename']) if cab['filename'] is not None else None,
-                    patches={str(rom): [str(p) for p in cab['patches'][rom]] for rom in cab['patches']},
+                    patches={str(rom): [str(p) for p in cab['roms'][rom]] for rom in cab['roms']},
                     target=str(cab['target']) if 'target' in cab else None,
                     version=str(cab['version']) if 'version' in cab else None,
                 )
@@ -217,7 +217,7 @@ class CabinetManager:
                 'target': cab.target,
                 'version': cab.version,
                 'filename': cab.filename,
-                'patches': cab.patches,
+                'roms': cab.patches,
             }
 
         with open(yaml_file, "w") as fp:
