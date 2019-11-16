@@ -33,7 +33,7 @@ def main() -> int:
     with open(args.bin, "rb") as fp:
         data = fp.read()
     newdata = force_no_attract_sound(data)
-    differences = Binary.diff(data, newdata)
+    differences = ["# Description: force silent attract mode", *Binary.diff(data, newdata)]
     if not args.patch_file:
         for line in differences:
             print(line)
