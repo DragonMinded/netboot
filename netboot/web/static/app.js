@@ -13,11 +13,48 @@ Vue.component('state', {
 
 Vue.component('cabinet', {
     props: ['cabinet'],
+    data: function() {
+        return {
+            selecting: false,
+            choice: this.cabinet.filename,
+            games: {},
+        };
+    },
+    methods: {
+        change: function() {
+            this.selecting = true;
+        },
+        choose: function() {
+            axios.post('/cabinets/' + this.cabinet.ip + '/filename', {filename: this.choice}).then(result => {
+                if (!result.data.error) {
+                    this.choice = result.data.filename;
+                    this.cabinet = result.data;
+                    this.selecting = false;
+                }
+            });
+        },
+        cancel: function() {
+            this.selecting = false;
+        },
+    },
     template: `
         <div class='cabinet'>
             <h3>{{ cabinet.description }}</h3>
             <dl>
-                <dt>Game</dt><dd>{{ cabinet.game }}</dd>
+                <dt>Game</dt>
+                <dd>
+                    <span v-if="!selecting">{{ cabinet.game }}</span>
+                    <span v-if="selecting">
+                        <select v-model="choice">
+                            <option v-for="game in cabinet.options" v-bind:value="game.file">{{ game.name }}</option>
+                        </select>
+                    </span>
+                    <span class="right">
+                        <button v-if="!selecting" class="small" v-on:click="change">Choose New Game</button>
+                        <button v-if="selecting" class="small" v-on:click="choose">Run This Game</button>
+                        <button v-if="selecting" class="small" v-on:click="cancel">Nevermind</button>
+                    </span>
+                </dd>
                 <dt>Status</dt><dd><state v-bind:status="cabinet.status" v-bind:progress="cabinet.progress"></state></dd>
             </dl>
             <a class="button" v-bind:href="'config/cabinet/' + cabinet.ip">Configure Cabinet</a>

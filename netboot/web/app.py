@@ -47,6 +47,8 @@ def cabinet_to_dict(cab: Cabinet, dirmanager: DirectoryManager) -> Dict[str, str
         'description': cab.description,
         'region': cab.region,
         'game': dirmanager.game_name(cab.filename, cab.region) if cab.filename is not None else "no game selected",
+        'filename': cab.filename,
+        'options': [{'file': filename, 'name': dirmanager.game_name(filename, cab.region)} for filename in cab.patches],
         'target': cab.target,
         'version': cab.version,
         'status': status,
@@ -357,6 +359,15 @@ def updateromsforcabinet(ip: str) -> Response:
             ]
     serialize_app(app)
     return romsforcabinet(ip)
+
+
+@app.route('/cabinets/<ip>/filename', methods=['POST'])
+def changegameforcabinet(ip: str) -> Response:
+    cabman = app.config['CabinetManager']
+    cab = cabman.cabinet(ip)
+    cab.filename = request.json['filename']
+    serialize_app(app)
+    return cabinet(ip)
 
 
 class AppException(Exception):

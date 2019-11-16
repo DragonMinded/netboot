@@ -76,3 +76,7 @@ span.errorindicator {
     margin-left: 5px;
     color: red;
 }
+
+span.right {
+    margin-left: 5px;
+}
