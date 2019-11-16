@@ -317,11 +317,6 @@ Vue.component('newcabinet', {
                         <option v-for="region in regions" v-bind:value="region">{{ region }}</option>
                     </select>
                 </dd>
-                <dt>Initial ROM</dt><dd>
-                    <select v-model="cabinet.filename">
-                        <option v-for="rom in roms" v-bind:value="rom.file">{{ rom.name }}</option>
-                    </select>
-                </dd>
                 <dt>Target</dt><dd>
                     <select v-model="cabinet.target">
                         <option v-for="target in targets" v-bind:value="target">{{ target }}</option>

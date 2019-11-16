@@ -25,7 +25,16 @@ class Cabinet:
     REGION_KOREA = "korea"
     REGION_AUSTRALIA = "australia"
 
-    def __init__(self, ip: str, region: str, description: str, filename: str, patches: Dict[str, Sequence[str]], target: Optional[str] = None, version: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        ip: str,
+        region: str,
+        description: str,
+        filename: Optional[str],
+        patches: Dict[str, Sequence[str]],
+        target: Optional[str] = None,
+        version: Optional[str] = None
+    ) -> None:
         if region not in [self.REGION_JAPAN, self.REGION_USA, self.REGION_EXPORT, self.REGION_KOREA, self.REGION_AUSTRALIA]:
             raise CabinetException(f"Unrecognized region {region}!")
         self.description: str = description
@@ -33,8 +42,8 @@ class Cabinet:
         self.patches: Dict[str, List[str]] = {rom: [p for p in patches[rom]] for rom in patches}
         self.__host: Host = Host(ip, target=target, version=version)
         self.__lock: threading.Lock = threading.Lock()
-        self.__current_filename: str = filename
-        self.__new_filename: str = filename
+        self.__current_filename: Optional[str] = filename
+        self.__new_filename: Optional[str] = filename
         self.__state: Tuple[str, int] = (self.STATE_STARTUP, 0)
 
     def _clone_state(self, other_cabinet: "Cabinet") -> None:
@@ -62,12 +71,12 @@ class Cabinet:
         return self.__host.version
 
     @property
-    def filename(self) -> str:
+    def filename(self) -> Optional[str]:
         with self.__lock:
             return self.__new_filename
 
     @filename.setter
-    def filename(self, new_filename: str) -> None:
+    def filename(self, new_filename: Optional[str]) -> None:
         with self.__lock:
             self.__new_filename = new_filename
 
@@ -89,8 +98,12 @@ class Cabinet:
             # if the cabinet is active, transition to self if cabinet is not.
             if current_state == self.STATE_WAIT_FOR_CABINET_POWER_ON:
                 if self.__host.alive:
-                    self.__host.send(self.__new_filename, self.patches.get(self.__new_filename, []))
-                    self.__state = (self.STATE_SEND_CURRENT_GAME, 0)
+                    if self.__new_filename is None:
+                        # Skip sending game, there's nothing to send
+                        self.__state = (self.STATE_WAIT_FOR_CABINET_POWER_OFF, 0)
+                    else:
+                        self.__host.send(self.__new_filename, self.patches.get(self.__new_filename, []))
+                        self.__state = (self.STATE_SEND_CURRENT_GAME, 0)
                 return
 
             # Wait for send to complete state. Transition to waiting for
@@ -168,7 +181,7 @@ class CabinetManager:
             for key in ["description", "filename", "patches"]:
                 if key not in cab:
                     raise CabinetException(f"Invalid YAML file format for {yaml_file}, missing {key} for {ip}!")
-            if not os.path.isfile(str(cab['filename'])):
+            if cab['filename'] is not None and not os.path.isfile(str(cab['filename'])):
                 raise CabinetException(f"Invalid YAML file format for {yaml_file}, file {cab['filename']} for {ip} is not a file!")
             for rom, patches in cab['patches'].items():
                 if not os.path.isfile(str(rom)):
@@ -182,7 +195,7 @@ class CabinetManager:
                     ip=ip,
                     description=str(cab['description']),
                     region=str(cab['region']).lower(),
-                    filename=str(cab['filename']),
+                    filename=str(cab['filename']) if cab['filename'] is not None else None,
                     patches={str(rom): [str(p) for p in cab['patches'][rom]] for rom in cab['patches']},
                     target=str(cab['target']) if 'target' in cab else None,
                     version=str(cab['version']) if 'version' in cab else None,
@@ -192,7 +205,7 @@ class CabinetManager:
         return CabinetManager(cabinets)
 
     def to_yaml(self, yaml_file: str) -> None:
-        data: Dict[str, Dict[str, Union[str, Dict[str, List[str]]]]] = {}
+        data: Dict[str, Dict[str, Optional[Union[str, Dict[str, List[str]]]]]] = {}
 
         with self.__lock:
             cabinets: List[Cabinet] = sorted([cab for _, cab in self.__cabinets.items()], key=lambda cab: cab.ip)
