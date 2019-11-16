@@ -271,12 +271,16 @@ def createcabinet(ip: str) -> Dict[str, Any]:
     dirman = app.config['DirectoryManager']
     if cabman.cabinet_exists(ip):
         raise Exception("Cabinet already exists!")
+    # As a convenience, start with all game selectable instad of none.
+    roms: List[str] = []
+    for directory in dirman.directories:
+        roms.extend(os.path.join(directory, filename) for filename in dirman.games(directory))
     new_cabinet = Cabinet(
         ip=ip,
         region=request.json['region'],
         description=request.json['description'],
         filename=None,
-        patches={},
+        patches={rom: [] for rom in roms},
         target=request.json['target'],
         version=request.json['version'],
     )
