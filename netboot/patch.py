@@ -35,6 +35,13 @@ class PatchManager:
                 if filename in self.__cache:
                     del self.__cache[filename]
 
+    def patch_name(self, filename: str) -> str:
+        with self.__lock:
+            with open(filename, "r") as pp:
+                patchlines = pp.readlines()
+
+            return Binary.description(patchlines) or os.path.splitext(os.path.basename(filename))[0].replace('_', ' ')
+
     def patches_for_game(self, filename: str) -> List[str]:
         with self.__lock:
             # First, see if we already cached this file.

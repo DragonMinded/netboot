@@ -223,3 +223,13 @@ class Binary:
 
         # Didn't find any problems
         return (True, "")
+
+    @staticmethod
+    def description(patches: List[str]) -> Optional[str]:
+        for patch in patches:
+            if patch.startswith('#'):
+                # This is a comment, ignore it, unless its a description comment
+                patch = patch[1:].strip().lower()
+                if patch.startswith('description:'):
+                    return patch[12:].strip()
+        return None

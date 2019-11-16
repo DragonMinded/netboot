@@ -335,7 +335,7 @@ def romsforcabinet(ip: str) -> Dict[str, Any]:
                 {
                     'file': patch,
                     'enabled': patch in cabinet.patches.get(full_filename, []),
-                    'name': os.path.basename(patch),
+                    'name': patchman.patch_name(patch),
                 }
                 for patch in patches
             ]
