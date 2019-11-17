@@ -3,12 +3,14 @@
 # Please attribute properly, but only if you want.
 import socket
 import struct
-import sys
 import zlib
 
 from Crypto.Cipher import DES
 from contextlib import contextmanager
 from typing import Callable, Generator, List, Optional
+
+
+from netboot.log import log
 
 
 class NetDimmException(Exception):
@@ -71,7 +73,7 @@ class NetDimm:
 
     def __print(self, string: str, newline: bool = True) -> None:
         if not self.quiet:
-            print(string, file=sys.stderr, end="\n" if newline else "")
+            log(string, newline=newline)
 
     def __read(self, num: int) -> bytes:
         if self.sock is None:

@@ -6,6 +6,7 @@ import yaml
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from netboot.hostutils import Host
+from netboot.log import log
 
 
 class CabinetException(Exception):
@@ -33,14 +34,16 @@ class Cabinet:
         filename: Optional[str],
         patches: Dict[str, Sequence[str]],
         target: Optional[str] = None,
-        version: Optional[str] = None
+        version: Optional[str] = None,
+        quiet: bool = False,
     ) -> None:
         if region not in [self.REGION_JAPAN, self.REGION_USA, self.REGION_EXPORT, self.REGION_KOREA, self.REGION_AUSTRALIA]:
             raise CabinetException(f"Unrecognized region {region}!")
         self.description: str = description
         self.region: str = region
         self.patches: Dict[str, List[str]] = {rom: [p for p in patches[rom]] for rom in patches}
-        self.__host: Host = Host(ip, target=target, version=version)
+        self.quiet = quiet
+        self.__host: Host = Host(ip, target=target, version=version, quiet=self.quiet)
         self.__lock: threading.Lock = threading.Lock()
         self.__current_filename: Optional[str] = filename
         self.__new_filename: Optional[str] = filename
@@ -80,6 +83,10 @@ class Cabinet:
         with self.__lock:
             self.__new_filename = new_filename
 
+    def __print(self, string: str, newline: bool = True) -> None:
+        if not self.quiet:
+            log(string, newline=newline)
+
     def tick(self) -> None:
         """
         Tick the state machine forward.
@@ -91,6 +98,7 @@ class Cabinet:
 
             # Startup state, only one transition to waiting for cabinet
             if current_state == self.STATE_STARTUP:
+                self.__print(f"Cabinet {self.ip} waiting for power on.")
                 self.__state = (self.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
                 return
 
@@ -100,8 +108,10 @@ class Cabinet:
                 if self.__host.alive:
                     if self.__new_filename is None:
                         # Skip sending game, there's nothing to send
+                        self.__print(f"Cabinet {self.ip} has no associated game, waiting for power off.")
                         self.__state = (self.STATE_WAIT_FOR_CABINET_POWER_OFF, 0)
                     else:
+                        self.__print(f"Cabinet {self.ip} sending game {self.__new_filename}.")
                         self.__host.send(self.__new_filename, self.patches.get(self.__new_filename, []))
                         self.__state = (self.STATE_SEND_CURRENT_GAME, 0)
                 return
@@ -116,8 +126,10 @@ class Cabinet:
                     current, total = self.__host.progress
                     self.__state = (self.STATE_SEND_CURRENT_GAME, int(float(current * 100) / float(total)))
                 elif self.__host.status == Host.STATUS_FAILED:
+                    self.__print(f"Cabinet {self.ip} failed to send game, waiting for power on.")
                     self.__state = (self.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
                 elif self.__host.status == Host.STATUS_COMPLETED:
+                    self.__print(f"Cabinet {self.ip} succeeded sending game, rebooting and waiting for power off.")
                     self.__host.reboot()
                     self.__state = (self.STATE_WAIT_FOR_CABINET_POWER_OFF, 0)
                 return
@@ -128,8 +140,10 @@ class Cabinet:
             # if cabinet stays on.
             if current_state == self.STATE_WAIT_FOR_CABINET_POWER_OFF:
                 if not self.__host.alive:
+                    self.__print(f"Cabinet {self.ip} turned off, waiting for power on.")
                     self.__state = (self.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
                 elif self.__current_filename != self.__new_filename:
+                    self.__print(f"Cabinet {self.ip} changed games to {self.__new_filename}, waiting for power on.")
                     self.__current_filename = self.__new_filename
                     self.__state = (self.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
                 return

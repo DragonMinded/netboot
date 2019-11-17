@@ -1,3 +1,4 @@
+import os
 import os.path
 import yaml
 import traceback
@@ -188,7 +189,6 @@ def updaterom(filename: str) -> Dict[str, Any]:
     if name not in dirman.games(directory):
         raise Exception("This isn't a valid ROM file!")
     for region, name in request.json.items():
-        print(f"renaming rom {region} to {name}")
         dirman.rename_game(filename, region, name)
     serialize_app(app)
     return {
@@ -379,6 +379,9 @@ class AppException(Exception):
 
 
 def spawn_app(config_file: str) -> Flask:
+    if not os.environ.get('WERKZEUG_RUN_MAIN'):
+        return app
+
     with open(config_file, "r") as fp:
         data = yaml.safe_load(fp)
     config_dir = os.path.abspath(os.path.dirname(config_file))

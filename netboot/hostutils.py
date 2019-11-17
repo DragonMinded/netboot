@@ -10,6 +10,7 @@ import time
 from typing import Optional, Sequence, Tuple, TYPE_CHECKING
 
 from netboot.binary import Binary
+from netboot.log import log
 from netboot.netboot import NetDimm, NetDimmException
 
 
@@ -56,11 +57,18 @@ class Host:
     STATUS_COMPLETED = "completed"
     STATUS_FAILED = "failed"
 
-    SUCCESS_SECONDS = 3
+    DEBOUNCE_SECONDS = 3
 
-    def __init__(self, ip: str, target: Optional[str] = None, version: Optional[str] = None) -> None:
+    def __init__(self, ip: str, target: Optional[str] = None, version: Optional[str] = None, quiet: bool = False) -> None:
+        if target is not None and target not in [NetDimm.TARGET_CHIHIRO, NetDimm.TARGET_NAOMI, NetDimm.TARGET_TRIFORCE]:
+            raise NetDimmException(f"Invalid target platform {target}")
+        self.target: str = target or NetDimm.TARGET_NAOMI
+        if version is not None and version not in [NetDimm.TARGET_VERSION_1_07, NetDimm.TARGET_VERSION_2_03, NetDimm.TARGET_VERSION_2_15, NetDimm.TARGET_VERSION_3_01]:
+            raise NetDimmException(f"Invalid NetDimm version {version}")
+        self.version: str = version or NetDimm.TARGET_VERSION_3_01
         self.ip: str = ip
         self.alive: bool = False
+        self.quiet: bool = quiet
         self.__queue: "multiprocessing.Queue[Tuple[str, Any]]" = multiprocessing.Queue()
         self.__lock: multiprocessing.synchronize.Lock = multiprocessing.Lock()
         self.__proc: Optional[multiprocessing.Process] = None
@@ -70,18 +78,16 @@ class Host:
         self.__thread.setDaemon(True)
         self.__thread.start()
 
-        if target is not None and target not in [NetDimm.TARGET_CHIHIRO, NetDimm.TARGET_NAOMI, NetDimm.TARGET_TRIFORCE]:
-            raise NetDimmException(f"Invalid target platform {target}")
-        self.target: str = target or NetDimm.TARGET_NAOMI
-        if version is not None and version not in [NetDimm.TARGET_VERSION_1_07, NetDimm.TARGET_VERSION_2_03, NetDimm.TARGET_VERSION_2_15, NetDimm.TARGET_VERSION_3_01]:
-            raise NetDimmException(f"Invalid NetDimm version {version}")
-        self.version: str = version or NetDimm.TARGET_VERSION_3_01
-
     def __repr__(self) -> str:
         return f"Host(ip={repr(self.ip)}, target={repr(self.target)}, version={repr(self.version)})"
 
+    def __print(self, string: str, newline: bool = True) -> None:
+        if not self.quiet:
+            log(string, newline=newline)
+
     def __poll_thread(self) -> None:
         success_count: int = 0
+        failure_count: int = 0
 
         while True:
             # Dont bother if we're actively sending
@@ -96,15 +102,22 @@ class Host:
                 # Only claim up if it response to a number of pings.
                 if alive:
                     success_count += 1
-                    if success_count >= self.SUCCESS_SECONDS:
+                    failure_count = 0
+                    if success_count >= self.DEBOUNCE_SECONDS:
                         with self.__lock:
+                            if self.alive != alive:
+                                self.__print(f"Host {self.ip} started responding to ping, marking up.")
                             self.alive = True
                 else:
                     success_count = 0
-                    with self.__lock:
-                        self.alive = False
+                    failure_count += 1
+                    if failure_count >= self.DEBOUNCE_SECONDS:
+                        with self.__lock:
+                            if self.alive != alive:
+                                self.__print(f"Host {self.ip} stopped responding to ping, marking down.")
+                            self.alive = False
 
-            time.sleep(2 if success_count >= self.SUCCESS_SECONDS else 1)
+            time.sleep(2 if success_count >= self.DEBOUNCE_SECONDS else 1)
 
     def reboot(self) -> bool:
         """
