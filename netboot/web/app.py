@@ -241,7 +241,8 @@ def applicablepatches(filename: str) -> Dict[str, Any]:
 @app.route('/patches/<filename:filename>', methods=['DELETE'])
 def recalculateapplicablepatches(filename: str) -> Response:
     patchman = app.config['PatchManager']
-    if filename.startswith('/'):
+    patchman.recalculate(filename)
+    if not filename.startswith('/'):
         filename = "/" + filename
     patchman.recalculate(filename)
     return applicablepatches(filename)
