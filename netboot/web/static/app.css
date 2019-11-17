@@ -1,3 +1,7 @@
+body {
+    font-family: Arial;
+}
+
 div.cabinet, div.config, div.romlist, div.patchlist, div.gamelist, div.romconfig, div.game {
     margin: 20px;
     border: 1px solid #bbbbbb;
@@ -49,7 +53,8 @@ a.button, button {
     border: 1px solid #777777;
     border-radius: 5px;
     color: white;
-    font-weight: bold;
+    font-weight: normal;
+    font-size: 14px;
     text-decoration: none;
     background: #4E9CAF;
     padding: 5px 15px;
@@ -61,7 +66,8 @@ a.smallbutton, button.small {
     border: 1px solid #777777;
     border-radius: 5px;
     color: white;
-    font-size: small;
+    font-size: 12px;
+    font-weight: normal;
     text-decoration: none;
     background: #4E9CAF;
     padding: 3px 10px;
