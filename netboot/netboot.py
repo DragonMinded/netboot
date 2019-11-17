@@ -104,6 +104,7 @@ class NetDimm:
         # - it *should* work on naomi and chihiro, but due to lack of hardware, i didn't try.
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.settimeout(10)
             self.sock.connect((self.ip, 10703))
         except Exception as e:
             raise NetDimmException("Could not connect to NetDimm") from e
