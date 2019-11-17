@@ -196,8 +196,10 @@ class Host:
 
             # Transfer finished, so we should update our final status and wait on the process
             if update[0] == "success":
+                self.__print(f"Host {self.ip} succeeded in sending image.")
                 self.__laststatus = self.STATUS_COMPLETED
             elif update[0] == "failure":
+                self.__print(f"Host {self.ip} failed to send image: {update[1]}.")
                 self.__laststatus = self.STATUS_FAILED
             self.__lastprogress = (-1, -1)
 
@@ -211,6 +213,7 @@ class Host:
                 raise HostException("Host has active transfer already")
             self.__lastprogress = (-1, -1)
             self.__laststatus = None
+            self.__print(f"Host {self.ip} started sending image.")
 
             # Start the send
             self.__proc = multiprocessing.Process(target=_send_file_to_host, args=(self.ip, filename, patches, self.target, self.version, os.getpid(), self.__queue))
