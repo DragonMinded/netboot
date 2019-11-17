@@ -11,6 +11,8 @@
             window.addEventListener("load", function(event) {
                 new Vue({el: '#app'});
             });
+            // Automatically show config once we go here manually.
+            setCookie('admin', 'true', 7);
         </script>
     </head>
     <body>

@@ -1,4 +1,38 @@
-Vue.config.devtools = true;
+function setCookie(cname, cvalue, exdays) {
+    var d = new Date();
+    d.setTime(d.getTime() + (exdays * 24 * 60 * 60 * 1000));
+    var expires = "expires="+d.toUTCString();
+    document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/";
+}
+
+function getCookie(cname) {
+    var name = cname + "=";
+    var ca = document.cookie.split(';');
+    for(var i = 0; i < ca.length; i++) {
+        var c = ca[i];
+        while (c.charAt(0) == ' ') {
+            c = c.substring(1);
+        }
+        if (c.indexOf(name) == 0) {
+            return c.substring(name.length, c.length);
+        }
+    }
+    return "";
+}
+
+const eventBus = new Vue ({
+    created() {
+        window.keys = "";
+        window.addEventListener('keydown', (e) => {
+            window.keys = window.keys + e.key;
+            if( window.keys.substr(window.keys.length - 6) == "config" ) {
+                window.keys = "";
+                setCookie('admin', 'true', 7);
+                eventBus.$emit('changeConfigButtons', true)
+            }
+        });
+    },
+});
 
 Vue.component('state', {
     props: ['status', 'progress'],
@@ -18,6 +52,7 @@ Vue.component('cabinet', {
             selecting: false,
             choice: this.cabinet.filename,
             games: {},
+            admin: getCookie('admin') == 'true',
         };
     },
     methods: {
@@ -36,6 +71,12 @@ Vue.component('cabinet', {
         cancel: function() {
             this.selecting = false;
         },
+        update: function() {
+            this.admin = getCookie('admin') == 'true';
+        },
+    },
+    created () {
+        eventBus.$on('changeConfigButtons', this.update);
     },
     template: `
         <div class='cabinet'>
@@ -57,7 +98,7 @@ Vue.component('cabinet', {
                 </dd>
                 <dt>Status</dt><dd><state v-bind:status="cabinet.status" v-bind:progress="cabinet.progress"></state></dd>
             </dl>
-            <a class="button" v-bind:href="'config/cabinet/' + cabinet.ip">Configure Cabinet</a>
+            <a class="button" v-if="admin" v-bind:href="'config/cabinet/' + cabinet.ip">Configure Cabinet</a>
         </div>
     `,
 });
@@ -461,6 +502,36 @@ Vue.component('patches', {
         <div class='patchlist'>
             <h3>Available Patches</h3>
             <directory v-for="patch in patches" v-bind:dir="patch" v-bind:key="patch"></directory>
+        </div>
+    `,
+});
+
+Vue.component('systemconfig', {
+    data: function() {
+        return {
+            admin: getCookie('admin') == 'true',
+        };
+    },
+    methods: {
+        hide: function() {
+            setCookie('admin', 'false', -1);
+            this.admin = false;
+            eventBus.$emit('changeConfigButtons', true)
+        },
+        update: function() {
+            this.admin = getCookie('admin') == 'true';
+        },
+    },
+    created () {
+        eventBus.$on('changeConfigButtons', this.update);
+    },
+    template: `
+        <div v-if="admin" class="config">
+            <div>
+                <a class="button" href="/addcabinet">Add New Cabinet</a>
+                <a class="button" href="/config">Configure System</a>
+                <button v-on:click="hide">Hide Config Buttons</button>
+            </div>
         </div>
     `,
 });
