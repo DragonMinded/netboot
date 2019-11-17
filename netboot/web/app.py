@@ -378,8 +378,8 @@ class AppException(Exception):
     pass
 
 
-def spawn_app(config_file: str) -> Flask:
-    if not os.environ.get('WERKZEUG_RUN_MAIN'):
+def spawn_app(config_file: str, debug: bool = False) -> Flask:
+    if debug and not os.environ.get('WERKZEUG_RUN_MAIN'):
         return app
 
     with open(config_file, "r") as fp:

@@ -21,11 +21,7 @@ def _patch_rom(data: bytes, search: bytes, replace: bytes) -> bytes:
         raise Exception("ROM file does not have a suitable spot for the patch!")
 
     # Now, generate a patch with this updated data overlaid on the original rom
-    return (
-        data[:patch_location] +
-        replace +
-        data[(patch_location + len(replace)):]
-    )
+    return data[:patch_location] + replace + data[(patch_location + len(replace)):]
 
 
 def force_freeplay(data: bytes) -> bytes:
