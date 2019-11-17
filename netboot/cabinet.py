@@ -112,6 +112,7 @@ class Cabinet:
                         self.__state = (self.STATE_WAIT_FOR_CABINET_POWER_OFF, 0)
                     else:
                         self.__print(f"Cabinet {self.ip} sending game {self.__new_filename}.")
+                        self.__current_filename = self.__new_filename
                         self.__host.send(self.__new_filename, self.patches.get(self.__new_filename, []))
                         self.__state = (self.STATE_SEND_CURRENT_GAME, 0)
                 return
