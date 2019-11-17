@@ -73,12 +73,19 @@ def systemconfig() -> Response:
     dirman = app.config['DirectoryManager']
     roms: List[Dict[str, str]] = []
     for directory in dirman.directories:
-        roms.append({'name': directory, 'files': dirman.games(directory)})
+        roms.append({'name': directory, 'files': sorted(dirman.games(directory))})
     patchman = app.config['PatchManager']
     patches: List[Dict[str, str]] = []
     for directory in patchman.directories:
-        patches.append({'name': directory, 'files': patchman.patches(directory)})
-    return make_response(render_template('systemconfig.html', roms=roms, patches=patches), 200)
+        patches.append({'name': directory, 'files': sorted(patchman.patches(directory))})
+    return make_response(
+        render_template(
+            'systemconfig.html',
+            roms=sorted(roms, key=lambda rom: rom['name']),
+            patches=sorted(patches, key=lambda patch: patch['name']),
+        ),
+        200,
+    )
 
 
 @app.route('/config/rom/<filename:filename>')
@@ -142,10 +149,6 @@ def cabinetconfig(ip: str) -> Response:
 
 @app.route('/addcabinet')
 def addcabinet() -> Response:
-    dirman = app.config['DirectoryManager']
-    roms: List[Dict[str, str]] = []
-    for directory in dirman.directories:
-        roms.extend({'name': filename, 'file': os.path.join(directory, filename)} for filename in dirman.games(directory))
     return make_response(
         render_template(
             'addcabinet.html',
@@ -167,7 +170,6 @@ def addcabinet() -> Response:
                 NetDimm.TARGET_VERSION_2_03,
                 NetDimm.TARGET_VERSION_1_07,
             ],
-            roms=roms,
         ),
         200
     )
@@ -179,9 +181,9 @@ def roms() -> Dict[str, Any]:
     dirman = app.config['DirectoryManager']
     roms: List[Dict[str, str]] = []
     for directory in dirman.directories:
-        roms.append({'name': directory, 'files': dirman.games(directory)})
+        roms.append({'name': directory, 'files': sorted(dirman.games(directory))})
     return {
-        'roms': roms,
+        'roms': sorted(roms, key=lambda rom: rom['name']),
     }
 
 
@@ -237,7 +239,10 @@ def applicablepatches(filename: str) -> Dict[str, Any]:
             patches_by_directory[dirname] = []
         patches_by_directory[dirname].append(filename)
     return {
-        'patches': [{'name': dirname, 'files': patches_by_directory[dirname]} for dirname in patches_by_directory],
+        'patches': sorted(
+            [{'name': dirname, 'files': sorted(patches_by_directory[dirname])} for dirname in patches_by_directory],
+            key=lambda patch: patch['name'],
+        )
     }
 
 
@@ -257,9 +262,9 @@ def patches() -> Dict[str, Any]:
     patchman = app.config['PatchManager']
     patches: List[Dict[str, str]] = []
     for directory in patchman.directories:
-        patches.append({'name': directory, 'files': patchman.patches(directory)})
+        patches.append({'name': directory, 'files': sorted(patchman.patches(directory))})
     return {
-        'patches': patches,
+        'patches': sorted(patches, key=lambda patch: patch['name']),
     }
 
 
@@ -269,7 +274,10 @@ def cabinets() -> Dict[str, Any]:
     cabman = app.config['CabinetManager']
     dirman = app.config['DirectoryManager']
     return {
-        'cabinets': [cabinet_to_dict(cab, dirman) for cab in cabman.cabinets],
+        'cabinets': sorted(
+            [cabinet_to_dict(cab, dirman) for cab in cabman.cabinets],
+            key=lambda cab: cab['description'],
+        ),
     }
 
 
@@ -349,21 +357,24 @@ def romsforcabinet(ip: str) -> Dict[str, Any]:
         for filename in dirman.games(directory):
             full_filename = os.path.join(directory, filename)
             patches = patchman.patches_for_game(full_filename)
-            patches = [
-                {
-                    'file': patch,
-                    'enabled': patch in cabinet.patches.get(full_filename, []),
-                    'name': patchman.patch_name(patch),
-                }
-                for patch in patches
-            ]
+            patches = sorted(
+                [
+                    {
+                        'file': patch,
+                        'enabled': patch in cabinet.patches.get(full_filename, []),
+                        'name': patchman.patch_name(patch),
+                    }
+                    for patch in patches
+                ],
+                key=lambda patch: patch['name'],
+            )
             roms.append({
                 'file': full_filename,
                 'name': dirman.game_name(full_filename, cabinet.region),
                 'enabled': full_filename in cabinet.patches,
                 'patches': patches,
             })
-    return {'games': roms}
+    return {'games': sorted(roms, key=lambda rom: rom['name'])}
 
 
 @app.route('/cabinets/<ip>/games', methods=['POST'])

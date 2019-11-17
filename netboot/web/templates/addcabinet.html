@@ -6,7 +6,6 @@
         <script src="{{ url_for('static', filename='vue.js') }}"></script>
         <script src="{{ url_for('static', filename='app.js') }}"></script>
         <script>
-            window.roms = {{ roms|tojson|safe }};
             window.regions = {{ regions|tojson|safe }};
             window.targets = {{ targets|tojson|safe }};
             window.versions = {{ versions|tojson|safe }};

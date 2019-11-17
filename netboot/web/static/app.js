@@ -38,7 +38,7 @@ Vue.component('state', {
     props: ['status', 'progress'],
     template: `
         <span>
-            <span v-if="status == 'startup' || status == 'wait_power_on'">powered off</span>
+            <span v-if="status == 'startup' || status == 'wait_power_on'">waiting for cabinet</span>
             <span v-if="status == 'wait_power_off'">running game</span>
             <span v-if="status == 'send_game'">sending game ({{ progress }}% complete)</span>
         </span>
@@ -345,7 +345,6 @@ Vue.component('newcabinet', {
                 'region': window.regions[0],
                 'target': window.targets[0],
                 'version': window.versions[0],
-                'filename': window.roms[0].file,
             },
             invalid_ip: false,
             invalid_description: false,
