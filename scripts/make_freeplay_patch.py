@@ -39,7 +39,7 @@ def main() -> int:
             print(line)
     else:
         with open(args.patch_file, "w") as fp:
-            fp.write(os.linesep.join(differences))
+            fp.write(os.linesep.join(differences) + os.linesep)
 
     return 0
 
