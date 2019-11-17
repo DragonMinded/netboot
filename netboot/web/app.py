@@ -82,6 +82,9 @@ def systemconfig() -> Response:
 def romconfig(filename: str) -> Response:
     dirman = app.config['DirectoryManager']
     directory, name = os.path.split(filename)
+    if directory not in dirman.directories and not directory.startswith('/'):
+        directory = "/" + directory
+        filename = "/" + filename
     if directory not in dirman.directories:
         raise Exception("This isn't a valid ROM file!")
     if name not in dirman.games(directory):
@@ -184,6 +187,9 @@ def roms() -> Dict[str, Any]:
 def updaterom(filename: str) -> Dict[str, Any]:
     dirman = app.config['DirectoryManager']
     directory, name = os.path.split(filename)
+    if directory not in dirman.directories and not directory.startswith('/'):
+        directory = "/" + directory
+        filename = "/" + filename
     if directory not in dirman.directories:
         raise Exception("This isn't a valid ROM file!")
     if name not in dirman.games(directory):
@@ -214,7 +220,13 @@ def applicablepatches(filename: str) -> Dict[str, Any]:
     patchman = app.config['PatchManager']
     directories = set(patchman.directories)
     patches_by_directory = {}
-    for patch in patchman.patches_for_game(filename):
+    try:
+        patches = patchman.patches_for_game(filename)
+    except FileNotFoundError:
+        if not filename.startswith('/'):
+            filename = "/" + filename
+        patches = patchman.patches_for_game(filename)
+    for patch in patches:
         dirname, filename = os.path.split(patch)
         if dirname not in directories:
             raise Exception("Expected all patches to be inside managed directories!")
@@ -229,6 +241,8 @@ def applicablepatches(filename: str) -> Dict[str, Any]:
 @app.route('/patches/<filename:filename>', methods=['DELETE'])
 def recalculateapplicablepatches(filename: str) -> Response:
     patchman = app.config['PatchManager']
+    if filename.startswith('/'):
+        filename = "/" + filename
     patchman.recalculate(filename)
     return applicablepatches(filename)
 
