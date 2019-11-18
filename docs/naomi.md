@@ -4,30 +4,47 @@ I attempted to write a universal EEPROM write patch for Naomi in order to allow 
 
 ## Main Executable Layout
 
-The Naomi BIOS will load the rom header (first 1000 bytes) through the simulated GD-ROM interface in order to determine how to load the main executable. Then, depending on some parameters in this header, it will load the main game executable and then jump to the entrypoint, starting the game. Even though the Naomi has ROM cartridges, it does not access them through memory mapped interface. Instead, it uses GD-ROM registers much like the Dreamcast. So, parts of the rom must be DMA'd over using the GD-ROM interface hardware before executing. This means that if you are using a Dimm board with a GD-ROM attached, it has its own firmware to load the image off of the GD-ROM itself and into its memory, which is then DMA'd over by the Naomi BIOS itself. Bit of a rube goldberg machine but it works.
+The Naomi BIOS will load the ROM header (first 0x500 bytes) through the simulated GD-ROM interface in order to determine how to load the main executable. Then, depending on some parameters in this header, it will load the main game executable and then jump to the entrypoint, starting the game. Even though the Naomi has ROM cartridges, it does not access them through memory mapped interface. Instead, it uses GD-ROM registers much like the Dreamcast. So, parts of the ROM must be DMA'd over using the GD-ROM interface hardware before executing. This means that if you are using a Dimm board with a GD-ROM attached, it has its own firmware to load the image off of the GD-ROM itself and into its memory, which is then DMA'd over by the Naomi BIOS itself. Bit of a rube goldberg machine but it works.
 
-The header of a Naomi rom is as follows. I have only documented locations that I've RE'd or figured out by observation, the rest is a mystery to me. This is enough to use an existing game and replace the main executable to get homebrew on the system, or to understand where to search in the ROM for making hacks or fixes.
+The header of a Naomi ROM is as follows. I have documented locations that I've RE'd or figured out by observation and filled in additional information from MetalliC. This is enough to use an existing game and replace the main executable to get homebrew on the system, or to understand where to search in the ROM for making hacks or fixes.
 
-* `0x000` = 16 bytes ASCII system description, always set to `NAOMI           ` in practice (yes, with 0x20 as pad bytes).
+* `0x000` = 16 bytes ASCII system description, always set to `NAOMI           ` for Naomi ROMs (with 0x20 as pad bytes). Possible other values exist for Naomi 2 and System SP ROMs.
 * `0x010` = 32 byte space-padded ASCII string of publisher/copyright holder.
 * `0x030` = 32 byte space-padded ASCII string of game title in Japan region.
 * `0x050` = 32 byte space-padded ASCII string of game title in USA region.
 * `0x070` = 32 byte space-padded ASCII string of game title in Export region.
 * `0x090` = 32 byte space-padded ASCII string of game title in Korea region.
 * `0x0B0` = 32 byte space-padded ASCII string of game title in Australia region.
-
-There are three more unused region strings after this, spaced exactly where you expect them. Some games leave this empty. Some forgot to change it and it has a dummy starter game name. Some games set this to a generic title without region info.
-
+* `0x0D0` = 32 byte space-padded ASCII string of game title in dummy region 6. Some games leave this empty. Some forgot to change it and it has a dummy starter game name. Some games set this to a generic title without region info.
+* `0x0F0` = 32 byte space-padded ASCII string of game title in dummy region 7. Some games leave this empty. Some forgot to change it and it has a dummy starter game name. Some games set this to a generic title without region info.
+* `0x110` = 32 byte space-padded ASCII string of game title in dummy region 8. Some games leave this empty. Some forgot to change it and it has a dummy starter game name. Some games set this to a generic title without region info.
+* `0x130` = 2 byte year of manufacture.
+* `0x132` = 1 byte month of manufacture.
+* `0x133` = 1 byte day of manufacture.
 * `0x134` = 4 byte ASCII serial number (used by BIOS for validating system settings, see EEPROM below).
-* `0x138` = Unknown flag that controls something to do with main ROM copy. Observed to be `0x01` and `0x00` in practice.
-* `0x360` = 4 byte offset into ROM file where BIOS should start copying for the main executable.
-* `0x364` = Load address in main memory where copy should go. The first byte found at the offset specified at `0x360` will be placed into the memory region specified at `0x364`, and the rest of the bytes follow.
-* `0x368` = 4 byte offset into ROM file where BIOS should stop copying. The length of the main executable is therefore this value minus the start offset above.
-* `0x420` = entrypoint to jump to for main game after copy is done. This will always be at or after the load address above, but before load address plus the length.
-* `0x3C0` = 4 byte offset into ROM file for test mode executable. Identical to above documentation, but what's loaded for test.
-* `0x3C4` = Load address in main memory where copy should go, identical to above documentation.
-* `0x3C8` = 4 byte offset into the ROM file to stop copying the test executable. Identical to above.
-* `0x424` = Entrypoin in main RAM to jump to for test mode after copy is done.
+* `0x138` = 2 byte 8MB ROM mode flag. Non-zero value specifies that ROM board offsets should be OR'd with 0x20000000.
+* `0x13A` = 2 byte G1 BUS init flag. Non-zero value specifies that the below G1 BUS register values should be used.
+* `0x13C` = 4 byte SB_G1RRC init value, only used if `0x13A` is non-zero.
+* `0x140` = 4 byte SB_G1RWC init value, only used if `0x13A` is non-zero.
+* `0x144` = 4 byte SB_G1FRC init value, only used if `0x13A` is non-zero.
+* `0x148` = 4 byte SB_G1FWC init value, only used if `0x13A` is non-zero.
+* `0x14C` = 4 byte SB_G1CRC init value, only used if `0x13A` is non-zero.
+* `0x150` = 4 byte SB_G1CWC init value, only used if `0x13A` is non-zero.
+* `0x154` = 4 byte SB_G1GDRC init value, only used if `0x13A` is non-zero.
+* `0x158` = 4 byte SB_G1GDWC init value, only used if `0x13A` is non-zero.
+
+... TBD ...
+
+* `0x360` = Up to 8 12-byte game executable load entries. These will be loaded when the main game is executed. Naomi signifies that the end of the list has been reached if the offset is `0xFFFFFFFF`. Each entry consists of the following:
+  * 4 byte offset into ROM file where BIOS should start copying for this load entry.
+  * 4 byte load address in main memory where copy should go. The first byte found at the above offset will be placed into the memory region specified at this load address and the rest of the bytes follow.
+  * 4 byte offset into ROM file where BIOS should stop copying. The length of this load chunk is therefore this value minus the start offset above.
+* `0x3C0` = Up to 8 12-byte test executable load entries. These will be loaded when the game test mode is entered. Naomi signifies that the end of the list has been reached if the offset is `0xFFFFFFFF`. Each entry consists of the following:
+  * 4 byte offset into ROM file where BIOS should start copying for this load entry.
+  * 4 byte load address in main memory where copy should go. The first byte found at the above offset will be placed into the memory region specified at this load address and the rest of the bytes follow.
+  * 4 byte offset into ROM file where BIOS should stop copying. The length of this load chunk is therefore this value minus the start offset above.
+* `0x420` = 4 byte entrypoint to jump to in main RAM for main game after all executable load entries are processed. This will always be within one of the load entries specified above at `0x360`.
+* `0x424` = 4 byte entrypoint to jump to in main RAM for game test mode after all test load entries are processed. Similar restrictions to the game entrypoint above apply here, but within the test executable load entries specified at `0x3C0`.
 
 Games are free to put whatever values in they please, and they absolutely do. For instance, MvsC2 specifies an offset of `0x1000` and a load address `0x0c021000` and an entrypoint of `0x0c021000` which means the BIOS copies from the offset `0x1000` in the ROM to memory location `0x0c021000` before jumping to `0x0c021000` to start executing. Ikaruga decides that the offset is `0x0` which means that the main executable copy includes the header. They set the load address to `0x8c020000` but set the entrypoint to `0x8c021000`, or `0x1000` bytes into the copy. Presumably they could have set the offset to `0x1000` like MvsC2 and adjusted the load address accordingly to skip loading the first `0x1000` bytes, but it works out the same. Monkey Ball pulls some shenanigans where they set the offset for both the main executable and test executable to the same spot in the ROM, and loading to the same spot in main RAM. They then change the entrypoint to be two instructions different for test mode versus the main executable. If you look at the instructions that are pointed to by the two entrypoints, it sets a register to have one of two values. Presumably, somewhere in the executable is a check to ask whether it is test mode or normal mode based on the register. Somewhat clever if you ask me.
 
