@@ -11,10 +11,15 @@ def _patch_rom(data: bytes, search: bytes, replace: bytes) -> bytes:
     exec_data = rom.main_executable
     patch_location = None
     search_len = len(search)
-    for rloc in range(exec_data.length):
-        loc = rloc + exec_data.offset
-        if data[loc:(loc + search_len)] == search:
-            patch_location = loc
+
+    # Look through all copied sections.
+    for section in exec_data.sections:
+        for rloc in range(section.length - search_len):
+            loc = rloc + section.offset
+            if data[loc:(loc + search_len)] == search:
+                patch_location = loc
+                break
+        if patch_location is not None:
             break
 
     if patch_location is None:

@@ -38,11 +38,11 @@ The header of a Naomi ROM is as follows. I have documented locations that I've R
 * `0x360` = Up to 8 12-byte game executable load entries. These will be loaded when the main game is executed. Naomi signifies that the end of the list has been reached if the offset is `0xFFFFFFFF`. Each entry consists of the following:
   * 4 byte offset into ROM file where BIOS should start copying for this load entry.
   * 4 byte load address in main memory where copy should go. The first byte found at the above offset will be placed into the memory region specified at this load address and the rest of the bytes follow.
-  * 4 byte offset into ROM file where BIOS should stop copying. The length of this load chunk is therefore this value minus the start offset above.
+  * 4 byte length of data to copy.
 * `0x3C0` = Up to 8 12-byte test executable load entries. These will be loaded when the game test mode is entered. Naomi signifies that the end of the list has been reached if the offset is `0xFFFFFFFF`. Each entry consists of the following:
   * 4 byte offset into ROM file where BIOS should start copying for this load entry.
   * 4 byte load address in main memory where copy should go. The first byte found at the above offset will be placed into the memory region specified at this load address and the rest of the bytes follow.
-  * 4 byte offset into ROM file where BIOS should stop copying. The length of this load chunk is therefore this value minus the start offset above.
+  * 4 byte length of data to copy.
 * `0x420` = 4 byte entrypoint to jump to in main RAM for main game after all executable load entries are processed. This will always be within one of the load entries specified above at `0x360`.
 * `0x424` = 4 byte entrypoint to jump to in main RAM for game test mode after all test load entries are processed. Similar restrictions to the game entrypoint above apply here, but within the test executable load entries specified at `0x3C0`.
 
