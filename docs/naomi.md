@@ -45,8 +45,27 @@ The header of a Naomi ROM is as follows. I have documented locations that I've R
   * 4 byte length of data to copy.
 * `0x420` = 4 byte entrypoint to jump to in main RAM for main game after all executable load entries are processed. This will always be within one of the load entries specified above at `0x360`.
 * `0x424` = 4 byte entrypoint to jump to in main RAM for game test mode after all test load entries are processed. Similar restrictions to the game entrypoint above apply here, but within the test executable load entries specified at `0x3C0`.
+* `0x428` = 1 byte mask of supported regions, as compared to the BIOS region. Regions are enumerated much like the above game string titles, so the following bits are relevant:
+  * `bit 0` - Japan
+  * `bit 1` - USA
+  * `bit 2` - Export
+  * `bit 3` - Korea
+  * `bit 4` - Australia
+* `0x429` = 1 byte mask of supported player numbers, as compared to the cabinet player number setting in syatem assignments. If no bits are set, then all settings (1 player, 2 players, 3 players, 4 players) are valid. Otherwise, the following bits matter:
+  * `bit 0` - 1 player
+  * `bit 1` - 2 players
+  * `bit 2` - 3 players
+  * `bit 3` - 4 players
+* `0x42A` = 1 byte mask of supported display frequencies, as compared to DIP 1 on the Naomi. If no bits are set, then any frequency is valid. Otherwise, the following bits matter:
+  * `bit 0` - 31khz, corresponding to DIP 1 in the Off position.
+  * `bit 1` - 15khz, corresponding to DIP 1 in the On position.
+* `0x42B` = 1 byte mask of supported display orientations, as compared to the monitor orientation setting in system assignments. If no bits are set, then both horizontal and vertical are valid. Otherwise, the following bits matter:
+  * `bit 0` - Game requires horizontal mode setting.
+  * `bit 1` - Game requires vertical mode setting.
+* `0x42C` = 1 byte flag to check ROM/DIMM board serial number EEPROM. The BIOS checks the EEPROM if this set to 1.
+* `0x42D` = 1 byte service type. A value of `0` means common and a value of `1` means individual.
 
-Games are free to put whatever values in they please, and they absolutely do. For instance, MvsC2 specifies an offset of `0x1000` and a load address `0x0c021000` and an entrypoint of `0x0c021000` which means the BIOS copies from the offset `0x1000` in the ROM to memory location `0x0c021000` before jumping to `0x0c021000` to start executing. Ikaruga decides that the offset is `0x0` which means that the main executable copy includes the header. They set the load address to `0x8c020000` but set the entrypoint to `0x8c021000`, or `0x1000` bytes into the copy. Presumably they could have set the offset to `0x1000` like MvsC2 and adjusted the load address accordingly to skip loading the first `0x1000` bytes, but it works out the same. Monkey Ball pulls some shenanigans where they set the offset for both the main executable and test executable to the same spot in the ROM, and loading to the same spot in main RAM. They then change the entrypoint to be two instructions different for test mode versus the main executable. If you look at the instructions that are pointed to by the two entrypoints, it sets a register to have one of two values. Presumably, somewhere in the executable is a check to ask whether it is test mode or normal mode based on the register. Somewhat clever if you ask me.
+In terms of executable/test load entries, games are free to put whatever values in they please, and they absolutely do. For instance, MvsC2 specifies an offset of `0x1000` and a load address `0x0c021000` and an entrypoint of `0x0c021000` which means the BIOS copies from the offset `0x1000` in the ROM to memory location `0x0c021000` before jumping to `0x0c021000` to start executing. Ikaruga decides that the offset is `0x0` which means that the main executable copy includes the header. They set the load address to `0x8c020000` but set the entrypoint to `0x8c021000`, or `0x1000` bytes into the copy. Presumably they could have set the offset to `0x1000` like MvsC2 and adjusted the load address accordingly to skip loading the first `0x1000` bytes, but it works out the same. Monkey Ball pulls some shenanigans where they set the offset for both the main executable and test executable to the same spot in the ROM, and loading to the same spot in main RAM. They then change the entrypoint to be two instructions different for test mode versus the main executable. If you look at the instructions that are pointed to by the two entrypoints, it sets a register to have one of two values. Presumably, somewhere in the executable is a check to ask whether it is test mode or normal mode based on the register. Somewhat clever if you ask me.
 
 Most games have a fairly common startup: They jump to uncached mirror, enable cache using the CCR, then memset their working ram to 0x00, initialize FPU registers and other stuff, and then get started loading assets and reading EEPROM.
 

@@ -1,6 +1,7 @@
 #! /usr/bin/env python3
 import argparse
 import sys
+from typing import Dict
 
 from naomi import NaomiRom
 
@@ -24,6 +25,15 @@ def main() -> int:
     with open(args.bin, "rb") as fp:
         data = fp.read()
 
+    # Create a text LUT
+    region_lut: Dict[int, str] = {
+        NaomiRom.REGION_JAPAN: "Japan",
+        NaomiRom.REGION_USA: "USA",
+        NaomiRom.REGION_EXPORT: "Export",
+        NaomiRom.REGION_KOREA: "Korea",
+        NaomiRom.REGION_AUSTRALIA: "Australia",
+    }
+
     # First, assume its a Naomi ROM
     naomi = NaomiRom(data)
     if naomi.valid:
@@ -38,6 +48,15 @@ def main() -> int:
         print(f"Publish Date:    {naomi.date}")
         print(f"Serial Number:   {naomi.serial.decode('ascii')}")
         print(f"ROM Size:        {len(data)} bytes")
+        print("")
+
+        print("Supported Configurations")
+        print("------------------------")
+        print(f"Regions:         {', '.join(region_lut[r] for r in naomi.regions)}")
+        print(f"Players:         {', '.join(str(p) for p in naomi.players)}")
+        print(f"Monitor:         {', '.join(str(f) + 'khz' for f in naomi.frequencies)}")
+        print(f"Orientation:     {', '.join(o for o in naomi.orientations)}")
+        print(f"Service Type:    {naomi.servicetype}")
         print("")
 
         print("Main Executable Sections")

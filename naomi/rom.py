@@ -44,14 +44,14 @@ class NaomiRom:
     def _sanitize_str(self, data: bytes) -> str:
         return data.decode('ascii').strip()
 
-    def _sanitize_uint32(self, data: bytes) -> int:
-        return cast(int, struct.unpack("<I", data)[0])
+    def _sanitize_uint32(self, offset: int) -> int:
+        return cast(int, struct.unpack("<I", self.data[offset:(offset + 4)])[0])
 
-    def _sanitize_uint16(self, data: bytes) -> int:
-        return cast(int, struct.unpack("<H", data)[0])
+    def _sanitize_uint16(self, offset: int) -> int:
+        return cast(int, struct.unpack("<H", self.data[offset:(offset + 2)])[0])
 
-    def _sanitize_uint8(self, data: bytes) -> int:
-        return cast(int, struct.unpack("<B", data)[0])
+    def _sanitize_uint8(self, offset: int) -> int:
+        return cast(int, struct.unpack("<B", self.data[offset:(offset + 1)])[0])
 
     @property
     def publisher(self) -> str:
@@ -77,9 +77,9 @@ class NaomiRom:
         if not self.valid:
             raise NaomiRomException("Not a valid Naomi ROM!")
         return datetime.date(
-            self._sanitize_uint16(self.data[0x130:0x132]),
-            self._sanitize_uint8(self.data[0x132:0x133]),
-            self._sanitize_uint8(self.data[0x133:0x134]),
+            self._sanitize_uint16(0x130),
+            self._sanitize_uint8(0x132),
+            self._sanitize_uint8(0x133),
         )
 
     @property
@@ -87,6 +87,61 @@ class NaomiRom:
         if not self.valid:
             raise NaomiRomException("Not a valid Naomi ROM!")
         return self.data[0x134:0x138]
+
+    @property
+    def regions(self) -> List[int]:
+        if not self.valid:
+            raise NaomiRomException("Not a valid Naomi ROM!")
+        mask = self._sanitize_uint8(0x428)
+        regions: List[int] = []
+        for offset in [self.REGION_JAPAN, self.REGION_USA, self.REGION_EXPORT, self.REGION_KOREA, self.REGION_AUSTRALIA]:
+            if ((mask >> offset) & 0x1) != 0:
+                regions.append(offset)
+        return regions
+
+    @property
+    def players(self) -> List[int]:
+        if not self.valid:
+            raise NaomiRomException("Not a valid Naomi ROM!")
+        mask = self._sanitize_uint8(0x429)
+        if mask == 0:
+            return [1, 2, 3, 4]
+        return sorted([
+            (x + 1) for x in range(4)
+            if ((mask >> x) & 0x1) != 0
+        ])
+
+    @property
+    def frequencies(self) -> List[int]:
+        if not self.valid:
+            raise NaomiRomException("Not a valid Naomi ROM!")
+        mask = self._sanitize_uint8(0x42A)
+        if mask == 0:
+            return [15, 31]
+        lut = [31, 15]
+        return sorted([
+            lut[x] for x in range(2)
+            if ((mask >> x) & 0x1) != 0
+        ])
+
+    @property
+    def orientations(self) -> List[str]:
+        if not self.valid:
+            raise NaomiRomException("Not a valid Naomi ROM!")
+        mask = self._sanitize_uint8(0x42B)
+        lut = ['horizontal', 'vertical']
+        if mask == 0:
+            return lut
+        return sorted([
+            lut[x] for x in range(2)
+            if ((mask >> x) & 0x1) != 0
+        ])
+
+    @property
+    def servicetype(self) -> str:
+        if not self.valid:
+            raise NaomiRomException("Not a valid Naomi ROM!")
+        return 'individual' if self._sanitize_uint8(0x42D) != 0 else 'common'
 
     @property
     def main_executable(self) -> NaomiExecutable:
@@ -97,20 +152,20 @@ class NaomiRom:
         for entry in range(8):
             location = 0x360 + 12 * entry
 
-            offset = self._sanitize_uint32(self.data[location:(location + 4)])
+            offset = self._sanitize_uint32(location)
             if offset == 0xFFFFFFFF:
                 break
             sections.append(
                 NaomiRomSection(
                     offset=offset,
-                    length=self._sanitize_uint32(self.data[(location + 8):(location + 12)]),
-                    load_address=self._sanitize_uint32(self.data[(location + 4):(location + 8)]),
+                    length=self._sanitize_uint32(location + 8),
+                    load_address=self._sanitize_uint32(location + 4),
                 )
             )
 
         return NaomiExecutable(
             sections=sections,
-            entrypoint=self._sanitize_uint32(self.data[0x420:0x424]),
+            entrypoint=self._sanitize_uint32(0x420),
         )
 
     @property
@@ -122,18 +177,18 @@ class NaomiRom:
         for entry in range(8):
             location = 0x3C0 + 12 * entry
 
-            offset = self._sanitize_uint32(self.data[location:(location + 4)])
+            offset = self._sanitize_uint32(location)
             if offset == 0xFFFFFFFF:
                 break
             sections.append(
                 NaomiRomSection(
                     offset=offset,
-                    length=self._sanitize_uint32(self.data[(location + 8):(location + 12)]),
-                    load_address=self._sanitize_uint32(self.data[(location + 4):(location + 8)]),
+                    length=self._sanitize_uint32(location + 8),
+                    load_address=self._sanitize_uint32(location + 4),
                 )
             )
 
         return NaomiExecutable(
             sections=sections,
-            entrypoint=self._sanitize_uint32(self.data[0x424:0x428]),
+            entrypoint=self._sanitize_uint32(0x424),
         )
