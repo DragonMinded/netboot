@@ -84,8 +84,8 @@ class Binary:
         return ret
 
     @staticmethod
-    def _get_supposed_size(patches: List[str]) -> Optional[int]:
-        for patch in patches:
+    def size(patchlines: List[str]) -> Optional[int]:
+        for patch in patchlines:
             if patch.startswith('#'):
                 # This is a comment, ignore it, unless its a file-size comment
                 patch = patch[1:].strip().lower()
@@ -94,11 +94,11 @@ class Binary:
         return None
 
     @staticmethod
-    def _gather_differences(patches: List[str], reverse: bool) -> List[Tuple[int, bytes, bytes]]:
+    def _gather_differences(patchlines: List[str], reverse: bool) -> List[Tuple[int, bytes, bytes]]:
         # First, separate out into a list of offsets and old/new bytes
         differences: List[Tuple[int, bytes, bytes]] = []
 
-        for patch in patches:
+        for patch in patchlines:
             if patch.startswith('#'):
                 # This is a comment, ignore it.
                 continue
@@ -145,19 +145,19 @@ class Binary:
     @staticmethod
     def patch(
         binary: bytes,
-        patches: List[str],
+        patchlines: List[str],
         *,
         reverse: bool = False,
     ) -> bytes:
         # First, grab the differences
-        file_size = Binary._get_supposed_size(patches)
+        file_size = Binary.size(patchlines)
         if file_size is not None and file_size != len(binary):
             raise BinaryException(
                 f"Patch is for binary of size {file_size} but binary is {len(binary)} "
                 f"bytes long!"
             )
         differences: List[Tuple[int, bytes, bytes]] = sorted(
-            Binary._gather_differences(patches, reverse),
+            Binary._gather_differences(patchlines, reverse),
             key=lambda diff: diff[0],
         )
         chunks: List[bytes] = []
@@ -190,19 +190,21 @@ class Binary:
     @staticmethod
     def can_patch(
         binary: bytes,
-        patches: List[str],
+        patchlines: List[str],
         *,
         reverse: bool = False,
+        ignore_size_differences: bool = False,
     ) -> Tuple[bool, str]:
         # First, grab the differences
-        file_size = Binary._get_supposed_size(patches)
-        if file_size is not None and file_size != len(binary):
-            return (
-                False,
-                f"Patch is for binary of size {file_size} but binary is {len(binary)} "
-                f"bytes long!"
-            )
-        differences: List[Tuple[int, bytes, bytes]] = Binary._gather_differences(patches, reverse)
+        if not ignore_size_differences:
+            file_size = Binary.size(patchlines)
+            if file_size is not None and file_size != len(binary):
+                return (
+                    False,
+                    f"Patch is for binary of size {file_size} but binary is {len(binary)} "
+                    f"bytes long!"
+                )
+        differences: List[Tuple[int, bytes, bytes]] = Binary._gather_differences(patchlines, reverse)
 
         # Now, verify the changes to the binary data
         for diff in differences:
@@ -225,11 +227,19 @@ class Binary:
         return (True, "")
 
     @staticmethod
-    def description(patches: List[str]) -> Optional[str]:
-        for patch in patches:
+    def description(patchlines: List[str]) -> Optional[str]:
+        for patch in patchlines:
             if patch.startswith('#'):
                 # This is a comment, ignore it, unless its a description comment
                 patch = patch[1:].strip().lower()
                 if patch.startswith('description:'):
                     return patch[12:].strip()
         return None
+
+    @staticmethod
+    def needed_amount(patchlines: List[str]) -> int:
+        # First, grab the differences.
+        differences: List[Tuple[int, bytes, bytes]] = Binary._gather_differences(patchlines, False)
+
+        # Now, get the maximum byte we need to apply this patch.
+        return max([offset for offset, _, _ in differences]) + 1 if differences else 0

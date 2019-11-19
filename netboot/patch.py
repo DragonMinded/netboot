@@ -49,21 +49,34 @@ class PatchManager:
                 return self.__cache[filename]
 
             with open(filename, "rb") as fp:
-                data = fp.read()
+                # First, grab the file size, see if there are any patches at all for this file.
+                length: int = os.fstat(fp.fileno()).st_size
+                loaded: int = 0
+                data: bytes = b""
 
-            # Grab currently known patches
-            patches: List[str] = []
-            for directory in self.__directories:
-                patches.extend(os.path.join(directory, f) for f in os.listdir(directory))
+                # Grab currently known patches
+                patches: List[str] = []
+                for directory in self.__directories:
+                    patches.extend(os.path.join(directory, f) for f in os.listdir(directory))
 
-            # Figure out which of these is valid for this filename
-            valid_patches: List[str] = []
-            for patch in patches:
-                with open(patch, "r") as pp:
-                    patchlines = pp.readlines()
+                # Figure out which of these is valid for this filename
+                valid_patches: List[str] = []
+                for patch in patches:
+                    with open(patch, "r") as pp:
+                        patchlines = pp.readlines()
+                    size = Binary.size(patchlines)
+                    if size is None or size == length:
+                        # Only read the file itself if there's one or more patches that we
+                        # need to actually compare against. Also, only read the number of
+                        # bytes needed to calculate if the patch matches.
+                        needed_amount = Binary.needed_amount(patchlines)
+                        if loaded < needed_amount:
+                            rest = needed_amount - loaded
+                            data = data + fp.read(rest)
+                            loaded += rest
 
-                if Binary.can_patch(data, patchlines)[0]:
-                    valid_patches.append(patch)
+                        if Binary.can_patch(data, patchlines, ignore_size_differences=True)[0]:
+                            valid_patches.append(patch)
 
             self.__cache[filename] = valid_patches
             return valid_patches
