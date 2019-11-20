@@ -32,9 +32,18 @@ The header of a Naomi ROM is as follows. I have documented locations that I've R
 * `0x150` = 4 byte SB_G1CWC init value, only used if `0x13A` is non-zero.
 * `0x154` = 4 byte SB_G1GDRC init value, only used if `0x13A` is non-zero.
 * `0x158` = 4 byte SB_G1GDWC init value, only used if `0x13A` is non-zero.
-
-... TBD ...
-
+* `0x15C` = 132 bytes of M2/M4-type ROM checksums.
+* `0x1E0` = A table containing system EEPROM initialization values. There are 8 entries (same as the number of regions) and each entry is 16 bytes long. The Naomi BIOS will look at the table entry for the region you are booting the game in and see what values it should initialize the system settings to. So, if you were booting USA, that's region offset 1 (just like the bitfield at `0x428`) so you would offset to the second entry in this table by adding 16 bytes to `0x1E0`. Each table entry has the following format:
+  * 1 byte apply settings flag. If this is 0, the EEPROM is initialized to BIOS defaults. If it is 1, the settings below are used.
+  * 1 byte system settings flags. `bit 0` set forces the cabinet to vertical, while leaving it cleared sets the cabinet to horizontal. `bit 1` set forces attract mode sound off, while leaving it cleared sets the attract mode sound on.
+  * 1 byte coin chute type. Just like `0x42D`, a value of `0` means common, and a value of `1` means individual.
+  * 1 byte default coin setting number. `1`-`27` correspond to standard coin settings and `28` corresponds to manual coin setting. Just like in the system settings, 27 is free-play.
+  * 1 byte coin 1 rate as a number if you choose `28` above.
+  * 1 byte coin 2 rate as a number if you choose `28` above.
+  * 1 byte credit rate as a number if you choose `28` above.
+  * 1 byte bonus credit rate if you choose `28` above.
+  * 8 byte sequence text offsets for sequence 1-8 in the BIOS. These can be determined by looking at the table at offset `0x260`.
+* `0x260` = Eight sequence texts that the game and test mode can reference in order to display credit information. Each sequence text is 32 bytes long and is padded with spaces (`0x20`). Typical entries include "CREDIT TO START" and "CREDIT TO CONTINUE".
 * `0x360` = Up to 8 12-byte game executable load entries. These will be loaded when the main game is executed. Naomi signifies that the end of the list has been reached if the offset is `0xFFFFFFFF`. Each entry consists of the following:
   * 4 byte offset into ROM file where BIOS should start copying for this load entry.
   * 4 byte load address in main memory where copy should go. The first byte found at the above offset will be placed into the memory region specified at this load address and the rest of the bytes follow.
@@ -64,6 +73,9 @@ The header of a Naomi ROM is as follows. I have documented locations that I've R
   * `bit 1` - Game requires vertical mode setting.
 * `0x42C` = 1 byte flag to check ROM/DIMM board serial number EEPROM. The BIOS checks the EEPROM if this set to 1.
 * `0x42D` = 1 byte service type. A value of `0` means common and a value of `1` means individual.
+* `0x42E` = 144 bytes of M1-type ROM checksums.
+* `0x4B8` = 71 bytes of unused padding, always `0xFF` in practice.
+* `0x4FF` = 1 byte flag for header encryption. If this is `0xFF` then the header is unencrypted. If it is not `0xFF` then the header is encrypted starting at offset `0x010`.
 
 In terms of executable/test load entries, games are free to put whatever values in they please, and they absolutely do. For instance, MvsC2 specifies an offset of `0x1000` and a load address `0x0c021000` and an entrypoint of `0x0c021000` which means the BIOS copies from the offset `0x1000` in the ROM to memory location `0x0c021000` before jumping to `0x0c021000` to start executing. Ikaruga decides that the offset is `0x0` which means that the main executable copy includes the header. They set the load address to `0x8c020000` but set the entrypoint to `0x8c021000`, or `0x1000` bytes into the copy. Presumably they could have set the offset to `0x1000` like MvsC2 and adjusted the load address accordingly to skip loading the first `0x1000` bytes, but it works out the same. Monkey Ball pulls some shenanigans where they set the offset for both the main executable and test executable to the same spot in the ROM, and loading to the same spot in main RAM. They then change the entrypoint to be two instructions different for test mode versus the main executable. If you look at the instructions that are pointed to by the two entrypoints, it sets a register to have one of two values. Presumably, somewhere in the executable is a check to ask whether it is test mode or normal mode based on the register. Somewhat clever if you ask me.
 
