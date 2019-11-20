@@ -79,6 +79,33 @@ def main() -> int:
         print(f"Entrypoint:      {hex(naomi.test_executable.entrypoint)}")
         print("")
 
+        print("Per-Region EEPROM Defaults")
+        print("--------------------------")
+        for default in naomi.defaults:
+            print(f"{region_lut[default.region]}")
+            if not default.apply_settings:
+                print("Override:        disabled")
+            else:
+                print("Override:        enabled")
+                print(f"Force vertical:  {'yes' if default.force_vertical else 'no'}")
+                print(f"Force silent:    {'yes' if default.force_silent else 'no'}")
+                print(f"Chute type:      {default.chute}")
+                if default.coin_setting < 27:
+                    setting = f"#{default.coin_setting}"
+                elif default.coin_setting == 27:
+                    setting = "free play"
+                elif default.coin_setting == 28:
+                    setting = "manual assignment"
+                print(f"Coin setting:    {setting}")
+                if default.coin_setting == 28:
+                    print(f"Coin 1 rate:     {default.coin_1_rate}")
+                    print(f"Coin 2 rate:     {default.coin_2_rate}")
+                    print(f"Credit rate:     {default.credit_rate}")
+                    print(f"Bonus:           {default.bonus}")
+                for i, text in enumerate(default.sequences):
+                    print(f"Sequence {i + 1}:      {text}")
+            print("")
+
         return 0
 
     # Couldn't figure out ROM type

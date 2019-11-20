@@ -58,6 +58,20 @@ To apply a patch to a binary file, outputting it to a new file, run like so:
 python3 -m scripts.binary_patch patch file.bin newfile.bin --patch-file differences.binpatch
 ```
 
+### rominfo
+
+This script will read a rom and output information found in the header. Currently it only supports Naomi ROMs but it can be extended to Triforce and Chihiro ROMs as well if somebody wants to put in the effort. Invoke the script like so to see options:
+
+```
+python3 -m scripts.rominfo --help
+```
+
+To output information about a particular binary, run like so:
+
+```
+python3 -m scripts.rominfo somefile.bin
+```
+
 ### Free-Play/No Attract Patch Generators
 
 Both `scripts.make_freeplay_patch` and `scripts.make_no_attract_patch` can be invoked in the same manner, and will produce a patch that applies either forced free-play or forced silent attract mode. You can run them like so:
