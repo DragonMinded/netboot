@@ -62,8 +62,11 @@ class PatchManager:
                 # Figure out which of these is valid for this filename
                 valid_patches: List[str] = []
                 for patch in patches:
-                    with open(patch, "r") as pp:
-                        patchlines = pp.readlines()
+                    try:
+                        with open(patch, "r") as pp:
+                            patchlines = pp.readlines()
+                    except Exception:
+                        continue
                     size = Binary.size(patchlines)
                     if size is None or size == length:
                         # Only read the file itself if there's one or more patches that we
