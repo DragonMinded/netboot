@@ -36,11 +36,22 @@ def standard_force_no_attract(data: bytes) -> List[str]:
             values.append(_output(location + 1, data[location + 1], data[location + 1] | 0x2))
         return values
 
+    def _force_serial_check() -> List[str]:
+        return [
+            "# Force this patch to only apply to the correct serial",
+            (
+                f"{_hex(0x134)}: "
+                f"{_hex(data[0x134])} {_hex(data[0x135])} {_hex(data[0x136])} {_hex(data[0x137])} -> "
+                f"{_hex(data[0x134])} {_hex(data[0x135])} {_hex(data[0x136])} {_hex(data[0x137])}"
+            )
+        ]
+
     # Manually make a differences file since we want to support ROMs that already
     # have enabled EEPROM overrides.
     return [
         "# Description: force silent attract mode",
         f"# File size: {len(data)}",
+        *_force_serial_check(),
         *_make_differences(0),
         *_make_differences(1),
         *_make_differences(2),
