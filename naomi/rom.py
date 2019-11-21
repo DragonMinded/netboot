@@ -164,11 +164,16 @@ class NaomiRom:
     def date(self) -> datetime.date:
         if not self.valid:
             raise NaomiRomException("Not a valid Naomi ROM!")
-        return datetime.date(
-            self._sanitize_uint16(0x130),
-            self._sanitize_uint8(0x132),
-            self._sanitize_uint8(0x133),
-        )
+        year = self._sanitize_uint16(0x130)
+        month = self._sanitize_uint8(0x132)
+        day = self._sanitize_uint8(0x133)
+        if year == 0:
+            year = 2000
+        if month == 0:
+            month = 1
+        if day == 0:
+            day = 1
+        return datetime.date(year, month, day)
 
     @property
     def serial(self) -> bytes:
