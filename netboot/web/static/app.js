@@ -143,11 +143,11 @@ Vue.component('rom', {
 });
 
 Vue.component('patch', {
-    props: ['patch'],
+    props: ['game', 'patch'],
     template: `
         <div>
-            <input type="checkbox" v-bind:id="patch.file" v-model="patch.enabled" />
-            <label v-bind:for="patch.file">{{ patch.name }}</label>
+            <input type="checkbox" v-bind:id="game.file + patch.file" v-model="patch.enabled" />
+            <label v-bind:for="game.file + patch.file">{{ patch.name }}</label>
         </div>
     `,
 });
@@ -161,7 +161,7 @@ Vue.component('game', {
                 <label v-bind:for="game.file">{{ game.name }}</label>
             </h4>
             <div class="patches">
-                <patch v-for="patch in game.patches" v-bind:patch="patch" v-bind:key="patch"></patch>
+                <patch v-for="patch in game.patches" v-bind:game="game" v-bind:patch="patch" v-bind:key="patch"></patch>
                 <span v-if="game.patches.length == 0">no patches available for game</span>
             </div>
         </div>
