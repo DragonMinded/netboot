@@ -138,14 +138,14 @@ class NaomiRom:
         if not self.valid:
             raise NaomiRomException("Not a valid Naomi ROM!")
 
-        defaults: List[NaomiEEPROMDefaults] = []
+        sections: List[NaomiEEPROMDefaults] = []
         texts: List[str] = self.sequencetexts
 
         # The following list must remain sorted in order to output correctly.
         for offset in [self.REGION_JAPAN, self.REGION_USA, self.REGION_EXPORT, self.REGION_KOREA, self.REGION_AUSTRALIA]:
             location = 0x1E0 + (0x10 * offset)
 
-            defaults.append(NaomiEEPROMDefaults(
+            sections.append(NaomiEEPROMDefaults(
                 region=offset,
                 apply_settings=self._sanitize_uint8(location) == 1,
                 force_vertical=(self._sanitize_uint8(location + 1) & 0x1) != 0,
@@ -158,7 +158,7 @@ class NaomiRom:
                 bonus=self._sanitize_uint8(location + 7),
                 sequences=[texts[self._sanitize_uint8(location + 8 + x)] for x in range(8)],
             ))
-        return defaults
+        return sections
 
     @property
     def date(self) -> datetime.date:
