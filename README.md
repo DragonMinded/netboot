@@ -72,6 +72,20 @@ To output information about a particular binary, run like so:
 python3 -m scripts.rominfo somefile.bin
 ```
 
+### attach_sram
+
+This script will take an SRAM file from an emulator such as demul and attach it to an Atomiswave conversion game so that your Naomi initializes the SRAM with its contents. If an Atomiswave conversion ROM already has an SRAM initialization section, it will overwrite it with the new SRAM. Otherwise, it enlarges the ROM to make room for the init section. Use this to set up defaults for a game using the test menu in an emulator and apply those settings to your game for netbooting with chosen defaults. Invoke the script like so to see options:
+
+```
+python3 -m scripts.attach_sram --help
+```
+
+To attach a SRAM file from demul to a ROM named demo.bin, run like so:
+
+```
+python3 -m scripts.attach_sram demo.bin dummy.sram
+```
+
 ### Free-Play/No Attract Patch Generators
 
 Both `scripts.make_freeplay_patch` and `scripts.make_no_attract_patch` can be invoked in the same manner, and will produce a patch that applies either forced free-play or forced silent attract mode. You can run them like so:
