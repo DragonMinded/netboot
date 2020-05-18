@@ -3,7 +3,7 @@ import argparse
 import struct
 import sys
 
-from naomi import NaomiRom
+from naomi import NaomiRom, NaomiRomSection
 
 
 SRAM_LOCATION = 0x200000
@@ -54,8 +54,8 @@ def main() -> int:
         return 1
 
     # First, find out if there's already an SRAM portion to the file
-    sections = naomi.main_executable.sections
-    for section in sections:
+    executable = naomi.main_executable
+    for section in executable.sections:
         if section.load_address == SRAM_LOCATION:
             # This is a SRAM load chunk
             if section.length != SRAM_SIZE:
@@ -67,18 +67,22 @@ def main() -> int:
             break
     else:
         # We need to add a SRAM init section to the ROM
-        if len(sections) >= 8:
+        if len(executable.sections) >= 8:
             print("ROM already has the maximum number of init sections!", file=sys.stderr)
             return 1
 
-        # Construct the updated load header, put the SRAM at the end.
-        header_loc = 0x360 + (12 * len(sections))
-        header_update = struct.pack("<III", len(data), SRAM_LOCATION, SRAM_SIZE)
-        if len(sections) < 7:
-            # There's room for more sections after us, so we need to cap off with an end section.
-            header_update = header_update + bytes([0xFF, 0xFF, 0xFF, 0xFF])
+        # Add a new section to the end of the rom for this SRAM section
+        executable.sections.append(
+            NaomiRomSection(
+                offset=len(data),
+                load_address=SRAM_LOCATION,
+                length=SRAM_SIZE,
+            )
+        )
+        naomi.main_executable = executable
 
-        newdata = data[:header_loc] + header_update + data[(header_loc + len(header_update)):] + sram
+        # Now, just append it to the end of the file
+        newdata = naomi.data + data[naomi.HEADER_LENGTH:] + sram
 
     if args.output_file:
         print(f"Added SRAM init to the end of {args.output_file}.", file=sys.stderr)

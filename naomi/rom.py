@@ -79,12 +79,43 @@ class NaomiRom:
     REGION_KOREA = 3
     REGION_AUSTRALIA = 4
 
+    HEADER_LENGTH = 0x500
+
     def __init__(self, data: bytes) -> None:
-        self.data = data
+        self.data = data[:NaomiRom.HEADER_LENGTH]
+        self.data = self.data + (b'\0' * (NaomiRom.HEADER_LENGTH - len(self.data)))
+
+    @staticmethod
+    def default(serial: bytes) -> "NaomiRom":
+        return NaomiRom(b'NAOMI           ' + (b'\0' * (NaomiRom.HEADER_LENGTH - 16)))
 
     @property
     def valid(self) -> bool:
         return self.data[0x000:0x010] == b'NAOMI           '
+
+    def _raise_on_invalid(self) -> None:
+        if not self.valid:
+            raise NaomiRomException("Not a valid Naomi ROM!")
+
+    def _inject(self, offset: int, data: bytes) -> None:
+        self.data = self.data[:offset] + data + self.data[(offset + len(data)):]
+        if len(self.data) != self.HEADER_LENGTH:
+            raise Exception("Logic error!")
+
+    def _inject_str(self, offset: int, string: str, pad_length: int) -> None:
+        data = string.encode('ascii')
+        data = data[:pad_length]
+        data = data + (b'\0' * (pad_length - len(data)))
+        self._inject(offset, data)
+
+    def _inject_uint32(self, offset: int, value: int) -> None:
+        self._inject(offset, struct.pack("<I", value))
+
+    def _inject_uint16(self, offset: int, value: int) -> None:
+        self._inject(offset, struct.pack("<H", value))
+
+    def _inject_uint8(self, offset: int, value: int) -> None:
+        self._inject(offset, struct.pack("<B", value))
 
     def _sanitize_str(self, data: bytes) -> str:
         return data.decode('ascii').replace("\x00", " ").strip()
@@ -100,14 +131,17 @@ class NaomiRom:
 
     @property
     def publisher(self) -> str:
-        if not self.valid:
-            raise NaomiRomException("Not a valid Naomi ROM!")
+        self._raise_on_invalid()
         return self._sanitize_str(self.data[0x010:0x030])
+
+    @publisher.setter
+    def publisher(self, val: str) -> None:
+        self._raise_on_invalid()
+        self._inject_str(0x010, val, 0x030 - 0x010)
 
     @property
     def names(self) -> List[str]:
-        if not self.valid:
-            raise NaomiRomException("Not a valid Naomi ROM!")
+        self._raise_on_invalid()
 
         return [
             self._sanitize_str(self.data[0x030:0x050]),
@@ -117,10 +151,24 @@ class NaomiRom:
             self._sanitize_str(self.data[0x0B0:0x0D0]),
         ]
 
+    @names.setter
+    def names(self, val: List[str]) -> None:
+        self._raise_on_invalid()
+        if len(val) != 5:
+            raise NaomiRomException("Expected list of five strings for names!")
+
+        for i, (start, end) in enumerate([
+            (0x030, 0x050),
+            (0x050, 0x070),
+            (0x070, 0x090),
+            (0x090, 0x0B0),
+            (0x0B0, 0x0D0),
+        ]):
+            self._inject_str(start, val[i], end - start)
+
     @property
     def sequencetexts(self) -> List[str]:
-        if not self.valid:
-            raise NaomiRomException("Not a valid Naomi ROM!")
+        self._raise_on_invalid()
 
         return [
             self._sanitize_str(self.data[0x260:0x280]),
@@ -133,10 +181,29 @@ class NaomiRom:
             self._sanitize_str(self.data[0x340:0x360]),
         ]
 
+    @sequencetexts.setter
+    def sequencetexts(self, val: List[str]) -> None:
+        self._raise_on_invalid()
+        if len(val) > 8:
+            raise NaomiRomException("Expected list of eight strings for sequence texts!")
+        while len(val) < 8:
+            val.append('')
+
+        for i, (start, end) in enumerate([
+            (0x260, 0x280),
+            (0x280, 0x2A0),
+            (0x2A0, 0x2C0),
+            (0x2C0, 0x2E0),
+            (0x2E0, 0x300),
+            (0x300, 0x320),
+            (0x320, 0x340),
+            (0x340, 0x360),
+        ]):
+            self._inject_str(start, val[i], end - start)
+
     @property
     def defaults(self) -> List[NaomiEEPROMDefaults]:
-        if not self.valid:
-            raise NaomiRomException("Not a valid Naomi ROM!")
+        self._raise_on_invalid()
 
         sections: List[NaomiEEPROMDefaults] = []
         texts: List[str] = self.sequencetexts
@@ -147,7 +214,7 @@ class NaomiRom:
 
             sections.append(NaomiEEPROMDefaults(
                 region=offset,
-                apply_settings=self._sanitize_uint8(location) == 1,
+                apply_settings=self._sanitize_uint8(location + 0) == 1,
                 force_vertical=(self._sanitize_uint8(location + 1) & 0x1) != 0,
                 force_silent=(self._sanitize_uint8(location + 1) & 0x2) != 0,
                 chute="individual" if self._sanitize_uint8(location + 2) != 0 else "common",
@@ -160,10 +227,76 @@ class NaomiRom:
             ))
         return sections
 
+    @defaults.setter
+    def defaults(self, val: List[NaomiEEPROMDefaults]) -> None:
+        self._raise_on_invalid()
+
+        # Go through the list, back-converting each structure
+        for defaults in val:
+            if defaults.region not in {
+                self.REGION_JAPAN, self.REGION_USA, self.REGION_EXPORT, self.REGION_KOREA, self.REGION_AUSTRALIA
+            }:
+                raise NaomiRomException(f"Invalid region {defaults.region} in defaults!")
+            offset = 0x1E0 + (0x10 * defaults.region)
+
+            self._inject_uint8(offset + 0, 1 if defaults.apply_settings else 0)
+
+            mask: int = 0
+            if defaults.force_vertical:
+                mask |= 0x1
+            if defaults.force_silent:
+                mask |= 0x2
+            self._inject_uint8(offset + 1, mask)
+
+            if defaults.chute == "individual":
+                self._inject_uint8(offset + 2, 1)
+            elif defaults.chute == "common":
+                self._inject_uint8(offset + 2, 0)
+            else:
+                raise NaomiRomException(f"Invalid chute type {defaults.chute} in defaults!")
+
+            self._inject_uint8(offset + 3, defaults.coin_setting)
+            self._inject_uint8(offset + 4, defaults.coin_1_rate)
+            self._inject_uint8(offset + 5, defaults.coin_2_rate)
+            self._inject_uint8(offset + 6, defaults.credit_rate)
+            self._inject_uint8(offset + 7, defaults.bonus)
+
+            # Calculate sequence offsets
+            sequences: List[str] = list(defaults.sequences)
+            if len(sequences) > 8:
+                raise NaomiRomException(f"Invalid number of sequence texts for defaults, expected at most 8!")
+
+            # First, default them all to 0
+            self._inject(offset + 8, b'\0' * 8)
+
+            # Now, attempt to insert texts that are non-default
+            for i, text in enumerate(sequences):
+                # First, if it is empty, default it
+                if text == "":
+                    continue
+
+                # Try to find this sequence text in our global list.
+                # This is not cached because it can change.
+                validtexts = self.sequencetexts
+                for off, existingtext in enumerate(validtexts):
+                    if text == existingtext:
+                        self._inject_uint8(offset + 8 + i, off)
+                        break
+                else:
+                    # We didn't find one, add it to the end!
+                    for off, existingtext in enumerate(validtexts):
+                        if existingtext == "":
+                            validtexts[off] = text
+                            self.sequencetexts = validtexts
+                            self._inject_uint8(offset + 8 + i, off)
+                            break
+                    else:
+                        # We didn't find room!
+                        raise NaomiRomException(f"Not enough room in sequence text table for {text}!")
+
     @property
     def date(self) -> datetime.date:
-        if not self.valid:
-            raise NaomiRomException("Not a valid Naomi ROM!")
+        self._raise_on_invalid()
         year = self._sanitize_uint16(0x130)
         month = self._sanitize_uint8(0x132)
         day = self._sanitize_uint8(0x133)
@@ -175,16 +308,30 @@ class NaomiRom:
             day = 1
         return datetime.date(year, month, day)
 
+    @date.setter
+    def date(self, date: datetime.date) -> None:
+        self._raise_on_invalid()
+        self._inject_uint16(0x130, date.year)
+        self._inject_uint8(0x132, date.month)
+        self._inject_uint8(0x133, date.day)
+
     @property
     def serial(self) -> bytes:
-        if not self.valid:
-            raise NaomiRomException("Not a valid Naomi ROM!")
+        self._raise_on_invalid()
         return self.data[0x134:0x138]
+
+    @serial.setter
+    def serial(self, serial: bytes) -> None:
+        self._raise_on_invalid()
+        if len(serial) != 4:
+            raise NaomiRomException("Serial length should be 4 bytes!")
+        if serial[0:1] != b'B':
+            raise NaomiRomException("Serial should start with B!")
+        self._inject(0x134, serial)
 
     @property
     def regions(self) -> List[int]:
-        if not self.valid:
-            raise NaomiRomException("Not a valid Naomi ROM!")
+        self._raise_on_invalid()
         mask = self._sanitize_uint8(0x428)
         regions: List[int] = []
         for offset in [self.REGION_JAPAN, self.REGION_USA, self.REGION_EXPORT, self.REGION_KOREA, self.REGION_AUSTRALIA]:
@@ -192,10 +339,20 @@ class NaomiRom:
                 regions.append(offset)
         return regions
 
+    @regions.setter
+    def regions(self, regions: List[int]) -> None:
+        self._raise_on_invalid()
+
+        mask: int = 0
+        for region in regions:
+            if region not in {self.REGION_JAPAN, self.REGION_USA, self.REGION_EXPORT, self.REGION_KOREA, self.REGION_AUSTRALIA}:
+                raise NaomiRomException(f"Region {region} not recognized!")
+            mask |= 1 << region
+        self._inject_uint8(0x428, mask)
+
     @property
     def players(self) -> List[int]:
-        if not self.valid:
-            raise NaomiRomException("Not a valid Naomi ROM!")
+        self._raise_on_invalid()
         mask = self._sanitize_uint8(0x429)
         if mask == 0:
             return [1, 2, 3, 4]
@@ -204,10 +361,20 @@ class NaomiRom:
             if ((mask >> x) & 0x1) != 0
         ])
 
+    @players.setter
+    def players(self, players: List[int]) -> None:
+        self._raise_on_invalid()
+
+        mask: int = 0
+        for player in players:
+            if player not in {1, 2, 3, 4}:
+                raise NaomiRomException(f"Number of players {player} not valid!")
+            mask |= 1 << (player - 1)
+        self._inject_uint8(0x429, mask)
+
     @property
     def frequencies(self) -> List[int]:
-        if not self.valid:
-            raise NaomiRomException("Not a valid Naomi ROM!")
+        self._raise_on_invalid()
         mask = self._sanitize_uint8(0x42A)
         if mask == 0:
             return [15, 31]
@@ -217,10 +384,23 @@ class NaomiRom:
             if ((mask >> x) & 0x1) != 0
         ])
 
+    @frequencies.setter
+    def frequencies(self, frequencies: List[int]) -> None:
+        self._raise_on_invalid()
+
+        mask: int = 0
+        for frequency in frequencies:
+            if frequency not in {15, 31}:
+                raise NaomiRomException(f"Monitor frequency {frequency} not valid!")
+            if frequency == 15:
+                mask |= 0x2
+            if frequency == 31:
+                mask |= 0x1
+        self._inject_uint8(0x42A, mask)
+
     @property
     def orientations(self) -> List[str]:
-        if not self.valid:
-            raise NaomiRomException("Not a valid Naomi ROM!")
+        self._raise_on_invalid()
         mask = self._sanitize_uint8(0x42B)
         lut = ['horizontal', 'vertical']
         if mask == 0:
@@ -230,58 +410,91 @@ class NaomiRom:
             if ((mask >> x) & 0x1) != 0
         ])
 
+    @orientations.setter
+    def orientations(self, orientations: List[str]) -> None:
+        self._raise_on_invalid()
+
+        mask: int = 0
+        for orientation in orientations:
+            if orientation not in {'horizontal', 'vertical'}:
+                raise NaomiRomException(f"Monitor orientation {orientation} not valid!")
+            if orientation == "horizontal":
+                mask |= 0x1
+            if orientation == "vertical":
+                mask |= 0x2
+        self._inject_uint8(0x42B, mask)
+
     @property
     def servicetype(self) -> str:
-        if not self.valid:
-            raise NaomiRomException("Not a valid Naomi ROM!")
+        self._raise_on_invalid()
         return 'individual' if self._sanitize_uint8(0x42D) != 0 else 'common'
+
+    @servicetype.setter
+    def servicetype(self, servicetype: str) -> None:
+        self._raise_on_invalid()
+        if servicetype == "individual":
+            self._inject_uint8(0x42D, 1)
+        elif servicetype == "common":
+            self._inject_uint8(0x42D, 0)
+        else:
+            raise NaomiRomException(f"Service type {servicetype} not valid!")
+
+    def _get_sections(self, startoffset: int) -> List[NaomiRomSection]:
+        sections: List[NaomiRomSection] = []
+        for entry in range(8):
+            location = startoffset + 12 * entry
+
+            offset = self._sanitize_uint32(location)
+            if offset == 0xFFFFFFFF:
+                break
+            sections.append(
+                NaomiRomSection(
+                    offset=offset,
+                    length=self._sanitize_uint32(location + 8),
+                    load_address=self._sanitize_uint32(location + 4),
+                )
+            )
+        return sections
+
+    def _put_sections(self, offset: int, sections: List[NaomiRomSection]) -> None:
+        if len(sections) > 8:
+            raise NaomiRomException(f"Cannot have more than 8 load sections in an executable!")
+
+        for section in sections:
+            print(section)
+            self._inject_uint32(offset, section.offset)
+            self._inject_uint32(offset + 4, section.load_address)
+            self._inject_uint32(offset + 8, section.length)
+            offset += 12
+
+        if len(sections) < 8:
+            # Put an end of list marker so we don't load any garbage data.
+            self._inject_uint32(offset, 0xFFFFFFFF)
 
     @property
     def main_executable(self) -> NaomiExecutable:
-        if not self.valid:
-            raise NaomiRomException("Not a valid Naomi ROM!")
-
-        sections: List[NaomiRomSection] = []
-        for entry in range(8):
-            location = 0x360 + 12 * entry
-
-            offset = self._sanitize_uint32(location)
-            if offset == 0xFFFFFFFF:
-                break
-            sections.append(
-                NaomiRomSection(
-                    offset=offset,
-                    length=self._sanitize_uint32(location + 8),
-                    load_address=self._sanitize_uint32(location + 4),
-                )
-            )
-
+        self._raise_on_invalid()
         return NaomiExecutable(
-            sections=sections,
+            sections=self._get_sections(0x360),
             entrypoint=self._sanitize_uint32(0x420),
         )
 
+    @main_executable.setter
+    def main_executable(self, val: NaomiExecutable):
+        self._raise_on_invalid()
+        self._put_sections(0x360, val.sections)
+        self._inject_uint32(0x420, val.entrypoint)
+
     @property
     def test_executable(self) -> NaomiExecutable:
-        if not self.valid:
-            raise NaomiRomException("Not a valid Naomi ROM!")
-
-        sections: List[NaomiRomSection] = []
-        for entry in range(8):
-            location = 0x3C0 + 12 * entry
-
-            offset = self._sanitize_uint32(location)
-            if offset == 0xFFFFFFFF:
-                break
-            sections.append(
-                NaomiRomSection(
-                    offset=offset,
-                    length=self._sanitize_uint32(location + 8),
-                    load_address=self._sanitize_uint32(location + 4),
-                )
-            )
-
+        self._raise_on_invalid()
         return NaomiExecutable(
-            sections=sections,
+            sections=self._get_sections(0x3C0),
             entrypoint=self._sanitize_uint32(0x424),
         )
+
+    @test_executable.setter
+    def test_executable(self, val: NaomiExecutable):
+        self._raise_on_invalid()
+        self._put_sections(0x3C0, val.sections)
+        self._inject_uint32(0x424, val.entrypoint)
