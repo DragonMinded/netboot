@@ -89,8 +89,8 @@ def main() -> int:
     args = parser.parse_args()
 
     # Grab the rom, parse it
-    with open(args.bin, "rb") as fp:
-        data = fp.read()
+    with open(args.bin, "rb") as fpb:
+        data = fpb.read()
     if args.mode == "legacy":
         differences = legacy_force_freeplay(data)
     elif args.mode == "standard":
@@ -101,8 +101,8 @@ def main() -> int:
         for line in differences:
             print(line)
     else:
-        with open(args.patch_file, "w") as fp:
-            fp.write(os.linesep.join(differences) + os.linesep)
+        with open(args.patch_file, "w") as fps:
+            fps.write(os.linesep.join(differences) + os.linesep)
 
     return 0
 

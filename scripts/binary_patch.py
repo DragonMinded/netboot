@@ -69,10 +69,10 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.command == 'diff':
-        with open(args.file1, "rb") as fp:
-            file1 = fp.read()
-        with open(args.file2, "rb") as fp:
-            file2 = fp.read()
+        with open(args.file1, "rb") as fpb:
+            file1 = fpb.read()
+        with open(args.file2, "rb") as fpb:
+            file2 = fpb.read()
 
         try:
             differences = Binary.diff(file1, file2)
@@ -84,19 +84,19 @@ def main() -> int:
             for line in differences:
                 print(line)
         else:
-            with open(args.patch_file, "w") as fp:
-                fp.write(os.linesep.join(differences) + os.linesep)
+            with open(args.patch_file, "w") as fps:
+                fps.write(os.linesep.join(differences) + os.linesep)
     elif args.command == 'patch':
-        with open(args.bin, "rb") as fp:
-            data = fp.read()
+        with open(args.bin, "rb") as fpb:
+            data = fpb.read()
 
+        patch_list: List[List[str]] = []
         if not args.patch_file:
-            patch_list: List[List[str]] = [sys.stdin.readlines()]
+            patch_list.append(sys.stdin.readlines())
         else:
-            patch_list: List[List[str]] = []
             for patch in args.patch_file:
-                with open(patch, "r") as fp:
-                    patch_list.append(fp.readlines())
+                with open(patch, "r") as fps:
+                    patch_list.append(fps.readlines())
 
         for differences in patch_list:
             differences = [d.strip() for d in differences if d.strip()]
@@ -107,8 +107,8 @@ def main() -> int:
                 print(f"Could not patch {args.bin}: {str(e)}", file=sys.stderr)
                 return 1
 
-        with open(args.out, "wb") as fp:
-            fp.write(data)
+        with open(args.out, "wb") as fpb:
+            fpb.write(data)
 
         print(f"Patched {args.bin} and wrote to {args.out}.")
     else:

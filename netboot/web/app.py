@@ -40,7 +40,7 @@ def jsonify(func: Callable) -> Callable:
     return decoratedfunction
 
 
-def cabinet_to_dict(cab: Cabinet, dirmanager: DirectoryManager) -> Dict[str, str]:
+def cabinet_to_dict(cab: Cabinet, dirmanager: DirectoryManager) -> Dict[str, Any]:
     status, progress = cab.state
 
     return {
@@ -71,11 +71,11 @@ def home() -> Response:
 def systemconfig() -> Response:
     # We don't look up the game names here because that requires a region which is cab-specific.
     dirman = app.config['DirectoryManager']
-    roms: List[Dict[str, str]] = []
+    roms: List[Dict[str, Any]] = []
     for directory in dirman.directories:
         roms.append({'name': directory, 'files': sorted(dirman.games(directory))})
     patchman = app.config['PatchManager']
-    patches: List[Dict[str, str]] = []
+    patches: List[Dict[str, Any]] = []
     for directory in patchman.directories:
         patches.append({'name': directory, 'files': sorted(patchman.patches(directory))})
     return make_response(
@@ -179,7 +179,7 @@ def addcabinet() -> Response:
 @jsonify
 def roms() -> Dict[str, Any]:
     dirman = app.config['DirectoryManager']
-    roms: List[Dict[str, str]] = []
+    roms: List[Dict[str, Any]] = []
     for directory in dirman.directories:
         roms.append({'name': directory, 'files': sorted(dirman.games(directory))})
     return {
@@ -224,7 +224,7 @@ def recalculateallpatches() -> Dict[str, Any]:
 def applicablepatches(filename: str) -> Dict[str, Any]:
     patchman = app.config['PatchManager']
     directories = set(patchman.directories)
-    patches_by_directory = {}
+    patches_by_directory: Dict[str, List[str]] = {}
     try:
         patches = patchman.patches_for_game(filename)
     except FileNotFoundError:
@@ -260,7 +260,7 @@ def recalculateapplicablepatches(filename: str) -> Response:
 @jsonify
 def patches() -> Dict[str, Any]:
     patchman = app.config['PatchManager']
-    patches: List[Dict[str, str]] = []
+    patches: List[Dict[str, Any]] = []
     for directory in patchman.directories:
         patches.append({'name': directory, 'files': sorted(patchman.patches(directory))})
     return {
@@ -352,7 +352,7 @@ def romsforcabinet(ip: str) -> Dict[str, Any]:
     patchman = app.config['PatchManager']
     cabinet = cabman.cabinet(ip)
 
-    roms: List[Dict[str, str]] = []
+    roms: List[Dict[str, Any]] = []
     for directory in dirman.directories:
         for filename in dirman.games(directory):
             full_filename = os.path.join(directory, filename)

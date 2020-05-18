@@ -13,6 +13,7 @@ def main() -> int:
     # Set up global configuration, overriding config port for convenience
     app = spawn_app(args.config, debug=True)
     app.run(host='0.0.0.0', port=args.port, debug=True)
+    return 0
 
 
 if __name__ == "__main__":

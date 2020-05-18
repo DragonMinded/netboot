@@ -169,7 +169,7 @@ With the above scripts, you should be able to visit `https://your.domain.here.co
 The tools here are fully typed, and should be kept that way. To verify type hints, run the following:
 
 ```
-mypy --strict -m netboot -m naomi -m scripts
+mypy --strict .
 ```
 
 The tools are also lint clean (save for line length lints which are useless drivel). To verify lint, run the following:
