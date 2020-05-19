@@ -1,6 +1,5 @@
 #! /usr/bin/env python3
 import argparse
-import struct
 import sys
 
 from naomi import NaomiRom, NaomiRomSection

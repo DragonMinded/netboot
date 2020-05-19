@@ -86,8 +86,8 @@ class NaomiRom:
         self.data = self.data + (b'\0' * (NaomiRom.HEADER_LENGTH - len(self.data)))
 
     @staticmethod
-    def default(serial: bytes) -> "NaomiRom":
-        return NaomiRom(b'NAOMI           ' + (b'\0' * (NaomiRom.HEADER_LENGTH - 16)))
+    def default() -> "NaomiRom":
+        return NaomiRom(b'NAOMI           ' + (b'\0' * (NaomiRom.HEADER_LENGTH - 17)) + b'\xFF')
 
     @property
     def valid(self) -> bool:
@@ -105,7 +105,7 @@ class NaomiRom:
     def _inject_str(self, offset: int, string: str, pad_length: int) -> None:
         data = string.encode('ascii')
         data = data[:pad_length]
-        data = data + (b'\0' * (pad_length - len(data)))
+        data = data + (b' ' * (pad_length - len(data)))
         self._inject(offset, data)
 
     def _inject_uint32(self, offset: int, value: int) -> None:
@@ -156,6 +156,7 @@ class NaomiRom:
         self._raise_on_invalid()
         if len(val) != 5:
             raise NaomiRomException("Expected list of five strings for names!")
+        val.extend(["", "", ""])
 
         for i, (start, end) in enumerate([
             (0x030, 0x050),
@@ -163,6 +164,9 @@ class NaomiRom:
             (0x070, 0x090),
             (0x090, 0x0B0),
             (0x0B0, 0x0D0),
+            (0x0D0, 0x0F0),
+            (0x0F0, 0x110),
+            (0x110, 0x130),
         ]):
             self._inject_str(start, val[i], end - start)
 
@@ -461,7 +465,6 @@ class NaomiRom:
             raise NaomiRomException(f"Cannot have more than 8 load sections in an executable!")
 
         for section in sections:
-            print(section)
             self._inject_uint32(offset, section.offset)
             self._inject_uint32(offset + 4, section.load_address)
             self._inject_uint32(offset + 8, section.length)
