@@ -1,5 +1,9 @@
 all: testrom.bin
 
+CC = sh4-linux-gnu-gcc
+LD = sh4-linux-gnu-ld
+AS = sh4-linux-gnu-as
+
 testrom.bin: build/test.bin
 	PYTHONPATH=../ python3 -m scripts.makerom testrom.bin \
 		--title "Test ROM" \
@@ -12,14 +16,14 @@ build:
 	mkdir -p build
 
 build/test.bin: build/crt0.o build/main.o
-	sh4-linux-gnu-ld -e start --oformat binary -Ttext 0x0C021000 -o build/test.bin build/crt0.o build/main.o
+	${LD} -e start --oformat=binary -Ttext=0x0C021000 -o $@ $^
 
 build/crt0.o: crt0.S | build
-	sh4-linux-gnu-gcc -E crt0.S -o build/crt0.s
-	sh4-linux-gnu-as --isa sh4 -o build/crt0.o build/crt0.s
+	${CC} -ml -E crt0.S -o build/crt0.s
+	${AS} --isa sh4 -little -o build/crt0.o build/crt0.s
 
 build/main.o: main.c | build
-	sh4-linux-gnu-gcc -nostdlib -nostartfiles -c main.c -o build/main.o
+	${CC} -ml -nostdlib -nostartfiles -c main.c -o build/main.o
 
 clean:
 	rm -rf build
