@@ -41,7 +41,7 @@ setup_cache:
 
 main_addr:
     # Location of main
-    .long main
+    .long _main
 
 phys_mask:
     # Mask for converting virtual to physical address.
