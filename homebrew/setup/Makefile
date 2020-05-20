@@ -147,6 +147,7 @@ $(build_newlib): src_dir = newlib-$(newlib_ver)
 $(build_newlib): log = $(logdir)/$(build).log
 $(build_newlib): logdir
 	@echo "+++ Building $(src_dir) to $(build)..."
+	patch -N -p0 < newlib.patch || true
 	-mkdir -p $(build)
 	> $(log)
 	cd $(build); ../$(src_dir)/configure --target=$(target) --prefix=$(prefix) $(extra_configure_args) $(to_log)

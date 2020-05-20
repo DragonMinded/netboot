@@ -1,0 +1,10 @@
+--- newlib-3.3.0/newlib/configure.host	2020-05-20 05:05:39.039807077 +0000
++++ newlib-3.3.0/newlib/configure.host	2020-05-20 05:05:32.435780002 +0000
+@@ -319,6 +319,7 @@
+ 	;;
+   sh | sh64)
+ 	machine_dir=sh
++	newlib_cflags="${newlib_cflags} -DREENTRANT_SYSCALLS_PROVIDED"
+ 	;;
+   sparc*)
+ 	machine_dir=sparc
