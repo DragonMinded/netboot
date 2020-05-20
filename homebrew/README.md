@@ -6,7 +6,6 @@ To build any examples that are included, first activate the Naomi enviornment by
 
 TODOs
 =====
- - Get rid of the not-used system calls from newlib. We don't have a kernel, so they are useless but appear in the ROM taking up space. They don't get called so they are safe to exist there, but it could be smaller.
  - Generalize ldscript, crt0 and system.c into a support library.
  - Get started on implementing maple drivers for control input, verify the ARM side of the library.
  - Fill out more of the TODOs in system.c to add functionality such as a ROMFS and support for loading things from a cart.
