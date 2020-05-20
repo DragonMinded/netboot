@@ -7,7 +7,7 @@ SEARCH_DIR("/opt/toolchains/naomi/sh-elf/sh-elf/lib");
 SECTIONS
 {
   /* Read-only sections, merged into text segment: */
-  PROVIDE (__executable_start = 0x0c020000); . = 0x0c020000;
+  PROVIDE (__executable_start = 0xc021000); . = 0xc021000;
   .text           :
   {
     *(.text .stub .text.* .gnu.linkonce.t.*)

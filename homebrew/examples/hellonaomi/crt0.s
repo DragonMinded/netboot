@@ -2,7 +2,21 @@
     .globl start
 
 start:
-    # First, we need to enable cache since the BIOS disables it
+    # First, we need to initialize the stack (we don't have a frame pointer)
+    # to the top of memory.
+    mov.l stack_addr,r15
+
+    # Now, zero out the .bss section.
+    mov.l bss_start_addr,r0
+    mov.l bss_end_addr,r1
+    mov #0,r2
+bss_zero_loop:
+    mov.l r2,@r0
+    add #4,r0
+    cmp/ge r0,r1
+    bt bss_zero_loop
+
+    # Now, we need to enable cache since the BIOS disables it
     # before calling into ROM space. So, get ourselves into P2
     # region so its safe to enable cache. Grab the address of
     # setup_cache (exactly 16 bytes forward), mask off the physical
@@ -19,9 +33,10 @@ start:
     nop
     nop
 
-# Enable cache, copying the setup that Mvc2 does.
-setup_cache:
     # This is exactly 16 bytes forward of the above mova instruction.
+
+setup_cache:
+    # Enable cache, copying the setup that Mvc2 does.
     mov.l ccr_addr,r0
     mov.w ccr_enable,r1
     mov.l r1,@r0
@@ -38,6 +53,21 @@ setup_cache:
     nop
 
     .align 4
+
+    # TODO: At some point we need to call global ctors/dtors, init and fini,
+    # but for now that's left out.
+
+stack_addr:
+    # Location of stack
+    .long 0x0E000000
+
+bss_start_addr:
+    # Location of .bss section we must zero
+    .long _edata
+
+bss_end_addr:
+    # Location of end of ROM where we stop zeroing
+    .long _end
 
 main_addr:
     # Location of main
