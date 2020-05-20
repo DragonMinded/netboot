@@ -295,11 +295,10 @@ void main()
     draw_text(20, 180, rgb(255, 255, 255), "Hello, world!");
     draw_text(20, 200, rgb(255, 0, 255), "This is a test...");
 
+    char buffer[64];
     unsigned int counter = 0;
     while ( 1 )
     {
-        char *number = "Counter: xxxxxxxxxx";
-        char buffer[64];
         sprintf(buffer, "Counter: %d", counter++);
 
         draw_box(20, 255, 20 + (8*19), 255 + 8, rgb(48, 48, 48));
