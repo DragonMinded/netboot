@@ -292,6 +292,7 @@ void main()
     draw_line(20, 20, 20, 100, rgb(0, 255, 0));
     draw_line(100, 20, 100, 100, rgb(0, 255, 0));
     draw_line(20, 100, 100, 100, rgb(0, 255, 0));
+    draw_text(20, 180, rgb(255, 255, 255), "Hello, world!");
     draw_text(20, 200, rgb(255, 0, 255), "This is a test...");
 
     unsigned int counter = 0;
@@ -302,7 +303,7 @@ void main()
         sprintf(buffer, "Counter: %d", counter++);
 
         draw_box(20, 255, 20 + (8*19), 255 + 8, rgb(48, 48, 48));
-        draw_text(20, 255, rgb(255, 255, 255), buffer);
+        draw_text(20, 255, rgb(200, 200, 20), buffer);
         wait_for_vblank();
     }
 }
