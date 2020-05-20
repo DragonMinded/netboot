@@ -3,7 +3,7 @@ OUTPUT_FORMAT("elf32-shl", "elf32-shl",
 	      "elf32-shl")
 OUTPUT_ARCH(sh)
 ENTRY(start)
-SEARCH_DIR("/opt/toolchains/dc/sh-elf/sh-elf/lib");
+SEARCH_DIR("/opt/toolchains/naomi/sh-elf/sh-elf/lib");
 SECTIONS
 {
   /* Read-only sections, merged into text segment: */

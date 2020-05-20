@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <stdint.h>
 #include "font.h"
 
@@ -280,82 +281,6 @@ void draw_text( int x, int y, uint16_t color, const char * const msg )
     }
 }
 
-void udiv(int divisor, int dividend, int *outquotient, int *outremainder)
-{
-    int remainder = 0;
-    int quotient = 0;
-
-    for (int i = 31; i >= 0; i--)
-    {
-        // First, shift out the top bit and shift it into our collector.
-        int shift_val = (dividend >> i) & 1;
-        remainder = (remainder << 1) | shift_val;
-
-        // Now, see if the remainder value is larger than our divisor,
-        // if it is, the divisor goes into this digit and we output a
-        // 1. Otherwise, it isn't and we output a 0.
-        if (remainder < divisor)
-        {
-            quotient = quotient << 1;
-        }
-        else
-        {
-            // We output a 1 here, to say that the divisor goes into the
-            // current remainder dividend. We also subtract the divisor
-            // from the remainder dividend so we can start over collecting.
-            quotient = (quotient << 1) | 1;
-            remainder = remainder - divisor;
-        }
-    }
-
-    *outquotient = quotient;
-    *outremainder = remainder;
-}
-
-char *itoa( int value, char *str, int base)
-{
-    char *lut = "0123456789ABCDEF";
-    char buf[32];
-    int pos = 31;
-
-    int rvalue = value;
-    int neg = 0;
-    if (rvalue < 0)
-    {
-        rvalue = -rvalue;
-        neg = 1;
-    }
-
-    if (base < 2 || base > 16)
-    {
-        return str;
-    }
-
-    while(rvalue >= base)
-    {
-        int digit;
-        udiv(base, rvalue, &rvalue, &digit);
-        buf[pos--] = lut[digit];
-    }
-
-    buf[pos] = lut[rvalue];
-    char *ptr = str;
-
-    if (neg)
-    {
-        *ptr++ = '-';
-    }
-
-    while(pos < 32)
-    {
-        *ptr++ = buf[pos++];
-    }
-
-    *ptr = 0;
-
-    return str;
-}
-
 void main()
 {
     init_video();
@@ -373,9 +298,11 @@ void main()
     while ( 1 )
     {
         char *number = "Counter: xxxxxxxxxx";
-        itoa(counter++, number + 9, 10);
+        char buffer[64];
+        sprintf(buffer, "Counter: %d", counter++);
+
         draw_box(20, 255, 20 + (8*19), 255 + 8, rgb(48, 48, 48));
-        draw_text(20, 255, rgb(255, 255, 255), number);
+        draw_text(20, 255, rgb(255, 255, 255), buffer);
         wait_for_vblank();
     }
 }
