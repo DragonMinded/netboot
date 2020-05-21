@@ -31,6 +31,9 @@ void _exit(int status)
         (*((func_ptr *)dtor_ptr))();
         dtor_ptr++;
     }
+
+    // We don't have an OS to "go back to", so just infinite-loop.
+    while ( 1 ) { ; }
 }
 
 void _enter()
