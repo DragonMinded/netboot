@@ -6,6 +6,8 @@ The next thing you will need to do is build libnaomi, the system support library
 
 To build any examples that are included, first activate the Naomi enviornment by running `source /opt/toolchains/naomi/env.sh`, and then running `make` in the directory of the example you want to run. The resulting binary file can be loaded in Demul or netbooted to a Naomi with a netdimm.
 
+If you are looking for a great resource for programming, the first thing I would recommend is https://github.com/Kochise/dreamcast-docs which is mostly relevant to the Naomi. For memory maps and general low-level stuff, Mame's https://github.com/mamedev/mame/blob/master/src/mame/drivers/naomi.cpp is extremely valuable.
+
 TODOs
 =====
  - Get started on implementing maple drivers for control input, verify the ARM side of the library.
