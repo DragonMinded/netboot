@@ -10,6 +10,7 @@ SECTIONS
   PROVIDE (__executable_start = 0xc021000); . = 0xc021000;
   .text           :
   {
+    *(.text.start)
     *(.text .stub .text.* .gnu.linkonce.t.*)
     /* .gnu.warning sections are handled specially by elf32.em.  */
     *(.gnu.warning)

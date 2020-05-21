@@ -9,4 +9,6 @@ export NAOMI_ARM_GCC_VER=8.4.0
 export NAOMI_SH_CC=${NAOMI_SH_BASE}/bin/sh-elf-gcc
 export NAOMI_SH_LD=${NAOMI_SH_BASE}/bin/sh-elf-ld
 export NAOMI_SH_AS=${NAOMI_SH_BASE}/bin/sh-elf-as
+export NAOMI_SH_AR=${NAOMI_SH_BASE}/bin/sh-elf-ar
 export NAOMI_SH_OBJCOPY=${NAOMI_SH_BASE}/bin/sh-elf-objcopy
+export NAOMI_SH_OBJDUMP=${NAOMI_SH_BASE}/bin/sh-elf-objdump

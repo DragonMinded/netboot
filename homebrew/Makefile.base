@@ -25,6 +25,8 @@ LD += -T$(dir $(abspath $(lastword $(MAKEFILE_LIST))))naomi.ld
 LD += --gc-sections
 # Add library paths so we can link against newlib-provided system libs.
 LD += -L${NAOMI_SH_BASE}/sh-elf/lib/ -L${NAOMI_SH_BASE}/lib/gcc/sh-elf/${NAOMI_SH_GCC_VER}/
+# Add the path to libnaomi, built in this repository.
+LD += -L$(dir $(abspath $(lastword $(MAKEFILE_LIST))))libnaomi/
 
 # Set up assembler default options for compiling .s files.
 AS  = ${NAOMI_SH_AS}
@@ -34,11 +36,14 @@ AS += --isa sh4 -little
 # Set up default options for objcopy, used for extracting the raw binary from the linked elf file.
 OBJCOPY = ${NAOMI_SH_OBJCOPY}
 
+# Set up default archiver, used for creating libraries.
+AR  = ${NAOMI_SH_AR}
+
 # A List of source files that should be included.
 SRCS ?=
 
 # A list of libraries that should be linked against.
-LIBS ?= -lc -lgcc
+LIBS ?= -lc -lgcc -lnaomi
 
 OBJS = $(patsubst %.s, build/%.o, $(patsubst %.c, build/%.o, $(SRCS)))
 
@@ -47,6 +52,7 @@ build/%.bin: build/%.elf
 	@mkdir -p $(dir $@)
 	${OBJCOPY} $< $@ -O binary
 
+# A rule for how we go about building the elf file from objects.
 build/%.elf: ${OBJS}
 	@mkdir -p $(dir $@)
 	${LD} -o $@ $^ ${LIBS}
@@ -60,3 +66,8 @@ build/%.o: %.s
 build/%.o: %.c
 	@mkdir -p $(dir $@)
 	${CC} -c $< -o $@
+
+# Mark intermediate build files as precious in case we need to examine them later.
+.PRECIOUS: ${OBJS}
+.PRECIOUS: build/%.elf
+.PRECIOUS: build/%.bin

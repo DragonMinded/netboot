@@ -8,9 +8,7 @@ all: hellonaomi.bin
 # one of these files is not found, make will complain about a
 # missing missing `build/naomi.bin' target, so make sure all of
 # these files exist.
-SRCS += crt0.s
 SRCS += main.c
-SRCS += system.c
 
 # Pick up base makefile rules common to all examples.
 include ../../Makefile.base
