@@ -369,3 +369,17 @@ void main()
 
     }
 }
+
+void test()
+{
+    video_init();
+
+    fill_screen(rgbto565(48, 48, 48));
+    draw_text(320 - 56, 236, rgbto565(255, 255, 255), "test mode stub");
+    video_wait_for_vblank();
+
+    // Copy it to VRAM.
+    memcpy((void *)VRAM_BASE, buffer_base, 640 * 480 * 2);
+
+    while ( 1 ) { ; }
+}

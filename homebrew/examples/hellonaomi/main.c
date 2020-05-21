@@ -307,3 +307,14 @@ void main()
         wait_for_vblank();
     }
 }
+
+void test()
+{
+    init_video();
+
+    fill_screen(rgbto565(48, 48, 48));
+    draw_text(320 - 56, 236, rgbto565(255, 255, 255), "test mode stub");
+    wait_for_vblank();
+
+    while ( 1 ) { ; }
+}

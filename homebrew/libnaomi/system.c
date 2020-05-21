@@ -9,6 +9,32 @@ int errno;
 /* This is used by _sbrk.  */
 register char *stack_ptr asm("r15");
 
+extern int main();
+extern int test();
+
+void _exit(int status)
+{
+    // TODO This should run fini sections and global destructors.
+}
+
+void _enter()
+{
+    // We set this to 1 or 0 depending on whether we are in test or normal
+    // mode.
+    register uint32_t boot_mode asm("r3");
+
+    // TODO: init sections
+
+    if(boot_mode == 0)
+    {
+        _exit(main());
+    }
+    else
+    {
+        _exit(test());
+    }
+}
+
 _ssize_t _read_r(struct _reent *reent, int file, void *ptr, size_t len)
 {
     // TODO

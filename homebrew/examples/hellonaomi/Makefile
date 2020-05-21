@@ -21,7 +21,7 @@ hellonaomi.bin: build/naomi.bin
 		--publisher "DragonMinded" \
 		--section $<,0xc021000 \
 		--entrypoint 0xc021000 \
-		--test-entrypoint 0xc021000
+		--test-entrypoint 0xc021004
 
 # Include a simple clean target which wipes the build directory
 # and kills any binary built.

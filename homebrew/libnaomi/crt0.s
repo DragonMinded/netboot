@@ -2,6 +2,13 @@
     .globl start
 
 start:
+    bra bss_zero
+    mov #0,r3
+start_test:
+    mov #1,r3
+    nop
+
+bss_zero:
     # First, we need to initialize the stack (we don't have a frame pointer)
     # to the top of memory.
     mov.l stack_addr,r15
@@ -54,9 +61,6 @@ setup_cache:
 
     .align 4
 
-    # TODO: At some point we need to call global ctors/dtors, init and fini,
-    # but for now that's left out.
-
 stack_addr:
     # Location of stack
     .long 0x0E000000
@@ -71,7 +75,7 @@ bss_end_addr:
 
 main_addr:
     # Location of main
-    .long _main
+    .long __enter
 
 phys_mask:
     # Mask for converting virtual to physical address.
