@@ -1,11 +1,22 @@
 # Please see the README for setting up a valid build environment.
+
+# The top-level binary that you wish to produce.
 all: hellonaomi.bin
 
-CC = ${NAOMI_SH_CC} -ml -nostdlib -nostartfiles -fno-stack-protector -ffreestanding -fomit-frame-pointer -ffunction-sections -fdata-sections
-LD = ${NAOMI_SH_LD} -mshlelf -Tnaomi.ld --gc-sections -L${NAOMI_SH_BASE}/sh-elf/lib/ -L${NAOMI_SH_BASE}/lib/gcc/sh-elf/${NAOMI_SH_GCC_VER}/
-AS = ${NAOMI_SH_AS} --isa sh4 -little
-OBJCOPY = ${NAOMI_SH_OBJCOPY}
+# All of the source files (.c and .s) that you want to compile.
+# You can use relative directories here as well. Note that if
+# one of these files is not found, make will complain about a
+# missing missing `build/naomi.bin' target, so make sure all of
+# these files exist.
+SRCS += crt0.s
+SRCS += main.c
+SRCS += system.c
 
+# Pick up base makefile rules common to all examples.
+include ../../Makefile.base
+
+# Provide the top-level ROM creation target for this binary.
+# See scripts.makerom for details about what is customizable.
 hellonaomi.bin: build/naomi.bin
 	PYTHONPATH=../../../ python3 -m scripts.makerom $@ \
 		--title "Hello Naomi" \
@@ -14,24 +25,9 @@ hellonaomi.bin: build/naomi.bin
 		--entrypoint 0xc021000 \
 		--test-entrypoint 0xc021000
 
-build:
-	mkdir -p build
-
-build/naomi.bin: build/naomi.elf
-	${OBJCOPY} $< $@ -O binary
-
-build/naomi.elf: build/crt0.o build/main.o build/system.o
-	${LD} -o $@ $^ -lc -lgcc
-
-build/crt0.o: crt0.s | build
-	${AS} -o build/crt0.o crt0.s
-
-build/main.o: main.c | build
-	${CC} -c main.c -o build/main.o
-
-build/system.o: system.c | build
-	${CC} -c system.c -o build/system.o
-
+# Include a simple clean target which wipes the build directory
+# and kills any binary built.
+.PHONY: clean
 clean:
 	rm -rf build
 	rm -rf hellonaomi.bin

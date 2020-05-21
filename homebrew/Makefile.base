@@ -1,0 +1,62 @@
+# Set up gcc default options for compiling .c files.
+CC  = ${NAOMI_SH_CC}
+# Little-endian SH-4.
+CC += -ml
+# Don't use the system standard library (We supply our own newlib-one with -lc in the link step).
+CC += -nostdlib
+# Don't use the system start files (We supply our own crt0).
+CC += -nostartfiles
+# Don't use GCC stack protection (its not needed on a kernel-less system).
+CC += -fno-stack-protector
+# We're making a free-standing binary.
+CC += -ffreestanding
+# Don't generate code that uses a frame pointer.
+CC += -fomit-frame-pointer
+# Put every object in its own section so the linker can trim dead code.
+CC += -ffunction-sections -fdata-sections
+
+# Set up linker default options for linking the final elf file.
+LD  = ${NAOMI_SH_LD}
+# SH-4 little endian ELF format.
+LD += -mshlelf
+# Use our supplied naomi linkscript.
+LD += -T$(dir $(abspath $(lastword $(MAKEFILE_LIST))))naomi.ld
+# Garbage collect (trim dead functions)
+LD += --gc-sections
+# Add library paths so we can link against newlib-provided system libs.
+LD += -L${NAOMI_SH_BASE}/sh-elf/lib/ -L${NAOMI_SH_BASE}/lib/gcc/sh-elf/${NAOMI_SH_GCC_VER}/
+
+# Set up assembler default options for compiling .s files.
+AS  = ${NAOMI_SH_AS}
+# Little endian SH-4
+AS += --isa sh4 -little
+
+# Set up default options for objcopy, used for extracting the raw binary from the linked elf file.
+OBJCOPY = ${NAOMI_SH_OBJCOPY}
+
+# A List of source files that should be included.
+SRCS ?=
+
+# A list of libraries that should be linked against.
+LIBS ?= -lc -lgcc
+
+OBJS = $(patsubst %.s, build/%.o, $(patsubst %.c, build/%.o, $(SRCS)))
+
+# A rule for how we go from the final built elf file to a raw binary for extracting.
+build/%.bin: build/%.elf
+	@mkdir -p $(dir $@)
+	${OBJCOPY} $< $@ -O binary
+
+build/%.elf: ${OBJS}
+	@mkdir -p $(dir $@)
+	${LD} -o $@ $^ ${LIBS}
+
+# A rule for how to build assembly files. Depends on the build dir being created.
+build/%.o: %.s
+	@mkdir -p $(dir $@)
+	${AS} -o $@ $<
+
+# A rule for how to build C files. Depends on the build dir being created.
+build/%.o: %.c
+	@mkdir -p $(dir $@)
+	${CC} -c $< -o $@
