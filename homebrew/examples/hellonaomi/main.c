@@ -115,13 +115,13 @@ void init_video()
     wait_for_vblank();
 }
 
-uint16_t rgb(unsigned int r, unsigned int g, unsigned int b)
+uint16_t rgbto565(unsigned int r, unsigned int g, unsigned int b)
 {
     r = (r >> 3) & 0x1F;
-    g = (g >> 3) & 0x1F;
+    g = (g >> 2) & 0x3F;
     b = (b >> 3) & 0x1F;
 
-    return b | (g << 6) | (r << 11);
+    return b | (g << 5) | (r << 11);
 
 }
 
@@ -285,24 +285,25 @@ void main()
 {
     init_video();
 
-    fill_screen(rgb(48, 48, 48));
-    draw_line(20, 20, 100, 100, rgb(0, 255, 0));
-    draw_line(100, 20, 20, 100, rgb(0, 255, 0));
-    draw_line(20, 20, 100, 20, rgb(0, 255, 0));
-    draw_line(20, 20, 20, 100, rgb(0, 255, 0));
-    draw_line(100, 20, 100, 100, rgb(0, 255, 0));
-    draw_line(20, 100, 100, 100, rgb(0, 255, 0));
-    draw_text(20, 180, rgb(255, 255, 255), "Hello, world!");
-    draw_text(20, 200, rgb(255, 0, 255), "This is a test...");
+    fill_screen(rgbto565(48, 48, 48));
+    draw_box(20, 20, 100, 100, rgbto565(0, 0, 0));
+    draw_line(20, 20, 100, 100, rgbto565(0, 255, 0));
+    draw_line(100, 20, 20, 100, rgbto565(0, 255, 0));
+    draw_line(20, 20, 100, 20, rgbto565(0, 255, 0));
+    draw_line(20, 20, 20, 100, rgbto565(0, 255, 0));
+    draw_line(100, 20, 100, 100, rgbto565(0, 255, 0));
+    draw_line(20, 100, 100, 100, rgbto565(0, 255, 0));
+    draw_text(20, 180, rgbto565(255, 255, 255), "Hello, world!");
+    draw_text(20, 200, rgbto565(255, 0, 255), "This is a test...");
 
     char buffer[64];
     unsigned int counter = 0;
     while ( 1 )
     {
-        sprintf(buffer, "Counter: %d", counter++);
+        sprintf(buffer, "Aliveness counter: %d", counter++);
 
-        draw_box(20, 255, 20 + (8*19), 255 + 8, rgb(48, 48, 48));
-        draw_text(20, 255, rgb(200, 200, 20), buffer);
+        draw_box(20, 220, 20 + (8*30), 220 + 8, rgbto565(48, 48, 48));
+        draw_text(20, 220, rgbto565(200, 200, 20), buffer);
         wait_for_vblank();
     }
 }
