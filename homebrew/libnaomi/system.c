@@ -12,6 +12,9 @@ register char *stack_ptr asm("r15");
 extern int main();
 extern int test();
 
+/* C++ expected definitions */
+void *__dso_handle = NULL;
+
 /* Global constructors/destructors */
 typedef void (*func_ptr)(void);
 extern uint32_t __ctors;
@@ -33,8 +36,10 @@ void _exit(int status)
 void _enter()
 {
     // We set this to 1 or 0 depending on whether we are in test or normal
-    // mode.
+    // mode. Save this value locally since the register could change in
+    // global constructors below.
     register uint32_t boot_mode asm("r3");
+    uint32_t _boot_mode = boot_mode;
 
     // Run init sections.
     uint32_t *ctor_ptr = &__ctors;
@@ -44,7 +49,7 @@ void _enter()
         ctor_ptr++;
     }
 
-    if(boot_mode == 0)
+    if(_boot_mode == 0)
     {
         _exit(main());
     }

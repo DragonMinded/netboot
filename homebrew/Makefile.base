@@ -15,6 +15,23 @@ CC += -fomit-frame-pointer
 # Put every object in its own section so the linker can trim dead code.
 CC += -ffunction-sections -fdata-sections
 
+# Set up gcc default options for compiling .cpp files.
+CPP  = ${NAOMI_SH_CPP}
+# Little-endian SH-4.
+CPP += -ml
+# Don't use the system standard library (We supply our own newlib-one with -lc in the link step).
+CPP += -nostdlib
+# Don't use the system start files (We supply our own crt0).
+CPP += -nostartfiles
+# Don't use GCC stack protection (its not needed on a kernel-less system).
+CPP += -fno-stack-protector
+# We're making a free-standing binary.
+CPP += -ffreestanding
+# Don't generate code that uses a frame pointer.
+CPP += -fomit-frame-pointer
+# Put every object in its own section so the linker can trim dead code.
+CPP += -ffunction-sections -fdata-sections
+
 # Set up linker default options for linking the final elf file.
 LD  = ${NAOMI_SH_LD}
 # SH-4 little endian ELF format.
@@ -43,9 +60,9 @@ AR  = ${NAOMI_SH_AR}
 SRCS ?=
 
 # A list of libraries that should be linked against.
-LIBS ?= -lc -lgcc -lnaomi
+LIBS ?= -lc -lgcc -lstdc++ -lnaomi
 
-OBJS = $(patsubst %.s, build/%.o, $(patsubst %.c, build/%.o, $(SRCS)))
+OBJS = $(patsubst %.cpp, build/%.o, $(patsubst %.s, build/%.o, $(patsubst %.c, build/%.o, $(SRCS))))
 
 # A rule for how we go from the final built elf file to a raw binary for extracting.
 build/%.bin: build/%.elf
@@ -66,6 +83,11 @@ build/%.o: %.s
 build/%.o: %.c
 	@mkdir -p $(dir $@)
 	${CC} -c $< -o $@
+
+# A rule for how to build C++ files. Depends on the build dir being created.
+build/%.o: %.cpp
+	@mkdir -p $(dir $@)
+	${CPP} -c $< -o $@
 
 # Mark intermediate build files as precious in case we need to examine them later.
 .PRECIOUS: ${OBJS}
