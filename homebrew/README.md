@@ -12,4 +12,4 @@ TODOs
 =====
  - Get started on implementing maple drivers for control input, verify the ARM side of the library.
  - Fill out more of the TODOs in system.c to add functionality such as a ROMFS and support for loading things from a cart.
- - Finish the crt0 script so it calls C init/fini as well as C++ global constructors/destructors.
+ - Incorporate a C++ example and support in the base makefile.

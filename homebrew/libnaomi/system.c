@@ -12,9 +12,22 @@ register char *stack_ptr asm("r15");
 extern int main();
 extern int test();
 
+/* Global constructors/destructors */
+typedef void (*func_ptr)(void);
+extern uint32_t __ctors;
+extern uint32_t __ctors_end;
+extern uint32_t __dtors;
+extern uint32_t __dtors_end;
+
 void _exit(int status)
 {
-    // TODO This should run fini sections and global destructors.
+    // Run fini sections.
+    uint32_t *dtor_ptr = &__dtors;
+    while (dtor_ptr < &__dtors_end)
+    {
+        (*((func_ptr *)dtor_ptr))();
+        dtor_ptr++;
+    }
 }
 
 void _enter()
@@ -23,7 +36,13 @@ void _enter()
     // mode.
     register uint32_t boot_mode asm("r3");
 
-    // TODO: init sections
+    // Run init sections.
+    uint32_t *ctor_ptr = &__ctors;
+    while (ctor_ptr < &__ctors_end)
+    {
+        (*((func_ptr *)ctor_ptr))();
+        ctor_ptr++;
+    }
 
     if(boot_mode == 0)
     {
