@@ -81,7 +81,7 @@ void init_video()
     );
 
     // Set up horizontal position.
-    videobase[HPOS] = 144;
+    videobase[HPOS] = 166;
 
     // Set up refresh rate.
     videobase[SYNC_LOAD] = (

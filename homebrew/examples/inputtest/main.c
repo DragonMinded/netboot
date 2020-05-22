@@ -106,7 +106,7 @@ void video_init()
     );
 
     // Set up horizontal position.
-    videobase[HPOS] = 144;
+    videobase[HPOS] = 166;
 
     // Set up refresh rate.
     videobase[SYNC_LOAD] = (
@@ -187,18 +187,18 @@ void maple_print_regs()
     console_printf("HW_INIT: %08X\n", maplebase[HW_INIT]);
 }
 
-uint32_t *maple_swap_data(unsigned int port, int peripheral, unsigned int cmd, unsigned int datalen, uint32_t *data)
+volatile uint32_t *maple_swap_data(unsigned int port, int peripheral, unsigned int cmd, unsigned int datalen, uint32_t *data)
 {
-    volatile unsigned int *maplebase = (volatile unsigned int *)MAPLE_BASE;
+    volatile uint32_t *maplebase = (volatile uint32_t *)MAPLE_BASE;
 
     // First, calculate the send and receive buffers. We make sure we get a 32-byte
     // aligned address, and ensure its in uncached memory.
-    unsigned long *recv = (unsigned long *)(((((unsigned long)maple_base) + 31) & ~31) | UNCACHED_MIRROR);
+    volatile uint32_t *recv = (uint32_t *)(((((uint32_t)maple_base) + 31) & ~31) | UNCACHED_MIRROR);
     // Place the send buffer 1024 bytes after the receive buffer.
-    unsigned long *send = recv + (1024 / sizeof(unsigned long));
+    volatile uint32_t *send = recv + (1024 / sizeof(recv[0]));
 
     // Calculate the recipient address.
-    unsigned long addr;
+    unsigned int addr;
     if (peripheral == 0)
     {
         // Main controller peripheral.
@@ -210,41 +210,58 @@ uint32_t *maple_swap_data(unsigned int port, int peripheral, unsigned int cmd, u
         addr = (port & 0x3) << 6 | (1 << (peripheral - 1)) & 0x1F;
     }
 
+    // Calculate receive buffer
+    uint32_t buffer = (uint32_t)recv & PHYSICAL_MASK;
+
     // Wait until any transfer finishes before messing with memory, then point at
     // our buffer.
     maple_wait_for_dma();
-    maplebase[DMA_BUFFER_ADDR] = (unsigned long)send & PHYSICAL_MASK;
 
     // Now, construct the maple request transfer descriptor.
+    memset((void *)send, 0, 1024);
     send[0] = (
         1 << 31 |       // This is the last entry in the transfer descriptor.
         datalen & 0xFF  // Length is how many extra bytes of payload we are including.
     );
-    send[1] = (unsigned long)recv & PHYSICAL_MASK;
+    send[1] = buffer;
     send[2] = (
+        /*
         ((cmd & 0xFF) << 24) |  // The command we are sending.
         (addr << 16) |          // The recipient of our packet.
         (0 << 8) |              // The sender address (us).
         (datalen & 0xFF)        // Number of words we tack on the end.
+        */
+        ((cmd & 0xFF)) |         // The command we are sending.
+        ((addr & 0xFF) << 8) |   // The recipient of our packet.
+        ((addr & 0xC0) << 16) |  // The sender address (us).
+        ((datalen & 0xFF) < 24)  // Number of words we tack on the end.
     );
 
     // Add on any command data we should include.
     if (datalen)
     {
-        memcpy(&send[3], data, datalen * 4);
+        memcpy((void *)&send[3], data, datalen * 4);
     }
 
-    maple_print_regs();
-    console_printf("Sending:\n");
+    // Set the first word of the recv buffer like real BIOS does.
+    memset((void *)recv, 0, 1024);
+    recv[0] = 0xFFFFFFFF;
+
+    // Debugging
+    console_printf("Send buffer: %08X\n", (uint32_t)send);
+    console_printf("Recv buffer: %08X\n", (uint32_t)recv);
+    console_printf("Sending:\n   ");
     for (int i = 0; i < (3 + datalen); i++)
     {
-        console_printf("    %08X\n", send[i]);
+        volatile uint8_t *bytes = (volatile uint8_t *)(&send[i]);
+        console_printf(" %02X %02X %02X %02X", bytes[0], bytes[1], bytes[2], bytes[3]);
     }
-
-    // Memset the receive buffer like real BIOS does.
-    memset(recv, 0xFF, 1024);
+    console_printf("\n");
 
     // Kick off the DMA request
+    maple_wait_for_dma();
+    maplebase[DMA_BUFFER_ADDR] = (uint32_t)send & PHYSICAL_MASK;
+    maplebase[MAPLE_DEVICE_ENABLE] = 1;
     maplebase[DMA_START] = 1;
 
     // Wait for it to finish
@@ -342,26 +359,37 @@ void display()
 
 void main()
 {
-    uint32_t *resp;
+    volatile uint32_t *resp;
 
     // Set up a crude console
     video_init();
-
-    console_printf("Initializing Maple...\n");
-    display();
-
     maple_init();
 
-    console_printf("Maple initialization done!\n");
-    display();
+    unsigned int try = 0;
+    do
+    {
+        if(try > 0)
+        {
+            // Spinloop, reset our console.
+            console_base[0] = 0;
+            for(int x = 0x2710; x > 0; x--) { ; }
+        }
 
-    // Reset Maple device
-    console_printf("Requesting Maple status...\n");
-    display();
+        // Try again...
+        resp = maple_swap_data(0, 0, DEVICE_INFO_REQUEST, 0, NULL);
+        console_printf("Requesting Maple status try %d...\n", try++);
+        console_printf("Maple returned (%08X): %08X %08X %08X %08X\n", (uint32_t)resp, resp[0], resp[1], resp[2], resp[3]);
 
-    resp = maple_swap_data(0, 0, DEVICE_INFO_REQUEST, 0, NULL);
-    console_printf("Maple returned: %08X %08X %08X %08X\n", resp[0], resp[1], resp[2], resp[3]);
-    display();
+        resp = (uint32_t *)(((uint32_t)resp) & 0x0FFFFFFF);
+        console_printf("Maple returned (%08X): %08X %08X %08X %08X\n", (uint32_t)resp, resp[0], resp[1], resp[2], resp[3]);
+        resp = (uint32_t *)((((uint32_t)resp) & 0x0FFFFFFF) | 0x80000000);
+        console_printf("Maple returned (%08X): %08X %08X %08X %08X\n", (uint32_t)resp, resp[0], resp[1], resp[2], resp[3]);
+        resp = (uint32_t *)((((uint32_t)resp) & 0x0FFFFFFF) | 0xC0000000);
+        console_printf("Maple returned (%08X): %08X %08X %08X %08X\n", (uint32_t)resp, resp[0], resp[1], resp[2], resp[3]);
+
+        display();
+    }
+    while (resp[0] == 0xFFFFFFFF);
 
     while ( 1 )
     {

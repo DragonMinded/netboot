@@ -44,6 +44,9 @@ void _enter()
     register uint32_t boot_mode asm("r3");
     uint32_t _boot_mode = boot_mode;
 
+    // Invalidate cache, as is done in real games.
+    ((uint32_t *)0xFF00001C)[0] = 0x905;
+
     // Run init sections.
     uint32_t *ctor_ptr = &__ctors;
     while (ctor_ptr < &__ctors_end)
