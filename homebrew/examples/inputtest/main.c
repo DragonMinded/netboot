@@ -24,6 +24,7 @@
 #define SYNC_LOAD (0x0D8 >> 2)
 #define VBORDER (0x0DC >> 2)
 #define TSP_CFG (0x0E4 >> 2)
+#define VIDEO_CFG (0x0E8 >> 2)
 #define HPOS (0x0EC >> 2)
 #define VPOS (0x0F0 >> 2)
 #define SYNC_CFG (0x0D0 >> 2)
@@ -33,12 +34,18 @@
 
 #define MAPLE_BASE 0xA05F6C00
 
-#define DMA_BUFFER_ADDR (0x04 >> 2)
-#define DMA_START_HW (0x10 >> 2)
+#define MAPLE_DMA_BUFFER_ADDR (0x04 >> 2)
+#define MAPLE_DMA_TRIGGER_SELECT (0x10 >> 2)
 #define MAPLE_DEVICE_ENABLE (0x14 >> 2)
-#define DMA_START (0x18 >> 2)
-#define TIMEOUT_AND_SPEED (0x80 >> 2)
-#define HW_INIT (0x8C >> 2)
+#define MAPLE_DMA_START (0x18 >> 2)
+#define MAPLE_TIMEOUT_AND_SPEED (0x80 >> 2)
+#define MAPLE_STATUS (0x84 >> 2)
+#define MAPLE_DMA_TRIGGER_CLEAR (0x88 >> 2)
+#define MAPLE_DMA_HW_INIT (0x8C >> 2)
+#define MAPLE_ENDIAN_SELECT (0x0E8 >> 2)
+
+#define MAPLE_ADDRESS_RANGE(x) ((x >> 20) - 0x80)
+
 
 #define DEVICE_INFO_REQUEST 0x01
 #define DEVICE_RESET_REQUEST 0x03
@@ -74,6 +81,9 @@ void video_init()
 
     // Set border color to black.
     videobase[BORDER_COL] = 0;
+
+    // Don't display border across whole screen.
+    videobase[VIDEO_CFG] = 0x00160000;
 
     // Set up frameebuffer config to enable display, set pixel mode, no line double.
     videobase[FB_DISPLAY_CFG] = (
@@ -149,8 +159,8 @@ void maple_wait_for_dma()
 {
     volatile unsigned int *maplebase = (volatile unsigned int *)MAPLE_BASE;
 
-    // Wait until the DMA_START bit has gone back to 0.
-    while((maplebase[DMA_START] & 1) != 0) { ; }
+    // Wait until the MAPLE_DMA_START bit has gone back to 0.
+    while((maplebase[MAPLE_DMA_START] & 1) != 0) { ; }
 }
 
 void maple_init()
@@ -158,11 +168,15 @@ void maple_init()
     volatile unsigned int *maplebase = (volatile unsigned int *)MAPLE_BASE;
 
     // Maple init routines based on Mvc2.
-    maplebase[HW_INIT] = 0x6155404F;
-    maplebase[DMA_START_HW] = 0;
+    maplebase[MAPLE_DMA_HW_INIT] = (
+        0x6155 << 16 |  // Security bytes
+        MAPLE_ADDRESS_RANGE(0x0c000000) << 8 |  // Low address in memory where maple DMA can be found
+        MAPLE_ADDRESS_RANGE(0x0dffffff)  // High address in memory where maple DMA can be found
+    );
+    maplebase[MAPLE_DMA_TRIGGER_SELECT] = 0;
 
     // Set up timeout and bitrate.
-    maplebase[TIMEOUT_AND_SPEED] = (50000 << 16) | 0;
+    maplebase[MAPLE_TIMEOUT_AND_SPEED] = (50000 << 16) | 0;
 
     // Enable maple bus.
     maplebase[MAPLE_DEVICE_ENABLE] = 1;
@@ -179,23 +193,21 @@ void maple_print_regs()
 {
     volatile unsigned int *maplebase = (volatile unsigned int *)MAPLE_BASE;
 
-    console_printf("DMA_BUFFER_ADDR: %08X\n", maplebase[DMA_BUFFER_ADDR]);
-    console_printf("DMA_START_HW: %08X\n", maplebase[DMA_START_HW]);
+    console_printf("MAPLE_DMA_BUFFER_ADDR: %08X\n", maplebase[MAPLE_DMA_BUFFER_ADDR]);
+    console_printf("MAPLE_DMA_TRIGGER_SELECT: %08X\n", maplebase[MAPLE_DMA_TRIGGER_SELECT]);
     console_printf("MAPLE_DEVICE_ENABLE: %08X\n", maplebase[MAPLE_DEVICE_ENABLE]);
-    console_printf("DMA_START: %08X\n", maplebase[DMA_START]);
-    console_printf("TIMEOUT_AND_SPEED: %08X\n", maplebase[TIMEOUT_AND_SPEED]);
-    console_printf("HW_INIT: %08X\n", maplebase[HW_INIT]);
+    console_printf("MAPLE_DMA_START: %08X\n", maplebase[MAPLE_DMA_START]);
 }
 
-volatile uint32_t *maple_swap_data(unsigned int port, int peripheral, unsigned int cmd, unsigned int datalen, uint32_t *data)
+uint32_t *maple_swap_data(unsigned int port, int peripheral, unsigned int cmd, unsigned int datalen, uint32_t *data)
 {
     volatile uint32_t *maplebase = (volatile uint32_t *)MAPLE_BASE;
 
     // First, calculate the send and receive buffers. We make sure we get a 32-byte
-    // aligned address, and ensure its in uncached memory.
-    volatile uint32_t *recv = (uint32_t *)(((((uint32_t)maple_base) + 31) & ~31) | UNCACHED_MIRROR);
+    // aligned address, and ensure the response buffer is in uncached memory.
+    uint32_t *recv = (uint32_t *)(((((uint32_t)maple_base) + 31) & ~31) | UNCACHED_MIRROR);
     // Place the send buffer 1024 bytes after the receive buffer.
-    volatile uint32_t *send = recv + (1024 / sizeof(recv[0]));
+    uint32_t *send = (uint32_t *)(((uint32_t)recv) + 1024);
 
     // Calculate the recipient address.
     unsigned int addr;
@@ -240,11 +252,11 @@ volatile uint32_t *maple_swap_data(unsigned int port, int peripheral, unsigned i
     // Add on any command data we should include.
     if (datalen)
     {
-        memcpy((void *)&send[3], data, datalen * 4);
+        memcpy(&send[3], data, datalen * 4);
     }
 
     // Set the first word of the recv buffer like real BIOS does.
-    memset((void *)recv, 0, 1024);
+    memset(recv, 0, 1024);
     recv[0] = 0xFFFFFFFF;
 
     // Debugging
@@ -253,16 +265,15 @@ volatile uint32_t *maple_swap_data(unsigned int port, int peripheral, unsigned i
     console_printf("Sending:\n   ");
     for (int i = 0; i < (3 + datalen); i++)
     {
-        volatile uint8_t *bytes = (volatile uint8_t *)(&send[i]);
-        console_printf(" %02X %02X %02X %02X", bytes[0], bytes[1], bytes[2], bytes[3]);
+        console_printf(" %08X", send[i]);
     }
     console_printf("\n");
 
     // Kick off the DMA request
     maple_wait_for_dma();
-    maplebase[DMA_BUFFER_ADDR] = (uint32_t)send & PHYSICAL_MASK;
+    maplebase[MAPLE_DMA_BUFFER_ADDR] = (uint32_t)send & PHYSICAL_MASK;
     maplebase[MAPLE_DEVICE_ENABLE] = 1;
-    maplebase[DMA_START] = 1;
+    maplebase[MAPLE_DMA_START] = 1;
 
     // Wait for it to finish
     maple_wait_for_dma();
@@ -359,34 +370,26 @@ void display()
 
 void main()
 {
-    volatile uint32_t *resp;
-
     // Set up a crude console
     video_init();
     maple_init();
 
     unsigned int try = 0;
+    unsigned int reset_loc = strlen(console_base);
+    uint32_t *resp;
     do
     {
         if(try > 0)
         {
             // Spinloop, reset our console.
-            console_base[0] = 0;
+            console_base[reset_loc] = 0;
             for(int x = 0x2710; x > 0; x--) { ; }
         }
 
         // Try again...
         resp = maple_swap_data(0, 0, DEVICE_INFO_REQUEST, 0, NULL);
-        console_printf("Requesting Maple status try %d...\n", try++);
+        console_printf("Requesting Maple status try %d...\n", ++try);
         console_printf("Maple returned (%08X): %08X %08X %08X %08X\n", (uint32_t)resp, resp[0], resp[1], resp[2], resp[3]);
-
-        resp = (uint32_t *)(((uint32_t)resp) & 0x0FFFFFFF);
-        console_printf("Maple returned (%08X): %08X %08X %08X %08X\n", (uint32_t)resp, resp[0], resp[1], resp[2], resp[3]);
-        resp = (uint32_t *)((((uint32_t)resp) & 0x0FFFFFFF) | 0x80000000);
-        console_printf("Maple returned (%08X): %08X %08X %08X %08X\n", (uint32_t)resp, resp[0], resp[1], resp[2], resp[3]);
-        resp = (uint32_t *)((((uint32_t)resp) & 0x0FFFFFFF) | 0xC0000000);
-        console_printf("Maple returned (%08X): %08X %08X %08X %08X\n", (uint32_t)resp, resp[0], resp[1], resp[2], resp[3]);
-
         display();
     }
     while (resp[0] == 0xFFFFFFFF);

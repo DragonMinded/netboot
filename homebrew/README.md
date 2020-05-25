@@ -10,5 +10,5 @@ If you are looking for a great resource for programming, the first thing I would
 
 TODOs
 =====
- - Get started on implementing maple drivers for control input, verify the ARM side of the library. This involves trying to figure out the missing HW init sequence for maple bus on Naomi as the standard routines do not work, even when copied directly out of games that are working.
+ - Get started on implementing maple drivers for control input, verify the ARM side of the library.
  - Fill out more of the TODOs in system.c to add functionality such as a ROMFS and support for loading things from a cart.

@@ -47,6 +47,19 @@ void _enter()
     // Invalidate cache, as is done in real games.
     ((uint32_t *)0xFF00001C)[0] = 0x905;
 
+    // Set up system DMA to allow for things like Maple to operate. This
+    // was kindly copied from the Mvc2 init code after bisecting to it
+    // when determining how to initialize Maple.
+    ((uint32_t *)0xFFA00020)[0] = 0;
+    ((uint32_t *)0xFFA0002C)[0] = 0x1201;
+    ((uint32_t *)0xFFA00040)[0] = 0x8201;
+    while(((volatile uint32_t *)0xFFA00040)[0] != 0x8201)
+    {
+        // Spinloop!
+        for(int i = 0; i < 0x10000; i++) { ; }
+        ((uint32_t *)0xFFA00040)[0] = 0x8201;
+    }
+
     // Run init sections.
     uint32_t *ctor_ptr = &__ctors;
     while (ctor_ptr < &__ctors_end)
