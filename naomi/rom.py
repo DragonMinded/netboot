@@ -483,7 +483,7 @@ class NaomiRom:
         )
 
     @main_executable.setter
-    def main_executable(self, val: NaomiExecutable):
+    def main_executable(self, val: NaomiExecutable) -> None:
         self._raise_on_invalid()
         self._put_sections(0x360, val.sections)
         self._inject_uint32(0x420, val.entrypoint)
@@ -497,7 +497,7 @@ class NaomiRom:
         )
 
     @test_executable.setter
-    def test_executable(self, val: NaomiExecutable):
+    def test_executable(self, val: NaomiExecutable) -> None:
         self._raise_on_invalid()
         self._put_sections(0x3C0, val.sections)
         self._inject_uint32(0x424, val.entrypoint)
