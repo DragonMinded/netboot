@@ -23,6 +23,7 @@
 #define SYNC_LOAD (0x0D8 >> 2)
 #define VBORDER (0x0DC >> 2)
 #define TSP_CFG (0x0E4 >> 2)
+#define VIDEO_CFG (0x0E8 >> 2)
 #define HPOS (0x0EC >> 2)
 #define VPOS (0x0F0 >> 2)
 #define SYNC_CFG (0x0D0 >> 2)
@@ -49,6 +50,9 @@ void init_video()
 
     // Set border color to black.
     videobase[BORDER_COL] = 0;
+
+    // Don't display border across whole screen.
+    videobase[VIDEO_CFG] = 0x00160000;
 
     // Set up frameebuffer config to enable display, set pixel mode, no line double.
     videobase[FB_DISPLAY_CFG] = (

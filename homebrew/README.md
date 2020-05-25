@@ -11,4 +11,5 @@ If you are looking for a great resource for programming, the first thing I would
 TODOs
 =====
  - Get started on implementing maple drivers for control input, verify the ARM side of the library.
+ - Abstract common debug init routines used in various examples to libnaomi.
  - Fill out more of the TODOs in system.c to add functionality such as a ROMFS and support for loading things from a cart.
