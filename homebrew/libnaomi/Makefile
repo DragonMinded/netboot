@@ -6,6 +6,7 @@ all: libnaomi.a
 # The source files that make libnaomi.a tick.
 SRCS += crt0.s
 SRCS += system.c
+SRCS += video.c
 
 # Pick up base makefile rules common to all examples.
 include ../Makefile.base

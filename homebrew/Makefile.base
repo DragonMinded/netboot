@@ -14,6 +14,8 @@ CC += -ffreestanding
 CC += -fomit-frame-pointer
 # Put every object in its own section so the linker can trim dead code.
 CC += -ffunction-sections -fdata-sections
+# Add libnaomi to include path.
+CC += -I$(dir $(abspath $(lastword $(MAKEFILE_LIST))))libnaomi/
 
 # Set up gcc default options for compiling .cpp files.
 CPP  = ${NAOMI_SH_CPP}
@@ -31,6 +33,8 @@ CPP += -ffreestanding
 CPP += -fomit-frame-pointer
 # Put every object in its own section so the linker can trim dead code.
 CPP += -ffunction-sections -fdata-sections
+# Add libnaomi to include path.
+CPP += -I$(dir $(abspath $(lastword $(MAKEFILE_LIST))))libnaomi/
 
 # Set up linker default options for linking the final elf file.
 LD  = ${NAOMI_SH_LD}
@@ -60,7 +64,7 @@ AR  = ${NAOMI_SH_AR}
 SRCS ?=
 
 # A list of libraries that should be linked against.
-LIBS ?= -lc -lgcc -lstdc++ -lnaomi
+LIBS ?= -lnaomi -lc -lgcc -lstdc++
 
 OBJS = $(patsubst %.cpp, build/%.o, $(patsubst %.s, build/%.o, $(patsubst %.c, build/%.o, $(SRCS))))
 
