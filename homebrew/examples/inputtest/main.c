@@ -18,18 +18,33 @@
 
 #define MAPLE_ADDRESS_RANGE(x) ((x >> 20) - 0x80)
 
-
 #define DEVICE_INFO_REQUEST 0x01
 #define DEVICE_RESET_REQUEST 0x03
+#define DEVICE_INFO_RESPONSE 0x05
 #define COMMAND_ACKNOWLEDGE_RESPONSE 0x07
+
+#define NO_RESPONSE 0xFF
+#define BAD_FUNCTION_CODE 0xFE
+#define UNKNOWN_COMMAND 0xFD
+#define RESEND_COMMAND 0xFC
 
 #define UNCACHED_MIRROR 0xA0000000
 #define PHYSICAL_MASK 0x0FFFFFFF
 
-char *console_base = 0;
 uint8_t *maple_base = 0;
 
+// Debug console
+char *console_base = 0;
 #define console_printf(...) sprintf(console_base + strlen(console_base), __VA_ARGS__)
+
+void display()
+{
+    // Render a simple test console.
+    video_fill_screen(rgbto565(48, 48, 48));
+    video_draw_text(0, 0, rgbto565(255, 255, 255), console_base);
+    video_wait_for_vblank();
+    video_display();
+}
 
 void maple_wait_for_dma()
 {
@@ -132,18 +147,9 @@ uint32_t *maple_swap_data(unsigned int port, int peripheral, unsigned int cmd, u
     }
 
     // Set the first word of the recv buffer like real BIOS does.
+    // This lets us check the response with maple_response_valid().
     memset(recv, 0, 1024);
     recv[0] = 0xFFFFFFFF;
-
-    // Debugging
-    console_printf("Send buffer: %08X\n", (uint32_t)send);
-    console_printf("Recv buffer: %08X\n", (uint32_t)recv);
-    console_printf("Sending:\n   ");
-    for (int i = 0; i < (3 + datalen); i++)
-    {
-        console_printf(" %08X", send[i]);
-    }
-    console_printf("\n");
 
     // Kick off the DMA request
     maple_wait_for_dma();
@@ -158,13 +164,101 @@ uint32_t *maple_swap_data(unsigned int port, int peripheral, unsigned int cmd, u
     return recv;
 }
 
-void display()
+int maple_response_valid(uint32_t *response)
 {
-    // Render a simple test console.
-    video_fill_screen(rgbto565(48, 48, 48));
-    video_draw_text(0, 0, rgbto565(255, 255, 255), console_base);
-    video_wait_for_vblank();
-    video_display();
+    if(response[0] == 0xFFFFFFFF)
+    {
+        return 0;
+    }
+    else
+    {
+        return 1;
+    }
+}
+
+uint8_t maple_response_code(uint32_t *response)
+{
+    return response[0] & 0xFF;
+}
+
+uint8_t maple_response_length_words(uint32_t *response)
+{
+    return (response[0] >> 24) & 0xFF;
+}
+
+void maple_print_response(uint32_t *response)
+{
+    if(!maple_response_valid(response))
+    {
+        console_printf("Maple response is invalid.\n");
+    }
+    else
+    {
+        // Work around macro expansion bug by splitting these two up.
+        console_printf("Response Code: %02X, ", maple_response_code(response));
+        console_printf("Data length: %d\n", maple_response_length_words(response));
+
+        if(maple_response_length_words(response) > 0)
+        {
+            console_printf("Data:");
+            for (int i = 0; i < maple_response_length_words(response); i++)
+            {
+                console_printf(" %08X", response[i+1]);
+            }
+            console_printf("\n");
+        }
+    }
+}
+
+int maple_busy()
+{
+    uint32_t *resp = maple_swap_data(0, 0, DEVICE_INFO_REQUEST, 0, NULL);
+
+    // Debug
+    maple_print_response(resp);
+    display();
+
+    // MIE on Naomi doesn't respond to DEVICE_INFO_REQUEST, however it will
+    // send a RESEND_COMMAND response if it is busy, and a UNKNOWN_COMMAND
+    // if it is ready to go. It will return NO_RESPONSE if it is not init'd.
+    // So, we check to see if either RESEND_COMMAND or NO_RESPONSE was
+    // returned, and claim busy for both. We can't just check against
+    // UNKNOWN_COMMAND because demul incorrectly emulates the MIE.
+    uint8_t code = maple_response_code(resp);
+    if (code == RESEND_COMMAND || code == NO_RESPONSE)
+    {
+        return 1;
+    }
+
+    return 0;
+}
+
+void maple_request_reset()
+{
+    console_printf("Resetting maple...\n");
+    while( 1 )
+    {
+        uint32_t *resp = maple_swap_data(0, 0, DEVICE_RESET_REQUEST, 0, NULL);
+
+        // Debug
+        maple_print_response(resp);
+        display();
+
+        if (maple_response_code(resp) == COMMAND_ACKNOWLEDGE_RESPONSE)
+        {
+            break;
+        }
+
+        // Spin and try again
+        for(int x = 0x2710; x > 0; x--) { ; }
+    }
+
+    console_printf("Waiting for maple to come back...\n");
+    while (maple_busy())
+    {
+        // Spin and try again
+        for(int x = 0x2710; x > 0; x--) { ; }
+    }
 }
 
 void main()
@@ -175,25 +269,8 @@ void main()
     console_base = malloc(((640 * 480) / (8 * 8)) + 1);
     memset(console_base, 0, ((640 * 480) / (8 * 8)) + 1);
 
-    unsigned int try = 0;
-    unsigned int reset_loc = strlen(console_base);
-    uint32_t *resp;
-    do
-    {
-        if(try > 0)
-        {
-            // Spinloop, reset our console.
-            console_base[reset_loc] = 0;
-            for(int x = 0x2710; x > 0; x--) { ; }
-        }
-
-        // Try again...
-        resp = maple_swap_data(0, 0, DEVICE_INFO_REQUEST, 0, NULL);
-        console_printf("Requesting Maple status try %d...\n", ++try);
-        console_printf("Maple returned (%08X): %08X %08X %08X %08X\n", (uint32_t)resp, resp[0], resp[1], resp[2], resp[3]);
-        display();
-    }
-    while (resp[0] == 0xFFFFFFFF);
+    // First, reset the maple HW and wait for it to settle.
+    maple_request_reset();
 
     while ( 1 )
     {
