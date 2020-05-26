@@ -274,6 +274,12 @@ void video_draw_text( int x, int y, uint16_t color, const char * const msg )
                 break;
         }
 
+        if (tx == video_width())
+        {
+            tx = 0;
+            ty += 8;
+        }
+
         text++;
     }
 }
