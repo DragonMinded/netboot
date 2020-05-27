@@ -10,6 +10,7 @@
 
 
 static void *buffer_base = 0;
+static int buffer_loc = 0;
 
 
 void video_wait_for_vblank()
@@ -70,8 +71,8 @@ void video_init_simple()
     );
 
     // Set up even/odd field video base address, shifted by bpp.
-    videobase[FB_DISPLAY_ADDR_1] = 0 << 1;
-    videobase[FB_DISPLAY_ADDR_2] = 640 << 1;
+    buffer_loc = 1;
+    video_display();
 
     // Set up render modulo, (bpp * width) / 8.
     videobase[FB_RENDER_MODULO] = (2 * 640) / 8;
@@ -119,9 +120,6 @@ void video_init_simple()
 
     // Wait for vblank like games do.
     video_wait_for_vblank();
-
-    // Set up a double buffer rendering location.
-    buffer_base = malloc(640 * 480 * 2);
 }
 
 uint32_t rgb(unsigned int r, unsigned int g, unsigned int b)
@@ -316,6 +314,9 @@ void video_draw_text( int x, int y, uint32_t color, const char * const msg )
 
 void video_display()
 {
-    // Copy it to VRAM.
-    memcpy((void *)VRAM_BASE, buffer_base, video_width() * video_height() * video_depth());
+    // Swap buffers in HW
+    buffer_loc = 1 - buffer_loc;
+    videobase[FB_DISPLAY_ADDR_1] = (640 * 480 * 2 * (1 - buffer_loc)) << 1;
+    videobase[FB_DISPLAY_ADDR_2] = (640 + (640 * 480 * 2 * (1 - buffer_loc))) << 1;
+    buffer_base = (VRAM_BASE + (640 * 480 * 2)) * buffer_loc;
 }
