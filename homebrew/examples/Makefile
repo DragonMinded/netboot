@@ -1,4 +1,4 @@
-all: hellonaomi hellocpp inputtest
+all: hellonaomi hellocpp inputtest eepromtest
 
 .PHONY: hellonaomi
 hellonaomi:
@@ -12,8 +12,13 @@ hellocpp:
 inputtest:
 	$(MAKE) -C inputtest
 
+.PHONY: eepromtest
+eepromtest:
+	$(MAKE) -C eepromtest
+
 .PHONY: clean
 clean:
 	$(MAKE) -C hellonaomi clean
 	$(MAKE) -C hellocpp clean
 	$(MAKE) -C inputtest clean
+	$(MAKE) -C eepromtest clean

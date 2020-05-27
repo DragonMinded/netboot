@@ -352,6 +352,65 @@ int maple_request_update(void *binary, unsigned int len)
 }
 
 /**
+ * Request the EEPROM contents from the MIE.
+ *
+ * Returns 0 on success
+ *         -1 on unexpected packet received
+ */
+int maple_request_eeprom_read(uint8_t *outbytes)
+{
+    uint8_t req_subcommand[4] = {
+        0x01,         // Subcommand 0x01, read whole EEPROM to MIE.
+        0x00,
+        0x00,
+        0x00,
+    };
+
+    uint32_t *resp = maple_swap_data(0, 0, MAPLE_NAOMI_IO_REQUEST, 1, req_subcommand);
+    if(maple_response_code(resp) != MAPLE_NAOMI_IO_RESPONSE)
+    {
+        // Invalid response packet
+        return -1;
+    }
+    if(maple_response_payload_length_words(resp) != 1)
+    {
+        // Invalid payload length
+        return -1;
+    }
+    if(resp[1] != 0x02)
+    {
+        // Invalid subcommand response
+        return -1;
+    }
+
+    // Now, wait until the EEPROM is read to fetch it.
+    maple_wait_for_ready();
+
+    uint8_t fetch_subcommand[4] = {
+        0x03,         // Subcommand 0x03, read EEPROM result.
+        0x00,
+        0x00,
+        0x00,
+    };
+
+    resp = maple_swap_data(0, 0, MAPLE_NAOMI_IO_REQUEST, 1, fetch_subcommand);
+    if(maple_response_code(resp) != MAPLE_NAOMI_IO_RESPONSE)
+    {
+        // Invalid response packet
+        return -1;
+    }
+    if(maple_response_payload_length_words(resp) != 32)
+    {
+        // Invalid payload length
+        return -1;
+    }
+
+    // Copy the data out, we did it!
+    memcpy(outbytes, &resp[1], 128);
+    return 0;
+}
+
+/**
  * Request the MIE send a JVS command out its RS485 bus.
  *
  * Return 0 on success

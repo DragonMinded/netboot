@@ -7,4 +7,5 @@ build/
 libnaomi.a
 hellonaomi.bin
 inputtest.bin
+eepromtest.bin
 hellocpp.bin
