@@ -37,13 +37,13 @@ void video_wait_for_vblank();
 unsigned int video_width();
 unsigned int video_height();
 void video_init_simple();
-uint16_t rgbto565(unsigned int r, unsigned int g, unsigned int b);
-void video_fill_screen(uint16_t color);
-void video_fill_box(int x0, int y0, int x1, int y1, uint16_t color);
-void video_draw_pixel(int x, int y, uint16_t color);
-void video_draw_line(int x0, int y0, int x1, int y1, uint16_t color);
-void video_draw_character(int x, int y, uint16_t color, char ch);
-void video_draw_text(int x, int y, uint16_t color, const char * const msg);
+uint32_t rgb(unsigned int r, unsigned int g, unsigned int b);
+void video_fill_screen(uint32_t color);
+void video_fill_box(int x0, int y0, int x1, int y1, uint32_t color);
+void video_draw_pixel(int x, int y, uint32_t color);
+void video_draw_line(int x0, int y0, int x1, int y1, uint32_t color);
+void video_draw_character(int x, int y, uint32_t color, char ch);
+void video_draw_text(int x, int y, uint32_t color, const char * const msg);
 void video_display();
 
 #ifdef __cplusplus

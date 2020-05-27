@@ -9,7 +9,7 @@
 // TODO: Need to support more than RGB565 color.
 
 
-static uint16_t *buffer_base = 0;
+static void *buffer_base = 0;
 
 
 void video_wait_for_vblank()
@@ -32,6 +32,13 @@ unsigned int video_height()
     return 480;
 }
 
+unsigned int video_depth()
+{
+    // Hardcoded for now
+    return 2;
+}
+
+// TODO: This function assumes 640x480 VGA, we should support more varied options.
 void video_init_simple()
 {
     volatile unsigned int *videobase = (volatile unsigned int *)POWERVR2_BASE;
@@ -117,25 +124,41 @@ void video_init_simple()
     buffer_base = malloc(640 * 480 * 2);
 }
 
-uint16_t rgbto565(unsigned int r, unsigned int g, unsigned int b)
+uint32_t rgb(unsigned int r, unsigned int g, unsigned int b)
 {
-    r = (r >> 3) & 0x1F;
-    g = (g >> 2) & 0x3F;
-    b = (b >> 3) & 0x1F;
-
-    return b | (g << 5) | (r << 11);
-
-}
-
-void video_fill_screen(uint16_t color)
-{
-    for(unsigned int x = 0; x < (video_width() * video_height()); x++)
+    if(video_depth() == 2)
     {
-        buffer_base[x] = color;
+        r = (r >> 3) & 0x1F;
+        g = (g >> 2) & 0x3F;
+        b = (b >> 3) & 0x1F;
+
+        return b | (g << 5) | (r << 11);
+    }
+    else
+    {
+        // TODO
+        return 0;
     }
 }
 
-void video_fill_box(int x0, int y0, int x1, int y1, uint16_t color)
+void video_fill_screen(uint32_t color)
+{
+    if(video_depth() == 2)
+    {
+        /* 16bpp colors, double our fill speed */
+        uint32_t realcolor = (color & 0xFFFF) | ((color << 16) & 0xFFFF0000);
+        for(unsigned int x = 0; x < ((video_width() * video_height()) / 2); x++)
+        {
+            ((uint32_t *)buffer_base)[x] = realcolor;
+        }
+    }
+    else
+    {
+        // TODO
+    }
+}
+
+void video_fill_box(int x0, int y0, int x1, int y1, uint32_t color)
 {
     if (x1 < x0)
     {
@@ -159,12 +182,19 @@ void video_fill_box(int x0, int y0, int x1, int y1, uint16_t color)
     }
 }
 
-void video_draw_pixel(int x, int y, uint16_t color)
+void video_draw_pixel(int x, int y, uint32_t color)
 {
-    buffer_base[x + (y * video_width())] = color;
+    if(video_depth() == 2)
+    {
+        ((uint16_t *)buffer_base)[x + (y * video_width())] = color & 0xFFFF;
+    }
+    else
+    {
+        // TODO
+    }
 }
 
-void video_draw_line(int x0, int y0, int x1, int y1, uint16_t color)
+void video_draw_line(int x0, int y0, int x1, int y1, uint32_t color)
 {
     int dy = y1 - y0;
     int dx = x1 - x0;
@@ -226,13 +256,13 @@ void video_draw_line(int x0, int y0, int x1, int y1, uint16_t color)
     }
 }
 
-void video_draw_character( int x, int y, uint16_t color, char ch )
+void video_draw_character( int x, int y, uint32_t color, char ch )
 {
-    for( int row = 0; row < 8; row++ )
+    for(int row = 0; row < 8; row++)
     {
-        unsigned char c = __font_data[(ch * 8) + row];
+        uint8_t c = __font_data[(ch * 8) + row];
 
-        for( int col = 0; col < 8; col++ )
+        for(int col = 0; col < 8; col++)
         {
             if( c & 0x80 )
             {
@@ -245,7 +275,7 @@ void video_draw_character( int x, int y, uint16_t color, char ch )
     }
 }
 
-void video_draw_text( int x, int y, uint16_t color, const char * const msg )
+void video_draw_text( int x, int y, uint32_t color, const char * const msg )
 {
     if( msg == 0 ) { return; }
 
@@ -287,5 +317,5 @@ void video_draw_text( int x, int y, uint16_t color, const char * const msg )
 void video_display()
 {
     // Copy it to VRAM.
-    memcpy((void *)VRAM_BASE, buffer_base, video_width() * video_height() * 2);
+    memcpy((void *)VRAM_BASE, buffer_base, video_width() * video_height() * video_depth());
 }

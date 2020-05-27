@@ -60,8 +60,8 @@ char *console_base = 0;
 void display()
 {
     // Render a simple test console.
-    video_fill_screen(rgbto565(48, 48, 48));
-    video_draw_text(0, 0, rgbto565(255, 255, 255), console_base);
+    video_fill_screen(rgb(48, 48, 48));
+    video_draw_text(0, 0, rgb(255, 255, 255), console_base);
     video_wait_for_vblank();
     video_display();
 }
@@ -750,8 +750,8 @@ void test()
 {
     video_init_simple();
 
-    video_fill_screen(rgbto565(48, 48, 48));
-    video_draw_text(320 - 56, 236, rgbto565(255, 255, 255), "test mode stub");
+    video_fill_screen(rgb(48, 48, 48));
+    video_draw_text(320 - 56, 236, rgb(255, 255, 255), "test mode stub");
     video_wait_for_vblank();
     video_display();
 

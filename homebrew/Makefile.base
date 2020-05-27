@@ -16,6 +16,8 @@ CC += -fomit-frame-pointer
 CC += -ffunction-sections -fdata-sections
 # Add libnaomi to include path.
 CC += -I$(dir $(abspath $(lastword $(MAKEFILE_LIST))))libnaomi/
+# Make sure we compile optimized
+CC += -O2
 
 # Set up gcc default options for compiling .cpp files.
 CPP  = ${NAOMI_SH_CPP}
@@ -35,6 +37,8 @@ CPP += -fomit-frame-pointer
 CPP += -ffunction-sections -fdata-sections
 # Add libnaomi to include path.
 CPP += -I$(dir $(abspath $(lastword $(MAKEFILE_LIST))))libnaomi/
+# Make sure we compile optimized
+CPP += -O2
 
 # Set up linker default options for linking the final elf file.
 LD  = ${NAOMI_SH_LD}
