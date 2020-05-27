@@ -1,5 +1,4 @@
 #include <memory.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include "naomi/maple.h"
@@ -372,9 +371,10 @@ int maple_request_eeprom_read(uint8_t *outbytes)
         // Invalid response packet
         return -1;
     }
-    if(maple_response_payload_length_words(resp) != 1)
+    if(maple_response_payload_length_words(resp) < 1)
     {
-        // Invalid payload length
+        // Invalid payload length. We would check against exactly 1 word, but
+        // it looks like sometimes the MIE responds with 2 words.
         return -1;
     }
     if(resp[1] != 0x02)
