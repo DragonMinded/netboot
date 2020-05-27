@@ -11,5 +11,7 @@ If you are looking for a great resource for programming, the first thing I would
 TODOs
 =====
  - Verify the ARM side of the library, get a sound example published.
- - Fill out more of the TODOs in system.c to add functionality such as a ROMFS and support for loading things from a cart.
+ - Verify G1 functionality, add functionality for DMA from cartridge space.
+ - Fill out more of the TODOs in system.c to add functionality such as a ROMFS and debug console.
  - Get libgcc/newlib compiled with threads enabled, publish a multi-threading example.
+ - Use PowerVR accelerated texture commands instead of raw framebuffer.
