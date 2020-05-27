@@ -55,7 +55,8 @@ uint8_t *maple_base = 0;
 
 // Debug console
 char *console_base = 0;
-#define console_printf(...) sprintf(console_base + strlen(console_base), __VA_ARGS__)
+unsigned int console_loc = 0;
+#define console_printf(...) do { sprintf(console_base + console_loc, __VA_ARGS__); console_loc += strlen(console_base + console_loc); } while(0)
 
 void display()
 {
@@ -434,8 +435,9 @@ int maple_request_update(void *binary, unsigned int len)
     resp = maple_swap_data(0, 0, NAOMI_UPLOAD_CODE_REQUEST, 1, execdata);
     if (maple_response_code(resp) != COMMAND_ACKNOWLEDGE_RESPONSE)
     {
-        // TODO: Demul returns the wrong value here, so this code would only
-        // work on an actual Naomi.
+        // TODO: A different value is returned by different revisions of the
+        // MIE which depend on the Naomi BIOS. However, since netboot only
+        // works on Rev. H BIOS, I think we're good here.
         return -4;
     }
 }
@@ -668,15 +670,43 @@ int maple_request_jvs_id(uint8_t addr, char *outptr)
     return 0;
 }
 
+typedef struct player_buttons
+{
+    uint8_t service;
+    uint8_t start;
+    uint8_t up;
+    uint8_t down;
+    uint8_t left;
+    uint8_t right;
+    uint8_t button1;
+    uint8_t button2;
+    uint8_t button3;
+    uint8_t button4;
+    uint8_t button5;
+    uint8_t button6;
+    uint8_t analog1;
+    uint8_t analog2;
+    uint8_t analog3;
+    uint8_t analog4;
+} player_buttons_t;
+
 typedef struct jvs_buttons
 {
+    uint8_t dip1;
+    uint8_t dip2;
+    uint8_t dip3;
+    uint8_t dip4;
+    uint8_t psw1;
+    uint8_t psw2;
     uint8_t test;
+    player_buttons_t player1;
+    player_buttons_t player2;
 } jvs_buttons_t;
 
-/**
- * Request JVS button read from JVS ID addr and return buttons.
- */
-jvs_buttons_t maple_request_jvs_buttons(uint8_t addr, unsigned int players)
+// Whether we have an outstanding JVS request to get to.
+static int __outstanding_request = 0;
+
+int __maple_request_jvs_send_buttons_packet(uint8_t addr, unsigned int players)
 {
     uint8_t subcommand[12] = {
         0x27,                   // Subcommand 0x27, send JVS buttons packet.
@@ -693,14 +723,31 @@ jvs_buttons_t maple_request_jvs_buttons(uint8_t addr, unsigned int players)
         0x00,
     };
 
+    uint32_t *resp = maple_swap_data(0, 0, NAOMI_IO_REQUEST, sizeof(subcommand) / 4, subcommand);
+    if(maple_response_code(resp) != NAOMI_IO_RESPONSE)
+    {
+        return 0;
+    }
+
+    return 1;
+}
+
+/**
+ * Request JVS button read from JVS ID addr and return buttons.
+ */
+jvs_buttons_t maple_request_jvs_buttons(uint8_t addr, unsigned int players)
+{
     // Set up a sane response.
     jvs_buttons_t buttons;
     memset(&buttons, 0, sizeof(buttons));
 
-    uint32_t *resp = maple_swap_data(0, 0, NAOMI_IO_REQUEST, sizeof(subcommand) / 4, subcommand);
-    if(maple_response_code(resp) != NAOMI_IO_RESPONSE)
+    if (!__outstanding_request)
     {
-        return buttons;
+        if(!__maple_request_jvs_send_buttons_packet(addr, players))
+        {
+            // Didn't get a valid response for sending JVS.
+            return buttons;
+        }
     }
 
     jvs_status_t status = maple_request_recv_jvs();
@@ -729,10 +776,52 @@ jvs_buttons_t maple_request_jvs_buttons(uint8_t addr, unsigned int players)
 
     // Parse out the buttons
     uint8_t *payload = jvs_packet_payload(status.packet) + 1;
+    buttons.dip1 = status.dip_switches & 0x1;
+    buttons.dip2 = (status.dip_switches >> 1) & 0x1;
+    buttons.dip3 = (status.dip_switches >> 2) & 0x1;
+    buttons.dip4 = (status.dip_switches >> 3) & 0x1;
+    buttons.psw1 = status.psw1;
+    buttons.psw2 = status.psw2;
     buttons.test = (payload[0] >> 7) & 0x1;
 
-    // TODO: Parse
-    maple_print_jvs_status(status);
+    // Player 1 controls
+    buttons.player1.service = (payload[1] >> 6) & 0x1;
+    buttons.player1.start = (payload[1] >> 7) & 0x1;
+    buttons.player1.up = (payload[1] >> 5) & 0x1;
+    buttons.player1.down = (payload[1] >> 4) & 0x1;
+    buttons.player1.left = (payload[1] >> 3) & 0x1;
+    buttons.player1.right = (payload[1] >> 2) & 0x1;
+    buttons.player1.button1 = (payload[1] >> 1) & 0x1;
+    buttons.player1.button2 = payload[1] & 0x1;
+    buttons.player1.button3 = (payload[2] >> 7) & 0x1;
+    buttons.player1.button4 = (payload[2] >> 6) & 0x1;
+    buttons.player1.button5 = (payload[2] >> 5) & 0x1;
+    buttons.player1.button6 = (payload[2] >> 4) & 0x1;
+    buttons.player1.analog1 = payload[11];
+    buttons.player1.analog2 = payload[13];
+    buttons.player1.analog3 = payload[15];
+    buttons.player1.analog4 = payload[17];
+
+    // Player 2 controls
+    buttons.player2.service = (payload[3] >> 6) & 0x1;
+    buttons.player2.start = (payload[3] >> 7) & 0x1;
+    buttons.player2.up = (payload[3] >> 5) & 0x1;
+    buttons.player2.down = (payload[3] >> 4) & 0x1;
+    buttons.player2.left = (payload[3] >> 3) & 0x1;
+    buttons.player2.right = (payload[3] >> 2) & 0x1;
+    buttons.player2.button1 = (payload[3] >> 1) & 0x1;
+    buttons.player2.button2 = payload[3] & 0x1;
+    buttons.player2.button3 = (payload[4] >> 7) & 0x1;
+    buttons.player2.button4 = (payload[4] >> 6) & 0x1;
+    buttons.player2.button5 = (payload[4] >> 5) & 0x1;
+    buttons.player2.button6 = (payload[4] >> 4) & 0x1;
+    buttons.player2.analog1 = payload[19];
+    buttons.player2.analog2 = payload[21];
+    buttons.player2.analog3 = payload[23];
+    buttons.player2.analog4 = payload[25];
+
+    // Finally, send another request to be ready next time we poll.
+    __outstanding_request = __maple_request_jvs_send_buttons_packet(addr, players);
     return buttons;
 }
 
@@ -745,7 +834,6 @@ void main()
     memset(console_base, 0, ((640 * 480) / (8 * 8)) + 1);
 
     // Now, report on the memory test.
-    console_printf("\n\n");
     if(maple_request_self_test())
     {
         console_printf("MIE reports healthy!\n");
@@ -764,24 +852,147 @@ void main()
 
     // Now, display the JVS IO version ID.
     maple_request_jvs_id(0x01, version);
-    console_printf("JVS IO ID: %s\n", version);
+    console_printf("JVS IO ID: %s\n\n", version);
     display();
 
     // Now, read the controls forever.
-    unsigned int reset_loc = strlen(console_base);
+    unsigned int reset_loc = console_loc;
     int liveness = 0;
     while ( 1 )
     {
-        console_base[reset_loc] = 0;
+        console_loc = reset_loc;
         console_printf("Liveness indicator: %d\n", liveness++);
         jvs_buttons_t buttons = maple_request_jvs_buttons(0x01, 2);
 
-        console_printf("\n\n");
+        console_printf("\n\nSystem buttons: ");
+        if(buttons.dip1)
+        {
+            console_printf("dip1 ");
+        }
+        if(buttons.dip2)
+        {
+            console_printf("dip2 ");
+        }
+        if(buttons.dip3)
+        {
+            console_printf("dip3 ");
+        }
+        if(buttons.dip4)
+        {
+            console_printf("dip4 ");
+        }
+        if(buttons.psw1)
+        {
+            console_printf("psw1 ");
+        }
+        if(buttons.psw2)
+        {
+            console_printf("psw2 ");
+        }
         if(buttons.test)
         {
             console_printf("test ");
         }
-        console_printf("\n");
+        console_printf("\n1P buttons: ");
+        if(buttons.player1.service)
+        {
+            console_printf("svc ");
+        }
+        if(buttons.player1.start)
+        {
+            console_printf("start ");
+        }
+        if(buttons.player1.up)
+        {
+            console_printf("up ");
+        }
+        if(buttons.player1.down)
+        {
+            console_printf("down ");
+        }
+        if(buttons.player1.left)
+        {
+            console_printf("left ");
+        }
+        if(buttons.player1.right)
+        {
+            console_printf("right ");
+        }
+        if(buttons.player1.button1)
+        {
+            console_printf("b1 ");
+        }
+        if(buttons.player1.button2)
+        {
+            console_printf("b2 ");
+        }
+        if(buttons.player1.button3)
+        {
+            console_printf("b3 ");
+        }
+        if(buttons.player1.button4)
+        {
+            console_printf("b4 ");
+        }
+        if(buttons.player1.button5)
+        {
+            console_printf("b5 ");
+        }
+        if(buttons.player1.button6)
+        {
+            console_printf("b6 ");
+        }
+        console_printf("\n1P Analog: %02X %02X %02X %02X", buttons.player1.analog1, buttons.player1.analog2, buttons.player1.analog3, buttons.player1.analog4);
+        console_printf("\n2P Buttons: ");
+        if(buttons.player2.service)
+        {
+            console_printf("svc ");
+        }
+        if(buttons.player2.start)
+        {
+            console_printf("start ");
+        }
+        if(buttons.player2.up)
+        {
+            console_printf("up ");
+        }
+        if(buttons.player2.down)
+        {
+            console_printf("down ");
+        }
+        if(buttons.player2.left)
+        {
+            console_printf("left ");
+        }
+        if(buttons.player2.right)
+        {
+            console_printf("right ");
+        }
+        if(buttons.player2.button1)
+        {
+            console_printf("b1 ");
+        }
+        if(buttons.player2.button2)
+        {
+            console_printf("b2 ");
+        }
+        if(buttons.player2.button3)
+        {
+            console_printf("b3 ");
+        }
+        if(buttons.player2.button4)
+        {
+            console_printf("b4 ");
+        }
+        if(buttons.player2.button5)
+        {
+            console_printf("b5 ");
+        }
+        if(buttons.player2.button6)
+        {
+            console_printf("b6 ");
+        }
+        console_printf("\n2P Analog: %02X %02X %02X %02X\n", buttons.player2.analog1, buttons.player2.analog2, buttons.player2.analog3, buttons.player2.analog4);
         display();
     }
 }

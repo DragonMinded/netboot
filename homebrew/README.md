@@ -1,4 +1,4 @@
-A minimal Naomi homebrew environment, very loosely based off of KallistiOS toolchain work but bare metal. This assumes that you have a Linux computer with standard prerequisites for compiling gcc/newlib/binutils already installed. It does not provide any libraries for accessing Naomi-related hardware, thought that will come at a later time. It also does not currently support threads, though I hope to fix that at a later time as well.
+A minimal Naomi homebrew environment, very loosely based off of KallistiOS toolchain work but bare metal. This assumes that you have a Linux computer with standard prerequisites for compiling gcc/newlib/binutils already installed. The Naomi system library is minimal, but will continue to get fleshed out. There is currently no support for threads though I hope to fix that at a later time as well.
 
 To get started, create a directory named "/opt/toolchains/naomi" and copy the contents of the `setup/` directory to it. This directory and the copied contents should be user-owned and user-writeable. Then, cd to "/opt/toolchains/naomi" and in order run `./download.sh` (downloads toolchain sources), `./unpack.sh` (unpacks the toolchain to be built), `make` (builds the toolchain and installs it in the correct directories) and finally `./cleanup.sh`. If everything is successful, you should have a working environment.
 
@@ -10,5 +10,7 @@ If you are looking for a great resource for programming, the first thing I would
 
 TODOs
 =====
- - Get started on implementing maple drivers for control input, verify the ARM side of the library.
+ - Generalize maple drivers for control input, code maple drivers for EEPROM.
+ - Verify the ARM side of the library, get a sound example published.
  - Fill out more of the TODOs in system.c to add functionality such as a ROMFS and support for loading things from a cart.
+ - Get libgcc/newlib compiled with threads enabled, publish a multi-threading example.
