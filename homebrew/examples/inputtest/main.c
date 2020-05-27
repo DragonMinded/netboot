@@ -185,7 +185,7 @@ uint8_t maple_response_code(uint32_t *response)
     return response[0] & 0xFF;
 }
 
-uint8_t maple_response_length_words(uint32_t *response)
+uint8_t maple_response_payload_length_words(uint32_t *response)
 {
     return (response[0] >> 24) & 0xFF;
 }
@@ -197,7 +197,7 @@ uint32_t *maple_skip_response(uint32_t *response)
         return response;
     }
 
-    return response + (1 + maple_response_length_words(response));
+    return response + (1 + maple_response_payload_length_words(response));
 }
 
 void maple_print_regs()
@@ -220,12 +220,12 @@ void maple_print_response(uint32_t *response)
     {
         // Work around macro expansion bug by splitting these two up.
         console_printf("Response Code: %02X, ", maple_response_code(response));
-        console_printf("Data length: %d\n", maple_response_length_words(response));
+        console_printf("Data length: %d\n", maple_response_payload_length_words(response));
 
-        if(maple_response_length_words(response) > 0)
+        if(maple_response_payload_length_words(response) > 0)
         {
             console_printf("Data:");
-            for (int i = 0; i < maple_response_length_words(response); i++)
+            for (int i = 0; i < maple_response_payload_length_words(response); i++)
             {
                 console_printf(" %08X", response[i+1]);
 
@@ -324,13 +324,13 @@ void maple_request_version(char *outptr)
     }
 
     // Copy the first half of the response string
-    memcpy(outptr, &resp[1], maple_response_length_words(resp) * 4);
-    outptr += maple_response_length_words(resp) * 4;
+    memcpy(outptr, &resp[1], maple_response_payload_length_words(resp) * 4);
+    outptr += maple_response_payload_length_words(resp) * 4;
 
     // Copy the second half of the response string
     resp = maple_skip_response(resp);
-    memcpy(outptr, &resp[1], maple_response_length_words(resp) * 4);
-    outptr += maple_response_length_words(resp) * 4;
+    memcpy(outptr, &resp[1], maple_response_payload_length_words(resp) * 4);
+    outptr += maple_response_payload_length_words(resp) * 4;
 
     // Cap it off
     outptr[0] = 0;
@@ -357,7 +357,7 @@ int maple_request_self_test()
         for(int x = 0x2710; x > 0; x--) { ; }
     }
 
-    if(maple_response_length_words(resp) != 1)
+    if(maple_response_payload_length_words(resp) != 1)
     {
         // This is an invalid response, consider the test failed.
         return 0;
@@ -408,7 +408,7 @@ int maple_request_update(void *binary, unsigned int len)
         {
             return -1;
         }
-        if(maple_response_length_words(resp) != 0x1)
+        if(maple_response_payload_length_words(resp) != 0x1)
         {
             return -1;
         }
@@ -514,7 +514,7 @@ jvs_status_t maple_request_recv_jvs()
     {
         return status;
     }
-    if(maple_response_length_words(resp) < 5)
+    if(maple_response_payload_length_words(resp) < 5)
     {
         return status;
     }
@@ -524,7 +524,7 @@ jvs_status_t maple_request_recv_jvs()
     status.psw2 = (~(resp[2] >> 21)) & 0x1;
     status.jvs_present_bitmask = (resp[5] >> 16) & 0x3;
 
-    if(maple_response_length_words(resp) >= 6)
+    if(maple_response_payload_length_words(resp) >= 6)
     {
         // We have a valid packet on the end, lets grab the length first
         status.packet_length = (resp[6] >> 8) & 0xFF;
@@ -591,14 +591,19 @@ int jvs_packet_valid(uint8_t *data)
     return 1;
 }
 
-unsigned int jvs_packet_length(uint8_t *data)
+unsigned int jvs_packet_payload_length_bytes(uint8_t *data)
 {
-    return data[2];
+    return data[2] - 1;
+}
+
+unsigned int jvs_packet_code(uint8_t *data)
+{
+    return data[3];
 }
 
 uint8_t *jvs_packet_payload(uint8_t *data)
 {
-    return data + 3;
+    return data + 4;
 }
 
 /**
@@ -632,59 +637,61 @@ int maple_request_jvs_id(uint8_t addr, char *outptr)
     uint8_t jvs_payload[1] = { 0x10 };
     maple_request_send_jvs(addr, 1, jvs_payload);
     jvs_status_t status = maple_request_recv_jvs();
-    maple_print_jvs_status(status);
     if(!status.packet_length)
     {
+        // Didn't get a packet
         outptr[0] = 0;
         return -1;
     }
 
     if(!jvs_packet_valid(status.packet))
     {
+        // Packet failed CRC
         outptr[0] = 0;
         return -1;
     }
 
-    memcpy(outptr, jvs_packet_payload(status.packet) + 2, jvs_packet_length(status.packet) - 2);
+    if(jvs_packet_code(status.packet) != 0x01)
+    {
+        // Packet is not response type.
+        outptr[0] = 0;
+        return -1;
+    }
+    if(jvs_packet_payload(status.packet)[0] != 0x01)
+    {
+        // Packet is not report type.
+        outptr[0] = 0;
+        return -1;
+    }
+
+    memcpy(outptr, jvs_packet_payload(status.packet) + 1, jvs_packet_payload_length_bytes(status.packet) - 1);
     return 0;
 }
 
 typedef struct jvs_buttons
 {
+    uint8_t test;
 } jvs_buttons_t;
 
 /**
  * Request JVS button read from JVS ID addr and return buttons.
  */
-jvs_buttons_t maple_request_jvs_buttons(uint8_t addr)
+jvs_buttons_t maple_request_jvs_buttons(uint8_t addr, unsigned int players)
 {
-#if 0
     uint8_t subcommand[12] = {
-        0x27,         // Subcommand 0x27, send JVS buttons packet.
-        0x77,         // GPIO direction, sent in these packets for some reason?
+        0x27,                   // Subcommand 0x27, send JVS buttons packet.
+        0x77,                  // GPIO direction, sent in these packets for some reason?
         0x00,
         0x00,
         0x00,
         0x00,
-        addr & 0xFF,   // JVS address to send to (0xFF is broadcast).
-        0x01 & 0xFF,   // Amount of data in the JVS payload.
+        addr & 0xFF,           // JVS address to send to (0xFF is broadcast).
+        (players - 1) & 0xFF,  // Player count - 1, I THINK?
         0x00,
         0x00,
         0x00,
         0x00,
     };
-#else
-    uint8_t subcommand[8] = {
-        0x21,         // Subcommand 0x27, send JVS buttons packet.
-        0x77,         // GPIO direction, sent in these packets for some reason?
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        addr & 0xFF,  // JVS address to send to (0xFF is broadcast).
-        0x00,
-    };
-#endif
 
     // Set up a sane response.
     jvs_buttons_t buttons;
@@ -697,9 +704,35 @@ jvs_buttons_t maple_request_jvs_buttons(uint8_t addr)
     }
 
     jvs_status_t status = maple_request_recv_jvs();
-    maple_print_jvs_status(status);
+    if(!status.packet_length)
+    {
+        // Didn't get a packet
+        return buttons;
+    }
+
+    if(!jvs_packet_valid(status.packet))
+    {
+        // Packet failed CRC
+        return buttons;
+    }
+
+    if(jvs_packet_code(status.packet) != 0x01)
+    {
+        // Packet is not response type.
+        return buttons;
+    }
+    if(jvs_packet_payload(status.packet)[0] != 0x01)
+    {
+        // Packet is not report type.
+        return buttons;
+    }
+
+    // Parse out the buttons
+    uint8_t *payload = jvs_packet_payload(status.packet) + 1;
+    buttons.test = (payload[0] >> 7) & 0x1;
 
     // TODO: Parse
+    maple_print_jvs_status(status);
     return buttons;
 }
 
@@ -741,7 +774,14 @@ void main()
     {
         console_base[reset_loc] = 0;
         console_printf("Liveness indicator: %d\n", liveness++);
-        jvs_buttons_t buttons = maple_request_jvs_buttons(0x01);
+        jvs_buttons_t buttons = maple_request_jvs_buttons(0x01, 2);
+
+        console_printf("\n\n");
+        if(buttons.test)
+        {
+            console_printf("test ");
+        }
+        console_printf("\n");
         display();
     }
 }
