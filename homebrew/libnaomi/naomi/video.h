@@ -5,6 +5,8 @@
 extern "C" {
 #endif
 
+#include <stdint.h>
+
 #define POWERVR2_BASE 0xA05F8000
 
 #define POWERVR2_ID (0x000 >> 2)

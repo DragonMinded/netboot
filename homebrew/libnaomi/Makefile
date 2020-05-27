@@ -7,6 +7,7 @@ all: libnaomi.a
 SRCS += crt0.s
 SRCS += system.c
 SRCS += video.c
+SRCS += maple.c
 
 # Pick up base makefile rules common to all examples.
 include ../Makefile.base
