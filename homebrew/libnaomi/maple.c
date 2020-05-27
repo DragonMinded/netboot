@@ -411,6 +411,40 @@ int maple_request_eeprom_read(uint8_t *outbytes)
 }
 
 /**
+ * Request writing a new EEPROM contents to the MIE.
+ *
+ * Returns 0 on success
+ *         -1 on unexpected packet received
+ */
+int maple_request_eeprom_write(uint8_t *inbytes)
+{
+    for(unsigned int i = 0; i < 0x80; i += 0x10)
+    {
+        // First, craft the subcommand requesting an EEPROM chunk write.
+        uint8_t req_subcommand[20];
+        req_subcommand[0] = 0x0B;      // Subcommand 0x0B, write chunk of EEPROM.
+        req_subcommand[1] = i & 0xFF;  // Write offset, relative to start of EEPROM.
+        req_subcommand[2] = 0x10;      // Chunk size, always 0x10 in practice.
+        req_subcommand[3] = 0x00;
+        memcpy(&req_subcommand[4], &inbytes[i], 0x10);
+
+        // Now, send it, verifying that it acknowledged the data
+        uint32_t *resp = maple_swap_data(0, 0, MAPLE_NAOMI_IO_REQUEST, 5, req_subcommand);
+        if(maple_response_code(resp) != MAPLE_NAOMI_IO_RESPONSE)
+        {
+            // Invalid response packet
+            return -1;
+        }
+
+        // Now, wait for the write operation to finish.
+        maple_wait_for_ready();
+    }
+
+    // Succeeded in writing new EEPROM!
+    return 0;
+}
+
+/**
  * Request the MIE send a JVS command out its RS485 bus.
  *
  * Return 0 on success

@@ -110,6 +110,7 @@ void maple_request_version(char *outptr);
 int maple_request_self_test();
 int maple_request_update(void *binary, unsigned int len);
 int maple_request_eeprom_read(uint8_t *outbytes);
+int maple_request_eeprom_write(uint8_t *inbytes);
 
 int maple_request_send_jvs(uint8_t addr, unsigned int len, void *bytes);
 jvs_status_t maple_request_recv_jvs();

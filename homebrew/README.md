@@ -10,7 +10,6 @@ If you are looking for a great resource for programming, the first thing I would
 
 TODOs
 =====
- - Generalize maple drivers for control input, code maple drivers for EEPROM.
  - Verify the ARM side of the library, get a sound example published.
  - Fill out more of the TODOs in system.c to add functionality such as a ROMFS and support for loading things from a cart.
  - Get libgcc/newlib compiled with threads enabled, publish a multi-threading example.
