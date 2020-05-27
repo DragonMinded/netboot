@@ -32,8 +32,6 @@ extern "C" {
 #define POWERVR2_SYNC_CFG (0x0D0 >> 2)
 #define POWERVR2_SYNC_STAT (0x10C >> 2)
 
-#define VRAM_BASE 0xA5000000
-
 void video_wait_for_vblank();
 unsigned int video_width();
 unsigned int video_height();

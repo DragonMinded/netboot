@@ -25,8 +25,8 @@ void maple_init()
     // Maple init routines based on Mvc2.
     maplebase[MAPLE_DMA_HW_INIT] = (
         0x6155 << 16 |  // Security bytes
-        MAPLE_ADDRESS_RANGE(0x0c000000) << 8 |  // Low address in memory where maple DMA can be found
-        MAPLE_ADDRESS_RANGE(0x0dffffff)  // High address in memory where maple DMA can be found
+        MAPLE_ADDRESS_RANGE(RAM_BASE) << 8 |          // Low address in memory where maple DMA can be found
+        MAPLE_ADDRESS_RANGE(RAM_BASE + RAM_SIZE - 1)  // High address in memory where maple DMA can be found
     );
     maplebase[MAPLE_DMA_TRIGGER_SELECT] = 0;
 

@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include "naomi/video.h"
+#include "naomi/system.h"
 #include "font.h"
 
 
