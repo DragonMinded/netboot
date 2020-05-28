@@ -101,6 +101,9 @@ ARMOBJCOPY = ${NAOMI_ARM_OBJCOPY}
 # Set up default archiver, used for creating libraries.
 ARMAR  = ${NAOMI_ARM_AR}
 
+# Set up various toolchain utilities.
+BIN2C  = python3 $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/bin2c.py
+
 # A List of source files that should be included.
 SRCS ?=
 
