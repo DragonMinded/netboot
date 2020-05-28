@@ -64,6 +64,43 @@ OBJCOPY = ${NAOMI_SH_OBJCOPY}
 # Set up default archiver, used for creating libraries.
 AR  = ${NAOMI_SH_AR}
 
+# Set up gcc default options for AICA .c files.
+ARMCC  = ${NAOMI_ARM_CC}
+# Set up processor flags.
+ARMCC += -mcpu=arm7
+# Don't use the system standard library (We supply our own stubs for necessary files).
+# These largely have the same justification as their counterparts in the above CC section.
+ARMCC += -ffreestanding -fomit-frame-pointer -nostdlib -nostartfiles -fno-stack-protector
+# Add libnaomi to include path.
+ARMCC += -I$(dir $(abspath $(lastword $(MAKEFILE_LIST))))libnaomi/
+# # Make sure we compile optimized
+ARMCC += -O4
+
+# Set up assembler default options for AICA .s files.
+ARMAS  = ${NAOMI_ARM_AS}
+# Make sure to specify the correct arch.
+ARMAS += -mcpu=arm7
+
+# Set up linker default options for AICA binaries.
+ARMLD  = ${NAOMI_ARM_LD}
+# Make sure we use the right ELF format.
+ARMLD += -marmelf
+# Force linking with simple linkscript that guarantees entrypoint.
+ARMLD += -T$(dir $(abspath $(lastword $(MAKEFILE_LIST))))aica.ld
+# Add libnaomi to library path.
+ARMLD += -L$(dir $(abspath $(lastword $(MAKEFILE_LIST))))libnaomi/
+# Add system library paths so we can link against libgcc.
+ARMLD += -L${NAOMI_ARM_BASE}/arm-eabi/lib/ -L${NAOMI_ARM_BASE}/lib/gcc/arm-eabi/${NAOMI_ARM_GCC_VER}/
+
+# We don't have many libraries for ARM.
+ARMLIBS ?= -lgcc
+
+# Set up default options for objcopy, used for extracting the raw binary from the linked elf file.
+ARMOBJCOPY = ${NAOMI_ARM_OBJCOPY}
+
+# Set up default archiver, used for creating libraries.
+ARMAR  = ${NAOMI_ARM_AR}
+
 # A List of source files that should be included.
 SRCS ?=
 
