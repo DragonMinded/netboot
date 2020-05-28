@@ -327,5 +327,5 @@ void video_display()
 
     // Swap buffer pointer in SW
     buffer_loc = buffer_loc ? 0 : 1;
-    buffer_base = (void *)(VRAM_BASE + buffer_offset[buffer_loc]);
+    buffer_base = (void *)((VRAM_BASE + buffer_offset[buffer_loc]) | 0xA0000000);
 }
