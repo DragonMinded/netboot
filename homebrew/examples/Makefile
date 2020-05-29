@@ -16,6 +16,13 @@ inputtest:
 eepromtest:
 	$(MAKE) -C eepromtest
 
+.PHONY: copy
+copy: hellonaomi hellocpp inputtest eepromtest
+	cp -r hellonaomi/hellonaomi.bin ../binaries/
+	cp -r hellocpp/hellocpp.bin ../binaries/
+	cp -r inputtest/inputtest.bin ../binaries/
+	cp -r eepromtest/eepromtest.bin ../binaries/
+
 .PHONY: clean
 clean:
 	$(MAKE) -C hellonaomi clean

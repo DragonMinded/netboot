@@ -5,7 +5,7 @@ __pycache__/
 *.yaml
 build/
 libnaomi.a
-hellonaomi.bin
-inputtest.bin
-eepromtest.bin
-hellocpp.bin
+homebrew/examples/hellonaomi/hellonaomi.bin
+homebrew/examples/hellocpp/hellocpp.bin
+homebrew/examples/inputtest/inputtest.bin
+homebrew/examples/eepromtest/eepromtest.bin

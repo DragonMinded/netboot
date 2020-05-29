@@ -8,6 +8,10 @@ libnaomi:
 examples:
 	$(MAKE) -C examples
 
+.PHONY: copy
+copy: libnaomi examples
+	$(MAKE) -C examples copy
+
 .PHONY: clean
 clean:
 	$(MAKE) -C libnaomi clean
