@@ -5,6 +5,7 @@ import os.path
 import sys
 import textwrap
 
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Utility for converting binary files to C includes."
