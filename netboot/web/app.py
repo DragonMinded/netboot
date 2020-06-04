@@ -60,6 +60,16 @@ def cabinet_to_dict(cab: Cabinet, dirmanager: DirectoryManager) -> Dict[str, Any
     }
 
 
+@app.after_request
+def after_request(response: Response) -> Response:
+    # Make sure our REST responses don't get cached, so that remote
+    # servers which respect cache headers don't get confused.
+    response.cache_control.no_cache = True
+    response.cache_control.must_revalidate = True
+    response.cache_control.private = True
+    return response
+
+
 @app.route('/')
 def home() -> Response:
     cabman = app.config['CabinetManager']
