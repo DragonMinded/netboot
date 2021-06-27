@@ -268,7 +268,7 @@ class NaomiRom:
             # Calculate sequence offsets
             sequences: List[str] = list(defaults.sequences)
             if len(sequences) > 8:
-                raise NaomiRomException(f"Invalid number of sequence texts for defaults, expected at most 8!")
+                raise NaomiRomException("Invalid number of sequence texts for defaults, expected at most 8!")
 
             # First, default them all to 0
             self._inject(offset + 8, b'\0' * 8)
@@ -462,7 +462,7 @@ class NaomiRom:
 
     def _put_sections(self, offset: int, sections: List[NaomiRomSection]) -> None:
         if len(sections) > 8:
-            raise NaomiRomException(f"Cannot have more than 8 load sections in an executable!")
+            raise NaomiRomException("Cannot have more than 8 load sections in an executable!")
 
         for section in sections:
             self._inject_uint32(offset, section.offset)
