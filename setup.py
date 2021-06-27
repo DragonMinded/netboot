@@ -13,7 +13,7 @@ setup(
         'netboot.web',
     ],
     install_requires=[
-        req for req in open('requirements.txt').read().split('\n') if len(req) > 0
+        req for req in open('requirements.txt').read().split('\n') if len(req) > 0 and "git+" not in req
     ],
     include_package_data=True,
     zip_safe=False,
