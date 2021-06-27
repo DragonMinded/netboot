@@ -4,3 +4,4 @@ mypy
 psutil
 pycrypto
 pyyaml
+git+https://github.com/DragonMinded/arcadeutils.git@main#egg=arcadeutils

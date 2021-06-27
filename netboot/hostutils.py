@@ -9,7 +9,7 @@ import threading
 import time
 from typing import Optional, Sequence, Tuple, TYPE_CHECKING
 
-from netboot.binary import Binary
+from arcadeutils.binary import BinaryDiff
 from netboot.log import log
 from netboot.netboot import NetDimm, NetDimmException
 
@@ -37,7 +37,7 @@ def _send_file_to_host(host: str, filename: str, patches: Sequence[str], target:
             with open(patch, "r") as pp:
                 differences = pp.readlines()
             differences = [d.strip() for d in differences if d.strip()]
-            data = Binary.patch(data, differences)
+            data = BinaryDiff.patch(data, differences)
 
         # Send it
         netdimm.send(data, progress_callback=capture_progress)

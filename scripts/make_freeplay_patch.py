@@ -5,14 +5,14 @@ import os.path
 import sys
 from typing import List, Optional
 
-from netboot import Binary
+from netboot import BinaryDiff
 from naomi import force_freeplay
 
 
 def legacy_force_freeplay(data: bytes) -> List[str]:
     # Apply brute-force search for EEPROM parsing routine (doesn't always work).
     newdata = force_freeplay(data)
-    return ["# Description: force free-play", *Binary.diff(data, newdata)]
+    return ["# Description: force free-play", *BinaryDiff.diff(data, newdata)]
 
 
 def standard_force_freeplay(data: bytes) -> List[str]:

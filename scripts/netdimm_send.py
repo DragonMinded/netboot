@@ -3,7 +3,7 @@
 # Please attribute properly, but only if you want.
 import argparse
 import sys
-from netboot import Binary, NetDimm
+from netboot import BinaryDiff, NetDimm
 from typing import Optional
 
 
@@ -72,7 +72,7 @@ def main() -> int:
             differences = pp.readlines()
         differences = [d.strip() for d in differences if d.strip()]
         try:
-            data = Binary.patch(data, differences)
+            data = BinaryDiff.patch(data, differences)
         except Exception as e:
             print(f"Could not patch {args.image}: {str(e)}", file=sys.stderr)
             return 1

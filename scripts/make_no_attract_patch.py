@@ -5,14 +5,14 @@ import os.path
 import sys
 from typing import List, Optional
 
-from netboot import Binary
+from netboot import BinaryDiff
 from naomi import force_no_attract_sound
 
 
 def legacy_force_no_attract(data: bytes) -> List[str]:
     # Apply brute-force search for EEPROM parsing routine (doesn't always work).
     newdata = force_no_attract_sound(data)
-    return ["# Description: force silent attract mode", *Binary.diff(data, newdata)]
+    return ["# Description: force silent attract mode", *BinaryDiff.diff(data, newdata)]
 
 
 def standard_force_no_attract(data: bytes) -> List[str]:

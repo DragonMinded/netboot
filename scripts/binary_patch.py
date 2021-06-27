@@ -4,7 +4,7 @@ import os
 import sys
 from typing import List
 
-from netboot import Binary
+from netboot import BinaryDiff
 
 
 def main() -> int:
@@ -75,7 +75,7 @@ def main() -> int:
             file2 = fpb.read()
 
         try:
-            differences = Binary.diff(file1, file2)
+            differences = BinaryDiff.diff(file1, file2)
         except Exception as e:
             print(f"Could not diff {args.file1} against {args.file2}: {str(e)}", file=sys.stderr)
             return 1
@@ -102,7 +102,7 @@ def main() -> int:
             differences = [d.strip() for d in differences if d.strip()]
 
             try:
-                data = Binary.patch(data, differences, reverse=args.reverse)
+                data = BinaryDiff.patch(data, differences, reverse=args.reverse)
             except Exception as e:
                 print(f"Could not patch {args.bin}: {str(e)}", file=sys.stderr)
                 return 1

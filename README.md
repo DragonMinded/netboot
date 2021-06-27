@@ -10,6 +10,8 @@ This requires at least Python 3.6, and a few packages installed. To install the 
 python3 -m pip install -r requirements.txt
 ```
 
+Remember to append a `--upgrade` to the above command if you are refreshing packages!
+
 ## Script Invocation
 
 ### netdimm_send
@@ -40,7 +42,7 @@ It works identically to netdimm_send, except for it only supports a zero PIC, an
 
 ### binary_patch
 
-This script can either diff two same-length binaries and produce a patch similar to the files found in `patches/` or it can take a binary and one or more patch files and produce a new binary with the patches applied. Invoke the script like so to see options:
+This script can either diff two same-length binaries and produce a patch similar to the files found in `patches/` or it can take a binary and one or more patch files and produce a new binary with the patches applied. Note that this is just a frontend to the same utility that lives in <https://github.com/DragonMinded/arcadeutils> and as such all documentation there applies here as well. Invoke the script like so to see options:
 
 ```
 python3 -m scripts.binary_patch --help
