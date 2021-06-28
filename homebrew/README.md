@@ -10,7 +10,7 @@ If you are looking for a great resource for programming, the first thing I would
 
 TODOs
 =====
- - Verify the ARM side of the library, get a sound example published.
+ - Figure out why audio doesn't play in ARM code, get a working sound example published.
  - Verify G1 functionality, add functionality for DMA from cartridge space.
  - Fill out more of the TODOs in system.c to add functionality such as a ROMFS and debug console.
  - Get libgcc/newlib compiled with threads enabled, publish a multi-threading example.

@@ -13,11 +13,15 @@ SRCS += audio.c
 # Pick up base makefile rules common to all examples.
 include ../Makefile.base
 
-# Special-case for AICA binary, since it is an ARM executable.
+# Special-case for AICA binary, since it is an ARM executable. This is
+# stored in the main executable as the default AICA binary which can be
+# loaded by homebrew wishing to use sound.
 build/arm/base.o: base.s
 	@mkdir -p $(dir $@)
 	${ARMAS} -o $@ $<
 
+# This has a bunch of debugging in it still and would need to be cleaned
+# up before we consider the AICA binary production-ready.
 build/arm/aica.o: aica.c
 	@mkdir -p $(dir $@)
 	${ARMCC} -c -o $@ $<
@@ -35,6 +39,12 @@ build/aica.bin.o: build/aica.bin
 	${BIN2C} $<.c $<
 	${CC} -c $<.c -o $@
 
+# This is a simple test sound that I never did get playing on actual HW.
+# It seems to work in MAME however, so I suspect there's a problem with
+# what memory it is placed into, perhaps it needs to be copied to somewhere
+# else before I try playing it. Eventually, this should be deleted and
+# the default AICA binary should be usable to request sounds be played from
+# the main executable through some sort of RPC.
 build/arm/success.o: success.raw
 	@mkdir -p $(dir $@)
 	${BIN2C} build/arm/success.c $<
