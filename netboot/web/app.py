@@ -3,7 +3,7 @@ import os.path
 import yaml
 import traceback
 from functools import wraps
-from typing import Callable, Dict, List, Any
+from typing import Callable, Dict, List, Any, cast
 
 from flask import Flask, Response, request, render_template, make_response, jsonify as flask_jsonify
 from werkzeug.routing import PathConverter
@@ -26,14 +26,14 @@ class EverythingConverter(PathConverter):
 app.url_map.converters['filename'] = EverythingConverter
 
 
-def jsonify(func: Callable) -> Callable:
+def jsonify(func: Callable[..., Dict[str, Any]]) -> Callable[..., Response]:
     @wraps(func)
     def decoratedfunction(*args: Any, **kwargs: Any) -> Response:
         try:
-            return flask_jsonify({**func(*args, **kwargs), "error": False})
+            return flask_jsonify({**func(*args, **kwargs), "error": False})  # type: ignore
         except Exception as e:
             print(traceback.format_exc())
-            return flask_jsonify({
+            return flask_jsonify({  # type: ignore
                 'error': True,
                 'message': str(e),
             })
@@ -51,7 +51,7 @@ def cabinet_to_dict(cab: Cabinet, dirmanager: DirectoryManager) -> Dict[str, Any
         'filename': cab.filename,
         'options': sorted(
             [{'file': filename, 'name': dirmanager.game_name(filename, cab.region)} for filename in cab.patches],
-            key=lambda option: option['name'],
+            key=lambda option: cast(str, option['name']),
         ),
         'target': cab.target,
         'version': cab.version,
@@ -91,8 +91,8 @@ def systemconfig() -> Response:
     return make_response(
         render_template(
             'systemconfig.html',
-            roms=sorted(roms, key=lambda rom: rom['name']),
-            patches=sorted(patches, key=lambda patch: patch['name']),
+            roms=sorted(roms, key=lambda rom: cast(str, rom['name'])),
+            patches=sorted(patches, key=lambda patch: cast(str, patch['name'])),
         ),
         200,
     )
@@ -193,7 +193,7 @@ def roms() -> Dict[str, Any]:
     for directory in dirman.directories:
         roms.append({'name': directory, 'files': sorted(dirman.games(directory))})
     return {
-        'roms': sorted(roms, key=lambda rom: rom['name']),
+        'roms': sorted(roms, key=lambda rom: cast(str, rom['name'])),
     }
 
 
@@ -251,7 +251,7 @@ def applicablepatches(filename: str) -> Dict[str, Any]:
     return {
         'patches': sorted(
             [{'name': dirname, 'files': sorted(patches_by_directory[dirname])} for dirname in patches_by_directory],
-            key=lambda patch: patch['name'],
+            key=lambda patch: cast(str, patch['name']),
         )
     }
 
@@ -274,7 +274,7 @@ def patches() -> Dict[str, Any]:
     for directory in patchman.directories:
         patches.append({'name': directory, 'files': sorted(patchman.patches(directory))})
     return {
-        'patches': sorted(patches, key=lambda patch: patch['name']),
+        'patches': sorted(patches, key=lambda patch: cast(str, patch['name'])),
     }
 
 
@@ -286,7 +286,7 @@ def cabinets() -> Dict[str, Any]:
     return {
         'cabinets': sorted(
             [cabinet_to_dict(cab, dirman) for cab in cabman.cabinets],
-            key=lambda cab: cab['description'],
+            key=lambda cab: cast(str, cab['description']),
         ),
     }
 
@@ -376,7 +376,7 @@ def romsforcabinet(ip: str) -> Dict[str, Any]:
                     }
                     for patch in patches
                 ],
-                key=lambda patch: patch['name'],
+                key=lambda patch: cast(str, patch['name']),
             )
             roms.append({
                 'file': full_filename,
@@ -384,7 +384,7 @@ def romsforcabinet(ip: str) -> Dict[str, Any]:
                 'enabled': full_filename in cabinet.patches,
                 'patches': patches,
             })
-    return {'games': sorted(roms, key=lambda rom: rom['name'])}
+    return {'games': sorted(roms, key=lambda rom: cast(str, rom['name']))}
 
 
 @app.route('/cabinets/<ip>/games', methods=['POST'])
