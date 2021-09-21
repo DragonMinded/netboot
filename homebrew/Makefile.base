@@ -123,9 +123,13 @@ build/%.elf: ${OBJS}
 	${LD} -o $@ $^ ${LIBS}
 
 # A rule for how to build assembly files. Depends on the build dir being created.
+# This runs the C preprocessor for convenience, so you can #define registers and
+# such in your assembly files.
 build/%.o: %.s
 	@mkdir -p $(dir $@)
-	${AS} -o $@ $<
+	cp $< $@.renamed.S
+	${NAOMI_SH_CC} -E $@.renamed.S > $@.preprocessed.s
+	${AS} -o $@ $@.preprocessed.s
 
 # A rule for how to build C files. Depends on the build dir being created.
 build/%.o: %.c
