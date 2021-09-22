@@ -17,6 +17,7 @@ bss_zero:
     mov.l bss_start_addr,r0
     mov.l bss_end_addr,r1
     mov #0,r2
+
 bss_zero_loop:
     mov.l r2,@r0
     add #4,r0
@@ -28,7 +29,7 @@ bss_zero_loop:
     # region so its safe to enable cache. Grab the address of
     # setup_cache (exactly 16 bytes forward), mask off the physical
     # address bits, and jump to it.
-    mova @(16,pc),r0
+    mova @((setup_cache-.),pc),r0
     mov.l phys_mask,r1
     and r1,r0
     mov.l p2_mask,r1
