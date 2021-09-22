@@ -104,11 +104,25 @@ ARMAR  = ${NAOMI_ARM_AR}
 # Set up various toolchain utilities.
 BIN2C  = python3 $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/bin2c.py
 
+# Set up various toolchain utilities.
+ADDR  = python3 $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/addr.py
+
 # A List of source files that should be included.
 SRCS ?=
 
 # A list of libraries that should be linked against.
 LIBS ?= -lnaomi -lc -lgcc -lstdc++
+
+# The desired start address of the executable. Its totally okay to leave this alone.
+START_ADDR = 0xc021000
+
+# The entrypoint for the main executable. The default crt0 and linkscript put this at
+# the start addr. If you provide a custom linker/crt0 you can overwrite this.
+MAIN_ADDR = $(shell ${ADDR} ${START_ADDR} 0)
+
+# The entrypoint for the test executable. The default crt0 and linkscript put this at
+# the start addr + 4. If you provide a custom linker/crt0 you can overwrite this.
+TEST_ADDR = $(shell ${ADDR} ${START_ADDR} 4)
 
 OBJS = $(patsubst %.cpp, build/%.o, $(patsubst %.s, build/%.o, $(patsubst %.c, build/%.o, $(SRCS))))
 
@@ -120,7 +134,7 @@ build/%.bin: build/%.elf
 # A rule for how we go about building the elf file from objects.
 build/%.elf: ${OBJS}
 	@mkdir -p $(dir $@)
-	${LD} -o $@ $^ ${LIBS}
+	${LD} -defsym START_ADDR=${START_ADDR} -o $@ $^ ${LIBS}
 
 # A rule for how to build assembly files. Depends on the build dir being created.
 # This runs the C preprocessor for convenience, so you can #define registers and

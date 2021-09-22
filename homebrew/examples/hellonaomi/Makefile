@@ -19,9 +19,9 @@ hellonaomi.bin: build/naomi.bin
 	PYTHONPATH=../../../ python3 -m scripts.makerom $@ \
 		--title "Hello Naomi" \
 		--publisher "DragonMinded" \
-		--section $<,0xc021000 \
-		--entrypoint 0xc021000 \
-		--test-entrypoint 0xc021004
+		--section $<,${START_ADDR} \
+		--entrypoint ${MAIN_ADDR} \
+		--test-entrypoint ${TEST_ADDR}
 
 # Include a simple clean target which wipes the build directory
 # and kills any binary built.
