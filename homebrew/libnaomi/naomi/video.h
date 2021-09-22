@@ -43,6 +43,7 @@ void video_draw_pixel(int x, int y, uint32_t color);
 void video_draw_line(int x0, int y0, int x1, int y1, uint32_t color);
 void video_draw_character(int x, int y, uint32_t color, char ch);
 void video_draw_text(int x, int y, uint32_t color, const char * const msg);
+void video_draw_sprite( int x, int y, int width, int height, void *data );
 void video_display();
 
 #ifdef __cplusplus

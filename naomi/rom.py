@@ -164,9 +164,11 @@ class NaomiRom:
             (0x070, 0x090),
             (0x090, 0x0B0),
             (0x0B0, 0x0D0),
-            (0x0D0, 0x0F0),
-            (0x0F0, 0x110),
-            (0x110, 0x130),
+            # The following are regions that we don't care to write since they
+            # are not used in practice.
+            # (0x0D0, 0x0F0),
+            # (0x0F0, 0x110),
+            # (0x110, 0x130),
         ]):
             self._inject_str(start, val[i], end - start)
 

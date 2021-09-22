@@ -274,6 +274,26 @@ void video_draw_character( int x, int y, uint32_t color, char ch )
     }
 }
 
+void video_draw_sprite( int x, int y, int width, int height, void *data )
+{
+    if(video_depth() == 2)
+    {
+        uint16_t *pixels = (uint16_t *)data;
+
+        for(int row = 0; row < height; row++)
+        {
+            for(int col = 0; col < width; col++)
+            {
+                video_draw_pixel( x + col, y + row, pixels[col + (row * width)] );
+            }
+        }
+    }
+    else
+    {
+        // TODO
+    }
+}
+
 void video_draw_text( int x, int y, uint32_t color, const char * const msg )
 {
     if( msg == 0 ) { return; }
