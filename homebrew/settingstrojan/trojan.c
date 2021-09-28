@@ -52,7 +52,8 @@ uint32_t *sentinel = (uint32_t *)(START_ADDR - 4);
 #define Y_LOC 200
 
 // Wait time to display debugging when enabled.
-#define WAIT_TIME 15
+#define WAIT_TIME_NORMAL 5
+#define WAIT_TIME_DEBUG 15
 
 // Whether to display verbose debugging info when debug printing is enabled.
 #define VERBOSE_DEBUG_MODE 0
@@ -338,7 +339,7 @@ void main()
         video_display();
 
         // Wait some seconds to display debugging.
-        for (int i = 0; i < 60 * WAIT_TIME; i++) {
+        for (int i = 0; i < 60 * (VERBOSE_DEBUG_MODE ? WAIT_TIME_DEBUG : WAIT_TIME_NORMAL); i++) {
             video_wait_for_vblank();
         }
     }
