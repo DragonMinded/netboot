@@ -3,9 +3,9 @@ import argparse
 import os
 import struct
 import sys
-from typing import Tuple, cast
+from typing import Tuple
 
-from naomi import NaomiRom, NaomiRomSection
+from naomi import NaomiRom, NaomiRomSection, NaomiEEPRom
 
 
 # The root of the repo.
@@ -25,17 +25,64 @@ def patch_bytesequence(data: bytes, sentinel: int, replacement: bytes) -> bytes:
     raise Exception("Couldn't find spot to patch in data!")
 
 
-def get_config(data: bytes) -> Tuple[int, int]:
+def get_config(data: bytes) -> Tuple[int, int, bool, bool]:
     # Returns a tuple consisting of the original EXE start address and
-    # the desired trojan start address.
-    for i in range(len(data) - 16):
-        if (
-            all(x == 0xDD for x in data[i:(i + 4)]) and
-            all(x == 0xEE for x in data[(i + 12):(i + 16)])
-        ):
-            return cast(Tuple[int, int], struct.unpack("<II", data[(i + 4):(i + 12)]))
+    # the desired trojan start address, whether sentinel mode is enabled
+    # and whether debug printing is enabled.
+    for i in range(len(data) - 24):
+        if all(x == 0xEE for x in data[i:(i + 4)]) and all(x == 0xEE for x in data[(i + 20):(i + 24)]):
+            original_start, trojan_start, sentinel, debug = struct.unpack("<IIII", data[(i + 4):(i + 20)])
+            return (
+                original_start,
+                trojan_start,
+                sentinel != 0,
+                debug != 0,
+            )
 
     raise Exception("Couldn't find config in executable!")
+
+
+def get_settings(data: bytes) -> bytes:
+    for i in range(len(data) - 128):
+        if validate_settings(data[i:(i + 128)]):
+            return data[i:(i + 128)]
+
+    raise Exception("Couldn't find settings in executable!")
+
+
+def validate_settings(data: bytes) -> bool:
+    # Returns whether the settings chunk passes CRC.
+    sys_section1 = data[2:18]
+    sys_section2 = data[20:36]
+
+    game_size1, game_size2 = struct.unpack("<BB", data[38:40])
+    if game_size1 != game_size2:
+        # These numbers should always match.
+        return False
+
+    game_size3, game_size4 = struct.unpack("<BB", data[42:44])
+    if game_size3 != game_size4:
+        # These numbers should always match.
+        return False
+
+    game_section1 = data[44:(44 + game_size1)]
+    game_section2 = data[(44 + game_size1):(44 + game_size1 + game_size3)]
+
+    if data[0:2] != NaomiEEPRom.crc(sys_section1):
+        # The CRC doesn't match!
+        return False
+    if data[18:20] != NaomiEEPRom.crc(sys_section2):
+        # The CRC doesn't match!
+        return False
+    if data[36:38] != NaomiEEPRom.crc(game_section1):
+        # The CRC doesn't match!
+        return False
+    if data[40:42] != NaomiEEPRom.crc(game_section2):
+        # The CRC doesn't match!
+        return False
+
+    # Everything looks good!
+    return True
 
 
 def main() -> int:
@@ -68,6 +115,16 @@ def main() -> int:
         type=str,
         help='A different file to output to instead of updating the binary specified directly.',
     )
+    parser.add_argument(
+        '--enable-sentinel',
+        action='store_true',
+        help='Write a sentinel in main RAM to detect when the same game has had settings changed.',
+    )
+    parser.add_argument(
+        '--enable-debugging',
+        action='store_true',
+        help='Display debugging information to the screen instead of silently saving settings.',
+    )
 
     # Grab what we're doing
     args = parser.parse_args()
@@ -89,18 +146,27 @@ def main() -> int:
 
     if len(eeprom) != 128:
         print("Invalid length of EEPROM file!", file=sys.stderr)
+        return 1
+    if not validate_settings(eeprom):
+        print("EEPROM file is incorrectly formed!", file=sys.stderr)
+        return 1
+    if naomi.serial != eeprom[3:7] or naomi.serial != eeprom[21:25]:
+        print("EEPROM file is not for this game!", file=sys.stderr)
+        return 1
 
     # Now we need to add an EXE init section to the ROM.
     executable = naomi.main_executable
-    _, location = get_config(exe)
+    _, location, _, _ = get_config(exe)
 
     for sec in executable.sections:
         if sec.load_address == location:
             # Grab the old entrypoint from the existing modification since the ROM header
             # entrypoint will be the old trojan EXE.
-            entrypoint, _ = get_config(data[sec.offset:(sec.offset + sec.length)])
+            entrypoint, _, _, _ = get_config(data[sec.offset:(sec.offset + sec.length)])
             exe = patch_bytesequence(exe, 0xAA, struct.pack("<I", entrypoint))
             exe = patch_bytesequence(exe, 0xBB, eeprom)
+            exe = patch_bytesequence(exe, 0xCF, struct.pack("<I", 1 if args.enable_sentinel else 0))
+            exe = patch_bytesequence(exe, 0xDD, struct.pack("<I", 1 if args.enable_debugging else 0))
 
             # We can reuse this section, but first we need to get rid of the old patch.
             if sec.offset + sec.length == len(data):
@@ -141,6 +207,8 @@ def main() -> int:
         # Patch the executable with the correct settings and entrypoint.
         exe = patch_bytesequence(exe, 0xAA, struct.pack("<I", executable.entrypoint))
         exe = patch_bytesequence(exe, 0xBB, eeprom)
+        exe = patch_bytesequence(exe, 0xCF, struct.pack("<I", 1 if args.enable_sentinel else 0))
+        exe = patch_bytesequence(exe, 0xDD, struct.pack("<I", 1 if args.enable_debugging else 0))
         data += exe
 
     executable.entrypoint = location

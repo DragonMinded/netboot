@@ -1,9 +1,6 @@
 #! /usr/bin/env python3
 import argparse
-import os
-import os.path
 import sys
-import textwrap
 
 
 def main() -> int:

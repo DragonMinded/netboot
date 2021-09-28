@@ -11,11 +11,11 @@ class NaomiEEPRom:
     def default(serial: bytes) -> "NaomiEEPRom":
         if len(serial) != 4:
             raise NaomiEEPRomException("Invalid game serial!")
-        data = bytes([0x10]) + serial + bytes([0x09, 0x10, 0x00, 0x01, 0x01, 0x01, 0x00, 0x11, 0x11, 0x11, 0x11])
-        return NaomiEEPRom(NaomiEEPRom.__crc(data) + data)
+        data = bytes([0x10]) + serial + bytes([0x18, 0x10, 0x00, 0x01, 0x01, 0x01, 0x00, 0x11, 0x11, 0x11, 0x11])
+        return NaomiEEPRom(NaomiEEPRom.crc(data) + data)
 
     def __init__(self, data: bytes) -> None:
-        if self.__crc(data[2:]) != data[0:2]:
+        if self.crc(data[2:]) != data[0:2]:
             raise NaomiEEPRomException("Invalid EEPROM CRC!")
         self.__data = data[2:]
 
@@ -42,7 +42,7 @@ class NaomiEEPRom:
         return running_crc
 
     @staticmethod
-    def __crc(data: bytes) -> bytes:
+    def crc(data: bytes) -> bytes:
         running_crc = 0xDEBDEB00
 
         for byte in b"".join([data, b"\x00"]):
@@ -54,7 +54,7 @@ class NaomiEEPRom:
     @property
     def data(self) -> bytes:
         data = self.__data
-        crc = NaomiEEPRom.__crc(data)
+        crc = self.crc(data)
         return crc + data
 
     def __getitem__(self, key: int) -> bytes:
