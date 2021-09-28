@@ -55,7 +55,7 @@ uint32_t *sentinel = (uint32_t *)(START_ADDR - 4);
 #define WAIT_TIME 15
 
 // Whether to display verbose debugging info when debug printing is enabled.
-#define VERBOSE_DEBUG_MODE 1
+#define VERBOSE_DEBUG_MODE 0
 
 // Location of the two system data chunks inside the EEPROM.
 #define SYSTEM_CHUNK_1 0
