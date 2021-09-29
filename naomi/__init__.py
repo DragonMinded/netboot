@@ -1,6 +1,7 @@
 from naomi.eeprom import NaomiEEPRom, NaomiEEPRomException
 from naomi.generic_patch import force_freeplay, force_no_attract_sound
 from naomi.rom import NaomiRom, NaomiExecutable, NaomiRomSection, NaomiRomException
+from naomi.settings_patch import NaomiSettingsPatcher, NaomiSettingsPatcherException
 
 __all__ = [
     "NaomiRom",
@@ -9,6 +10,8 @@ __all__ = [
     "NaomiRomException",
     "NaomiEEPRom",
     "NaomiEEPRomException",
+    "NaomiSettingsPatcher",
+    "NaomiSettingsPatcherException",
     "force_freeplay",
     "force_no_attract_sound",
 ]
