@@ -8,12 +8,13 @@
 // We will overwrite this in the final linking script when we are injected
 // into a binary. It will point to the original entrypoint that was in the
 // binary's header.
-uint32_t settings_chunk[6] = {
+uint32_t settings_chunk[7] = {
     0xEEEEEEEE,
     0xAAAAAAAA,
     START_ADDR,
     0xCFCFCFCF,  // Enable sentinel behavior
     0xDDDDDDDD,  // Enable debug printing
+    20210928,    // Version of this trojan as a date in YYYYMMDD format.
     0xEEEEEEEE,
 };
 
@@ -21,6 +22,7 @@ uint32_t settings_chunk[6] = {
 #define OUT_ENTRYPOINT 2
 #define SENTINEL_ENABLED 3
 #define DEBUG_ENABLED 4
+#define VERSION 5
 
 // We will overwrite this as well when we link. It will contain the EEPROM
 // contents that we wish to write.

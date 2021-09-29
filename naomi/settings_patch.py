@@ -28,20 +28,27 @@ class NaomiSettingsPatcher:
         raise NaomiSettingsPatcherException("Couldn't find spot to patch in data!")
 
     @staticmethod
-    def __get_config(data: bytes) -> Tuple[int, int, bool, bool]:
+    def __get_config(data: bytes) -> Tuple[int, int, bool, bool, Tuple[int, int, int]]:
         # Returns a tuple consisting of the original EXE start address and
         # the desired trojan start address, whether sentinel mode is enabled
-        # and whether debug printing is enabled.
-        for i in range(len(data) - 24):
-            if all(x == 0xEE for x in data[i:(i + 4)]) and all(x == 0xEE for x in data[(i + 20):(i + 24)]):
-                original_start, trojan_start, sentinel, debug = struct.unpack("<IIII", data[(i + 4):(i + 20)])
-                if sentinel not in {0, 1} or debug not in {0, 1}:
+        # and whether debug printing is enabled, and the date string of the
+        # trojan we're using.
+        for i in range(len(data) - 28):
+            if all(x == 0xEE for x in data[i:(i + 4)]) and all(x == 0xEE for x in data[(i + 24):(i + 28)]):
+                original_start, trojan_start, sentinel, debug, date = struct.unpack("<IIIII", data[(i + 4):(i + 24)])
+                if sentinel not in {0, 1, 0xCFCFCFCF} or debug not in {0, 1, 0xDDDDDDDD}:
                     continue
+
+                day = date % 100
+                month = (date // 100) % 100
+                year = (date // 10000)
+
                 return (
                     original_start,
                     trojan_start,
                     sentinel != 0,
                     debug != 0,
+                    (year, month, day),
                 )
 
         raise NaomiSettingsPatcherException("Couldn't find config in executable!")
@@ -90,13 +97,13 @@ class NaomiSettingsPatcher:
         # Now we need to add an EXE init section to the ROM.
         exe = self.__trojan[:]
         executable = naomi.main_executable
-        _, location, _, _ = self.__get_config(exe)
+        _, location, _, _, _ = self.__get_config(exe)
 
         for sec in executable.sections:
             if sec.load_address == location:
                 # Grab the old entrypoint from the existing modification since the ROM header
                 # entrypoint will be the old trojan EXE.
-                entrypoint, _, _, _ = self.__get_config(data[sec.offset:(sec.offset + sec.length)])
+                entrypoint, _, _, _, _ = self.__get_config(data[sec.offset:(sec.offset + sec.length)])
                 exe = self.__patch_bytesequence(exe, 0xAA, struct.pack("<I", entrypoint))
                 exe = self.__patch_bytesequence(exe, 0xBB, settings)
                 exe = self.__patch_bytesequence(exe, 0xCF, struct.pack("<I", 1 if enable_sentinel else 0))
