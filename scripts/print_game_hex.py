@@ -26,7 +26,7 @@ def main() -> int:
     eeprom = NaomiEEPRom(data)
     hexstr = eeprom.game.data.hex()
     chunks = [hexstr[i:(i + 2)] for i in range(0, len(hexstr), 2)]
-    print(" ".join(chunks))
+    print(f"Serial: {eeprom.serial.decode('ascii')}, Game Settings:", " ".join(chunks))
 
     return 0
 

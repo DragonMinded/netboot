@@ -1,0 +1,35 @@
+Serial Number: 4 bytes, read-only, default is 30 47 42 42
+
+Region: byte, default is 0, 0 - Japan, 1 - USA, 2 - Export, 3 - Korea, 4 - Australia
+Sound Mode: byte, default is 1, 0 - Monaural, 1 - Stereo
+Demo Sound Half: byte, default is 0, 0 - Off, 1 - On
+Continue: byte, read-only if Event is 1, default is 1 if Event is 0, default is 0 if Event is 1, 0 - Off, 1 - On
+Unknown: byte, read-only, default is 0
+Difficulty: byte, default is 1
+  0 - 1 (Easy)
+  1 - 2
+  2 - 3
+  3 - 4
+  4 - 5
+  5 - 6
+  6 - 7
+  7 - 8 (Hard)
+Damage Level: byte, default is 1
+  0 - 1 (Low)
+  1 - 2
+  2 - 3
+  3 - 4 (High)
+Timer Speed: byte, default is 1
+  0 - 1 (Low)
+  1 - 2
+  2 - 3
+  3 - 4 (High)
+
+VM-Kit Type: byte, default is 0, 0 - No Use, 1 - SEGA, 2 - Capcom
+VM Write: byte, default is 0, 0 - Off, 1 - On
+Game Speed: byte, default is 0, 0 - Free Select, 1 - Normal, 2 - Turbo
+Event: byte, default is 0, 0 - Off, 1 - On
+Join-In: byte, default is 0, 0 - On, 1 - Off
+Character Unlock Level: byte, default is 0, 0 - No Unlocks, 1 - Level 1, 2 - Level 2, 3 - Level 3, 4 - Full Unlock
+Unknown: byte, read-only, default is 0
+Unknown: byte, read-only, default is 0

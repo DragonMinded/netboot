@@ -84,14 +84,14 @@ class NaomiEEPRom:
             raise NaomiEEPRomException("Invalid game serial!")
 
         if game_defaults is None:
-            game_settings = b'\0xFF' * (128 - (18 * 2))
+            game_settings = b'\xFF' * (128 - (18 * 2))
         else:
-            header = NaomiEEPRom.crc(game_defaults) + struct.pack("<BB", (len(game_defaults), len(game_defaults)))
+            header = NaomiEEPRom.crc(game_defaults) + struct.pack("<BB", len(game_defaults), len(game_defaults))
             game_settings = header + header + game_defaults + game_defaults
 
-            padding_len = (128 - (18 * 2) - (4 * 2)) - len(game_settings)
+            padding_len = (128 - (18 * 2) - len(game_settings))
             if padding_len > 0:
-                game_settings += b'\0xFF' * padding_len
+                game_settings += b'\xFF' * padding_len
 
         system = bytes([0x10]) + serial + bytes([0x18, 0x10, 0x00, 0x01, 0x01, 0x01, 0x00, 0x11, 0x11, 0x11, 0x11])
         system_crc = NaomiEEPRom.crc(system)
@@ -229,7 +229,7 @@ class NaomiEEPRom:
     def length(self, newval: int) -> None:
         if newval < 0 or newval > 42:
             raise NaomiEEPRomException("Game section length invalid!")
-        lengthbytes = struct.pack("<BB", (newval, newval))
+        lengthbytes = struct.pack("<BB", newval, newval)
         self._data = self._data[:38] + lengthbytes + self._data[40:42] + lengthbytes + self._data[44:]
         if len(self._data) != 128:
             raise Exception("Logic error!")

@@ -4,7 +4,7 @@ import os
 import sys
 
 from naomi import NaomiSettingsPatcher
-from settings import SettingsManager, Condition
+from settings import SettingsManager, ReadOnlyCondition
 
 
 # The root of the repo.
@@ -179,7 +179,7 @@ def main() -> int:
                     # Don't show read-only settints.
                     if setting.read_only is True:
                         continue
-                    if isinstance(setting.read_only, Condition):
+                    if isinstance(setting.read_only, ReadOnlyCondition):
                         if setting.read_only.evaluate(config.system.settings):
                             continue
 
@@ -196,7 +196,7 @@ def main() -> int:
                         # Don't show read-only settints.
                         if setting.read_only is True:
                             continue
-                        if isinstance(setting.read_only, Condition):
+                        if isinstance(setting.read_only, ReadOnlyCondition):
                             if setting.read_only.evaluate(config.system.settings):
                                 continue
 

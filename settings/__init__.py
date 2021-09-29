@@ -19,7 +19,7 @@ class SettingType(Enum):
     GAME = auto()
 
 
-class Condition:
+class ReadOnlyCondition:
     # A wrapper class to encapsulate that a setting is read-only based on the
     # value of another setting.
 
@@ -38,6 +38,36 @@ class Condition:
         return False
 
 
+class DefaultCondition:
+    # A wrapper class to encapsulate one rule for a setting default.
+
+    def __init__(self, name: str, values: List[int], negate: bool, default: int) -> None:
+        self.name = name
+        self.values = values
+        self.negate = negate
+        self.default = default
+
+
+class DefaultConditionGroup:
+    # A wrapper class to encapsulate a set of rules for defaulting a setting.
+
+    def __init__(self, conditions: List[DefaultCondition]) -> None:
+        self.conditions = conditions
+
+    def evaluate(self, settings: List["Setting"]) -> int:
+        for cond in self.conditions:
+            for setting in settings:
+                if setting.name == cond.name:
+                    current = setting.current if setting.current is not None else setting.default
+
+                    if cond.negate and current not in cond.values:
+                        return cond.default
+                    if not cond.negate and current in cond.values:
+                        return cond.default
+
+        raise Exception("Cannot select a default for current settings!")
+
+
 class Setting:
     # A single setting, complete with its name, size (and optional length if
     # the size is a byte), whether it is read-only, the allowed values for
@@ -49,9 +79,10 @@ class Setting:
         name: str,
         size: SettingSizeEnum,
         length: int,
-        read_only: Union[bool, Condition],
+        read_only: Union[bool, ReadOnlyCondition],
         values: Optional[Dict[int, str]] = None,
         current: Optional[int] = None,
+        default: Optional[Union[int, DefaultConditionGroup]] = None,
     ) -> None:
         self.name = name
         self.size = size
@@ -59,6 +90,7 @@ class Setting:
         self.read_only = read_only
         self.values = values or {}
         self.current = current
+        self.default = default
 
         if size == SettingSizeEnum.UNKNOWN:
             raise Exception("Logic error!")
@@ -78,12 +110,25 @@ class Setting:
             jdict['readonly'] = True
         elif self.read_only is False:
             jdict['readonly'] = False
-        elif isinstance(self.read_only, Condition):
-            jdict['condition'] = {
+        elif isinstance(self.read_only, ReadOnlyCondition):
+            jdict['readonly'] = {
                 "name": self.read_only.name,
                 "values": self.read_only.values,
                 "negate": self.read_only.negate,
             }
+
+        if isinstance(self.default, int):
+            jdict['default'] = self.default
+        elif isinstance(self.default, DefaultConditionGroup):
+            jdict['default'] = [
+                {
+                    "name": cond.name,
+                    "values": cond.values,
+                    "default": cond.default,
+                    "negate": cond.negate,
+                }
+                for cond in self.default.conditions
+            ]
         return jdict
 
     def __str__(self) -> str:
@@ -239,8 +284,9 @@ class SettingsConfig:
                 # Now, figure out what size it should be.
                 size = SettingSizeEnum.UNKNOWN
                 length = 1
-                read_only: Union[bool, Condition] = False
+                read_only: Union[bool, ReadOnlyCondition] = False
                 values: Dict[int, str] = {}
+                default: Optional[Union[int, DefaultConditionGroup]] = None
 
                 if "," in rest:
                     restbits = [r.strip() for r in rest.split(",")]
@@ -264,22 +310,75 @@ class SettingsConfig:
                             raise Exception(f"Unrecognized unit {units}!")
                         if size != SettingSizeEnum.BYTE and length != 1:
                             raise Exception(f"Invalid length for unit {units}!")
+
                     elif "read-only" in bit:
                         if " if " in bit:
                             readonlystr, rest = bit.split(" if ", 1)
-                            if readonlystr.strip() != "read-only":
-                                raise Exception(f"Cannot parse read-only condition {bit}!")
-                            condname, condvalues = SettingsConfig.__get_vals(rest)
-                            read_only = Condition(condname, condvalues, True)
+                            negate = True
                         elif " unless " in bit:
                             readonlystr, rest = bit.split(" unless ", 1)
-                            if readonlystr.strip() != "read-only":
-                                raise Exception(f"Cannot parse read-only condition {bit}!")
-                            condname, condvalues = SettingsConfig.__get_vals(rest)
-                            read_only = Condition(condname, condvalues, False)
+                            negate = False
                         else:
                             # Its unconditionally read-only.
                             read_only = True
+                            continue
+
+                        if readonlystr.strip() != "read-only":
+                            raise Exception(f"Cannot parse read-only condition {bit}!")
+                        condname, condvalues = SettingsConfig.__get_vals(rest)
+                        read_only = ReadOnlyCondition(condname, condvalues, negate)
+
+                    elif "default" in bit:
+                        if " is " in bit:
+                            defstr, rest = bit.split(" is ", 1)
+                            if defstr.strip() != "default":
+                                raise Exception(f"Cannot parse default {bit}!")
+
+                            condstr = None
+                            if " if " in rest:
+                                rest, condstr = rest.split(" if ", 1)
+                                negate = False
+                            elif " unless " in rest:
+                                rest, condstr = rest.split(" unless ", 1)
+                                negate = True
+                            else:
+                                # Its unconditionally a default.
+                                pass
+
+                            rest = rest.strip().replace(" ", "").replace("\t", "")
+                            defbytes = bytes([int(rest[i:(i + 2)], 16) for i in range(0, len(rest), 2)])
+                            if len(defbytes) == 1:
+                                defaultint = defbytes[0]
+                            else:
+                                if size == SettingSizeEnum.NIBBLE:
+                                    defaultint = struct.unpack("<B", defbytes[0:1])[0]
+                                elif size == SettingSizeEnum.BYTE:
+                                    if length == 1:
+                                        defaultint = struct.unpack("<B", defbytes[0:1])[0]
+                                    elif length == 2:
+                                        defaultint = struct.unpack("<H", defbytes[0:2])[0]
+                                    elif length == 4:
+                                        defaultint = struct.unpack("<I", defbytes[0:4])[0]
+                                    else:
+                                        raise Exception(f"Cannot convert default {bit}!")
+                                else:
+                                    raise Exception("Must place default after size specifier!")
+
+                            if condstr is None:
+                                if default is not None:
+                                    raise Exception("Cannot specify more than one unconditional default!")
+                                default = defaultint
+                            else:
+                                if default is None:
+                                    default = DefaultConditionGroup([])
+                                if not isinstance(default, DefaultConditionGroup):
+                                    raise Exception("Cannot mix and match unconditional and conditional defaults!")
+
+                                condname, condvalues = SettingsConfig.__get_vals(condstr)
+                                default.conditions.append(DefaultCondition(condname, condvalues, negate, defaultint))
+                        else:
+                            raise Exception(f"Default missing for default section in {bit}!")
+
                     else:
                         # Assume this is a setting value.
                         k, v = SettingsConfig.__get_kv(bit)
@@ -291,6 +390,7 @@ class SettingsConfig:
                     length,
                     read_only,
                     values,
+                    default=default,
                 )
 
         if cur_setting:
@@ -309,7 +409,42 @@ class SettingsConfig:
         return SettingsConfig(settings)
 
     def defaults(self) -> bytes:
-        raise Exception("TODO!")
+        pending = 0
+        halves = 0
+        defaults: List[bytes] = []
+
+        for setting in self.settings:
+            if setting.default is None:
+                default = 0
+            elif isinstance(setting.default, int):
+                default = setting.default
+            elif isinstance(setting.default, DefaultConditionGroup):
+                # Must evaluate settings to figure out the default for this.
+                default = setting.default.evaluate(self.settings)
+
+            if setting.size == SettingSizeEnum.NIBBLE:
+                if halves == 0:
+                    pending = (default & 0xF) << 4
+                else:
+                    defaults.append(bytes([(default & 0xF) | pending]))
+
+                if halves == 0:
+                    halves = 1
+                else:
+                    halves = 0
+            elif setting.size == SettingSizeEnum.BYTE:
+                if halves != 0:
+                    raise Exception("Logic error!")
+                if setting.length == 1:
+                    defaults.append(struct.pack("<B", default))
+                elif setting.length == 2:
+                    defaults.append(struct.pack("<H", default))
+                elif setting.length == 4:
+                    defaults.append(struct.pack("<I", default))
+                else:
+                    raise Exception(f"Cannot convert setting of length {setting.length}!")
+
+        return b"".join(defaults)
 
 
 class SettingsManager:
