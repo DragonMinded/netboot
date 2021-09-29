@@ -9,6 +9,20 @@ class NaomiSettingsPatcherException(Exception):
     pass
 
 
+class NaomiSettingsDate:
+    def __init__(self, year: int, month: int, day: int) -> None:
+        self.year = year
+        self.month = month
+        self.day = day
+
+
+class NaomiSettingsInfo:
+    def __init__(self, sentinel: bool, debug: bool, date: Tuple[int, int, int]) -> None:
+        self.enable_sentinel = sentinel
+        self.enable_debugging = debug
+        self.date = NaomiSettingsDate(date[0], date[1], date[2])
+
+
 class NaomiSettingsPatcher:
     def __init__(self, rom: bytes, trojan: bytes) -> None:
         self.data = rom
@@ -52,6 +66,28 @@ class NaomiSettingsPatcher:
                 )
 
         raise NaomiSettingsPatcherException("Couldn't find config in executable!")
+
+    def get_info(self) -> Optional[NaomiSettingsInfo]:
+        # Parse the ROM header so we can narrow our search.
+        naomi = NaomiRom(self.data)
+
+        # Only look at main executables.
+        executable = naomi.main_executable
+        for sec in executable.sections:
+            # Constrain the search to the section that we jump to, since that will always
+            # be where our trojan is.
+            if executable.entrypoint >= sec.load_address and executable.entrypoint < (sec.load_address + sec.length):
+                try:
+                    # Grab the old entrypoint from the existing modification since the ROM header
+                    # entrypoint will be the old trojan EXE.
+                    data = self.data[sec.offset:(sec.offset + sec.length)]
+                    _, _, sentinel, debug, date = self.__get_config(data)
+
+                    return NaomiSettingsInfo(sentinel, debug, date)
+                except Exception:
+                    continue
+
+        return None
 
     def get_settings(self) -> Optional[bytes]:
         # Parse the ROM header so we can narrow our search.

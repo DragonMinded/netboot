@@ -76,6 +76,18 @@ def main() -> int:
         help='The actual EEPROM settings file we should write after extracting from the ROM.',
     )
 
+    info_parser = subparsers.add_parser(
+        'info',
+        help='Display settings info about a commercial ROM file.',
+        description='Display settings info about a commercial ROM file.',
+    )
+    info_parser.add_argument(
+        'rom',
+        metavar='ROM',
+        type=str,
+        help='The Naomi ROM file we should print settings information from.',
+    )
+
     # Grab what we're doing
     args = parser.parse_args()
 
@@ -106,6 +118,7 @@ def main() -> int:
             print(f"Added settings to {args.rom}.")
             with open(args.rom, "wb") as fp:
                 fp.write(patcher.data)
+
     elif args.action == "extract":
         # Grab the rom, parse it.
         with open(args.rom, "rb") as fp:
@@ -122,6 +135,22 @@ def main() -> int:
         print(f"Wrote settings to {args.eeprom}.")
         with open(args.eeprom, "wb") as fp:
             fp.write(settings)
+
+    elif args.action == "info":
+        # Grab the rom, parse it.
+        with open(args.rom, "rb") as fp:
+            data = fp.read()
+
+        # Now, search for the settings.
+        patcher = NaomiSettingsPatcher(data, b"")
+        info = patcher.get_info()
+
+        if info is None:
+            print("ROM does not have any settings attached!")
+        else:
+            print(f"ROM has settings attached, with trojan version {info.date.year:04}-{info.date.month:02}-{info.date.day:02}!")
+            print(f"Settings change sentinel is {'enabled' if info.enable_sentinel else 'disabled'}.")
+            print(f"Debug printing is {'enabled' if info.enable_debugging else 'disabled'}.")
     else:
         print(f"Invalid action {args.action}!", file=sys.stderr)
         return 1
