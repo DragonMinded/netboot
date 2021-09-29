@@ -255,136 +255,145 @@ class SettingsConfig:
 
     @staticmethod
     def from_data(data: str) -> "SettingsConfig":
-        lines = data.splitlines()
+        rawlines = data.splitlines()
+        lines: List[str] = []
         settings: List[Setting] = []
 
-        cur_setting: Optional[Setting] = None
-        for line in lines:
-            # Skip blank lines.
+        for line in rawlines:
             if not line.strip():
+                # Ignore empty lines.
+                continue
+            if line.strip().startswith("#"):
+                # Ignore comments.
                 continue
 
             if ":" not in line:
                 # Assume that this is a setting entry.
-                if cur_setting is None:
-                    raise Exception("Setting entry without a parent setting!")
-                k, v = SettingsConfig.__get_kv(line)
-                cur_setting.values[k] = v
-            else:
-                # Assume that this is a setting.
-                if cur_setting:
-                    settings.append(cur_setting)
-                    cur_setting = None
+                if not lines:
+                    raise Exception("Cannot have setting section before setting!")
 
-                # First, get the name as well as the size and any restrictions.
-                name, rest = line.split(":", 1)
-                name = name.strip()
-                rest = rest.strip()
-
-                # Now, figure out what size it should be.
-                size = SettingSizeEnum.UNKNOWN
-                length = 1
-                read_only: Union[bool, ReadOnlyCondition] = False
-                values: Dict[int, str] = {}
-                default: Optional[Union[int, DefaultConditionGroup]] = None
-
-                if "," in rest:
-                    restbits = [r.strip() for r in rest.split(",")]
+                cur = lines[-1]
+                if cur.strip()[-1] == ":":
+                    cur = cur + line
                 else:
-                    restbits = [rest]
+                    cur = cur + "," + line
 
-                for bit in restbits:
-                    if "byte" in bit or "nibble" in bit:
-                        if " " in bit:
-                            lenstr, units = bit.split(" ", 1)
-                            length = int(lenstr.strip())
-                            units = units.strip()
-                        else:
-                            units = bit.strip()
+                lines[-1] = cur
+            else:
+                # Assume that this is a full setting.
+                lines.append(line)
 
-                        if "byte" in units:
-                            size = SettingSizeEnum.BYTE
-                        elif "nibble" in units:
-                            size = SettingSizeEnum.NIBBLE
-                        else:
-                            raise Exception(f"Unrecognized unit {units}!")
-                        if size != SettingSizeEnum.BYTE and length != 1:
-                            raise Exception(f"Invalid length for unit {units}!")
+        for line in lines:
+            # First, get the name as well as the size and any restrictions.
+            name, rest = line.split(":", 1)
+            name = name.strip()
+            rest = rest.strip()
 
-                    elif "read-only" in bit:
-                        if " if " in bit:
-                            readonlystr, rest = bit.split(" if ", 1)
-                            negate = True
-                        elif " unless " in bit:
-                            readonlystr, rest = bit.split(" unless ", 1)
-                            negate = False
-                        else:
-                            # Its unconditionally read-only.
-                            read_only = True
-                            continue
+            # Now, figure out what size it should be.
+            size = SettingSizeEnum.UNKNOWN
+            length = 1
+            read_only: Union[bool, ReadOnlyCondition] = False
+            values: Dict[int, str] = {}
+            default: Optional[Union[int, DefaultConditionGroup]] = None
 
-                        if readonlystr.strip() != "read-only":
-                            raise Exception(f"Cannot parse read-only condition {bit}!")
-                        condname, condvalues = SettingsConfig.__get_vals(rest)
-                        read_only = ReadOnlyCondition(condname, condvalues, negate)
+            if "," in rest:
+                restbits = [r.strip() for r in rest.split(",")]
+            else:
+                restbits = [rest]
 
-                    elif "default" in bit:
-                        if " is " in bit:
-                            defstr, rest = bit.split(" is ", 1)
-                            if defstr.strip() != "default":
-                                raise Exception(f"Cannot parse default {bit}!")
-
-                            condstr = None
-                            if " if " in rest:
-                                rest, condstr = rest.split(" if ", 1)
-                                negate = False
-                            elif " unless " in rest:
-                                rest, condstr = rest.split(" unless ", 1)
-                                negate = True
-                            else:
-                                # Its unconditionally a default.
-                                pass
-
-                            rest = rest.strip().replace(" ", "").replace("\t", "")
-                            defbytes = bytes([int(rest[i:(i + 2)], 16) for i in range(0, len(rest), 2)])
-                            if len(defbytes) == 1:
-                                defaultint = defbytes[0]
-                            else:
-                                if size == SettingSizeEnum.NIBBLE:
-                                    defaultint = struct.unpack("<B", defbytes[0:1])[0]
-                                elif size == SettingSizeEnum.BYTE:
-                                    if length == 1:
-                                        defaultint = struct.unpack("<B", defbytes[0:1])[0]
-                                    elif length == 2:
-                                        defaultint = struct.unpack("<H", defbytes[0:2])[0]
-                                    elif length == 4:
-                                        defaultint = struct.unpack("<I", defbytes[0:4])[0]
-                                    else:
-                                        raise Exception(f"Cannot convert default {bit}!")
-                                else:
-                                    raise Exception("Must place default after size specifier!")
-
-                            if condstr is None:
-                                if default is not None:
-                                    raise Exception("Cannot specify more than one unconditional default!")
-                                default = defaultint
-                            else:
-                                if default is None:
-                                    default = DefaultConditionGroup([])
-                                if not isinstance(default, DefaultConditionGroup):
-                                    raise Exception("Cannot mix and match unconditional and conditional defaults!")
-
-                                condname, condvalues = SettingsConfig.__get_vals(condstr)
-                                default.conditions.append(DefaultCondition(condname, condvalues, negate, defaultint))
-                        else:
-                            raise Exception(f"Default missing for default section in {bit}!")
-
+            for bit in restbits:
+                if "byte" in bit or "nibble" in bit:
+                    if " " in bit:
+                        lenstr, units = bit.split(" ", 1)
+                        length = int(lenstr.strip())
+                        units = units.strip()
                     else:
-                        # Assume this is a setting value.
-                        k, v = SettingsConfig.__get_kv(bit)
-                        values[k] = v
+                        units = bit.strip()
 
-                cur_setting = Setting(
+                    if "byte" in units:
+                        size = SettingSizeEnum.BYTE
+                    elif "nibble" in units:
+                        size = SettingSizeEnum.NIBBLE
+                    else:
+                        raise Exception(f"Unrecognized unit {units}!")
+                    if size != SettingSizeEnum.BYTE and length != 1:
+                        raise Exception(f"Invalid length for unit {units}!")
+
+                elif "read-only" in bit:
+                    if " if " in bit:
+                        readonlystr, rest = bit.split(" if ", 1)
+                        negate = True
+                    elif " unless " in bit:
+                        readonlystr, rest = bit.split(" unless ", 1)
+                        negate = False
+                    else:
+                        # Its unconditionally read-only.
+                        read_only = True
+                        continue
+
+                    if readonlystr.strip() != "read-only":
+                        raise Exception(f"Cannot parse read-only condition {bit}!")
+                    condname, condvalues = SettingsConfig.__get_vals(rest)
+                    read_only = ReadOnlyCondition(condname, condvalues, negate)
+
+                elif "default" in bit:
+                    if " is " in bit:
+                        defstr, rest = bit.split(" is ", 1)
+                        if defstr.strip() != "default":
+                            raise Exception(f"Cannot parse default {bit}!")
+
+                        condstr = None
+                        if " if " in rest:
+                            rest, condstr = rest.split(" if ", 1)
+                            negate = False
+                        elif " unless " in rest:
+                            rest, condstr = rest.split(" unless ", 1)
+                            negate = True
+                        else:
+                            # Its unconditionally a default.
+                            pass
+
+                        rest = rest.strip().replace(" ", "").replace("\t", "")
+                        defbytes = bytes([int(rest[i:(i + 2)], 16) for i in range(0, len(rest), 2)])
+                        if len(defbytes) == 1:
+                            defaultint = defbytes[0]
+                        else:
+                            if size == SettingSizeEnum.NIBBLE:
+                                defaultint = struct.unpack("<B", defbytes[0:1])[0]
+                            elif size == SettingSizeEnum.BYTE:
+                                if length == 1:
+                                    defaultint = struct.unpack("<B", defbytes[0:1])[0]
+                                elif length == 2:
+                                    defaultint = struct.unpack("<H", defbytes[0:2])[0]
+                                elif length == 4:
+                                    defaultint = struct.unpack("<I", defbytes[0:4])[0]
+                                else:
+                                    raise Exception(f"Cannot convert default {bit}!")
+                            else:
+                                raise Exception("Must place default after size specifier!")
+
+                        if condstr is None:
+                            if default is not None:
+                                raise Exception("Cannot specify more than one unconditional default!")
+                            default = defaultint
+                        else:
+                            if default is None:
+                                default = DefaultConditionGroup([])
+                            if not isinstance(default, DefaultConditionGroup):
+                                raise Exception("Cannot mix and match unconditional and conditional defaults!")
+
+                            condname, condvalues = SettingsConfig.__get_vals(condstr)
+                            default.conditions.append(DefaultCondition(condname, condvalues, negate, defaultint))
+                    else:
+                        raise Exception(f"Default missing for default section in {bit}!")
+
+                else:
+                    # Assume this is a setting value.
+                    k, v = SettingsConfig.__get_kv(bit)
+                    values[k] = v
+
+            settings.append(
+                Setting(
                     name,
                     size,
                     length,
@@ -392,10 +401,7 @@ class SettingsConfig:
                     values,
                     default=default,
                 )
-
-        if cur_setting:
-            settings.append(cur_setting)
-            cur_setting = None
+            )
 
         # Verify that nibbles come in pairs.
         halves = 0

@@ -1,10 +1,31 @@
+# MVC2 stamps the EEPROM with its own serial, for some reason.
 Serial Number: 4 bytes, read-only, default is 30 47 42 42
 
+# The region that we saved settings for. The game has different defaults per-region
+# and the defaults in this file are based on the Japan region.
 Region: byte, default is 0, 0 - Japan, 1 - USA, 2 - Export, 3 - Korea, 4 - Australia
+
+# Whether your cabinet is mono or stereo.
 Sound Mode: byte, default is 1, 0 - Monaural, 1 - Stereo
+
+# Whether the demo sound is half-volume.
 Demo Sound Half: byte, default is 0, 0 - Off, 1 - On
-Continue: byte, read-only if Event is 1, default is 1 if Event is 0, default is 0 if Event is 1, 0 - Off, 1 - On
+
+# Whether continues are allowed. This is a bit complicated because the game
+# will force continues off if event mode is on. So, this is set up to be
+# read-only (invisible and not user editable) if event mode is on.
+Continue: byte
+  read-only if Event is 1
+  default is 1 if Event is 0
+  default is 0 if Event is 1
+  0 - Off
+  1 - On
+
+# I don't know what this is for. It might be a setting available outside of
+# the JP region?
 Unknown: byte, read-only, default is 0
+
+# Game difficulty, damage and timer settings. Self-explanatory.
 Difficulty: byte, default is 1
   0 - 1 (Easy)
   1 - 2
@@ -25,11 +46,24 @@ Timer Speed: byte, default is 1
   2 - 3
   3 - 4 (High)
 
+# Memory card kit installed, and whether we should write to it.
 VM-Kit Type: byte, default is 0, 0 - No Use, 1 - SEGA, 2 - Capcom
 VM Write: byte, default is 0, 0 - Off, 1 - On
+
+# Whether the game is forced to normal, turbo or user selectable speed.
 Game Speed: byte, default is 0, 0 - Free Select, 1 - Normal, 2 - Turbo
+
+# Whether the game is in event mode or not. Also controls continue mode.
 Event: byte, default is 0, 0 - Off, 1 - On
+
+# Whether you can join-in mid game or not.
 Join-In: byte, default is 0, 0 - On, 1 - Off
+
+# The secret character unlock setting. Controls what characters are available
+# without needing to enter a code.
 Character Unlock Level: byte, default is 0, 0 - No Unlocks, 1 - Level 1, 2 - Level 2, 3 - Level 3, 4 - Full Unlock
+
+# These are probably where the game stores the number of coin drops
+# in order to show XP level. I didn't bother figuring this out.
 Unknown: byte, read-only, default is 0
 Unknown: byte, read-only, default is 0

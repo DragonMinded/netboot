@@ -1,9 +1,25 @@
+# Whether attract sounds are enabled for the startup chime and in-game.
 Attract Sounds: nibble, 0 - Off, 1 - On
+
+# Whether the monitor should be horizontal or vertical.
 Monitor Orientation: nibble, 0 - Horizontal, 1 - Vertical
+
+# The game's serial number, must match the serial found in the ROM header.
+# This is not user-editable and will be filled in automatically based on the ROM.
 Serial Number: 4 bytes, read-only
+
+# I don't know what this is, but I've seen it be 09 and 18. It might be region
+# flags or even a set of flags specifying that the game has saved its settings?
 Unknown: byte, read-only
+
+# The cabinet configuration for number of controls.
 Number of Players: nibble, 0 - 1 Player, 1 - 2 Players, 2 - 3 Players, 3 - 4 Players
+
+# Whether the coin chutes should be considered common or have separate functionality.
 Coin Chute: nibble, 0 - Common, 1 - Individual
+
+# The various coin assignments. I didn't bother to transcribe every single one since
+# the only one anyone cares about is free play.
 Coin Assignments: byte
   00 - #1
   01 - #2
@@ -33,10 +49,23 @@ Coin Assignments: byte
   19 - #26
   1A - #27 (Free Play)
   1B - Manual Assignment
+
+# The number of coins you have to drop for the game to register a single credit inserted.
+# This only matters in manual assignment mode.
 Number of Coins for 1 Credit: byte, read-only unless Coin Assignments is 1B, 1, 2, 3, 4, 5, 6, 7, 8, 9
+
+# The number of coins that get counted when you put one coin in chute 1.
+# This only matters in manual assignment mode.
 Chute 1 Coin Multiplier: byte, read-only unless Coin Assignments is 1B, 1, 2, 3, 4, 5, 6, 7, 8, 9
+
+# The number of coins that get counted when you put one coin in chute 2.
+# This only matters in manual assignment mode.
 Chute 2 Coin Multiplier: byte, read-only unless Coin Assignments is 1B, 1, 2, 3, 4, 5, 6, 7, 8, 9
+
+# The number of bonus coins that are inserted after you hit X number of credits.
 Bonus Coin on X Credits: byte, read-only unless Coin Assignments is 1B, 0, 2, 3, 4, 5, 6, 7, 8, 9
+
+# Continue sequence texts. Presumably this is for games that support coins/bill acceptors/etc.
 Sequence 1: nibble, 1, 2, 3, 4, 5
 Sequence 2: nibble, 1, 2, 3, 4, 5
 Sequence 3: nibble, 1, 2, 3, 4, 5
