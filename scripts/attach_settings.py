@@ -206,7 +206,7 @@ def main() -> int:
 
                         print(f"  {setting.name}: {setting.values[setting.current]}")
                 else:
-                    print(f"  No game settings, game will use its own defaults.")
+                    print("  No game settings, game will use its own defaults.")
 
     else:
         print(f"Invalid action {args.action}!", file=sys.stderr)
