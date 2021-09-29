@@ -1,8 +1,42 @@
 import struct
+from typing import cast
 
 
 class NaomiEEPRomException(Exception):
     pass
+
+
+class ArrayBridge:
+    def __init__(self, parent: "NaomiEEPRom", name: str, length: int, offset1: int, offset2: int) -> None:
+        self.name = name
+        self.__length = length
+        self.__offset1 = offset1
+        self.__offset2 = offset2
+        self.__parent = parent
+
+    @property
+    def data(self) -> bytes:
+        return self.__parent._data[self.__offset1:(self.__offset1 + self.__length)]
+
+    def __getitem__(self, key: int) -> bytes:
+        if key < 0 or key >= self.__length:
+            raise NaomiEEPRomException(f"Cannot get bytes outside of {self.name} EEPRom section!")
+
+        # Arbitrarily choose the first section.
+        realkey = key + self.__offset1
+        return self.__parent._data[realkey:(realkey + 1)]
+
+    def __setitem__(self, key: int, val: bytes) -> None:
+        if len(val) != 1:
+            raise NaomiEEPRomException("Cannot set more than one byte at a time!")
+        if key < 0 or key >= self.__length:
+            raise NaomiEEPRomException(f"Cannot set bytes outside of {self.name} EEPRom section!")
+
+        # Make sure we set both bytes in each section.
+        for realkey in [key + self.__offset1, key + self.__offset2]:
+            self.__parent._data = self.__parent._data[:realkey] + val + self.__parent._data[realkey + 1:]
+        if len(self.__parent._data) != 128:
+            raise Exception("Logic error!")
 
 
 class NaomiEEPRom:
@@ -17,7 +51,7 @@ class NaomiEEPRom:
     def __init__(self, data: bytes) -> None:
         if not self.validate(data, only_system=True):
             raise NaomiEEPRomException("Invalid EEPROM CRC!")
-        self.__data = data
+        self._data = data
 
     @staticmethod
     def __cap_32(val: int) -> int:
@@ -88,17 +122,9 @@ class NaomiEEPRom:
         # Everything looks good!
         return True
 
-    @property
-    def data(self) -> bytes:
-        self.__fix_crc()
-        return self.__data
-
-    def __getitem__(self, key: int) -> bytes:
-        return self.__data[key:(key + 1)]
-
     def __fix_crc(self) -> None:
         # Grab a local reference.
-        data = self.__data
+        data = self._data
 
         # First fix the system CRCs.
         sys_section1 = data[2:18]
@@ -125,11 +151,47 @@ class NaomiEEPRom:
 
         if len(data) != 128:
             raise Exception("Logic error!")
-        self.__data = data
+        self._data = data
+
+    @property
+    def data(self) -> bytes:
+        self.__fix_crc()
+        return self._data
+
+    @property
+    def system(self) -> ArrayBridge:
+        return ArrayBridge(self, "system", 16, 2, 20)
+
+    @property
+    def length(self) -> int:
+        return cast(int, struct.unpack("<B", self._data[38:39])[0])
+
+    @length.setter
+    def length(self, newval: int) -> None:
+        if newval < 0 or newval > 42:
+            raise NaomiEEPRomException("Game section length invalid!")
+        lengthbytes = struct.pack("<BB", (newval, newval))
+        self._data = self._data[:38] + lengthbytes + self._data[40:42] + lengthbytes + self._data[44:]
+        if len(self._data) != 128:
+            raise Exception("Logic error!")
+
+    @property
+    def game(self) -> ArrayBridge:
+        length = self.length
+        return ArrayBridge(self, "game", length, 44, 44 + length)
+
+    def __getitem__(self, key: int) -> bytes:
+        if key < 0 or key >= 128:
+            raise NaomiEEPRomException("Cannot get bytes outside of 128-byte EEPRom!")
+        return self._data[key:(key + 1)]
 
     def __setitem__(self, key: int, val: bytes) -> None:
         if len(val) != 1:
             raise NaomiEEPRomException("Cannot set more than one byte at a time!")
         if key in {0, 1, 18, 19, 36, 37, 40, 41}:
             raise NaomiEEPRomException("Cannot manually set CRC bytes!")
-        self.__data = self.__data[:key] + val + self.__data[key + 1:]
+        if key < 0 or key >= 128:
+            raise NaomiEEPRomException("Cannot set bytes outside of 128-byte EEPRom!")
+        self._data = self._data[:key] + val + self._data[key + 1:]
+        if len(self._data) != 128:
+            raise Exception("Logic error!")
