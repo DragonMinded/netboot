@@ -231,16 +231,31 @@ class SettingsConfig:
         return SettingsConfig([])
 
     @staticmethod
-    def __get_kv(setting: str) -> Tuple[int, str]:
+    def __get_kv(setting: str) -> Dict[int, str]:
         if "-" in setting:
+            if " to " in setting:
+                raise Exception("Cannot have range in setting value with a dash in it!")
+
             k, v = setting.split("-", 1)
             key = int(k.strip(), 16)
             value = v.strip()
-        else:
-            key = int(setting.strip(), 16)
-            value = f"{key}"
 
-        return key, value
+            return {key: value}
+        else:
+            if " to " in setting:
+                low, high = setting.split(" to ", 1)
+                low = low.strip()
+                high = high.strip()
+
+                retdict: Dict[int, str] = {}
+                for x in range(int(low, 16), int(high, 16) + 1):
+                    retdict[x] = f"{x}"
+                return retdict
+            else:
+                key = int(setting.strip(), 16)
+                value = f"{key}"
+
+                return {key: value}
 
     @staticmethod
     def __get_vals(setting: str) -> Tuple[str, List[int]]:
@@ -389,8 +404,7 @@ class SettingsConfig:
 
                 else:
                     # Assume this is a setting value.
-                    k, v = SettingsConfig.__get_kv(bit)
-                    values[k] = v
+                    values.update(SettingsConfig.__get_kv(bit))
 
             settings.append(
                 Setting(
