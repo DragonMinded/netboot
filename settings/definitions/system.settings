@@ -1,0 +1,47 @@
+Attract Sounds: nibble, 0 - Off, 1 - On
+Monitor Orientation: nibble, 0 - Horizontal, 1 - Vertical
+Serial Number: 4 bytes, read-only
+Unknown: byte, read-only
+Number of Players: nibble, 0 - 1 Player, 1 - 2 Players, 2 - 3 Players, 3 - 4 Players
+Coin Chute: nibble, 0 - Common, 1 - Individual
+Coin Assignments: byte
+  00 - #1
+  01 - #2
+  02 - #3
+  03 - #4
+  04 - #5
+  05 - #6
+  06 - #7
+  07 - #8
+  08 - #9
+  09 - #10
+  0A - #11
+  0B - #12
+  0C - #13
+  0D - #14
+  0E - #15
+  0F - #16
+  10 - #17
+  11 - #18
+  12 - #19
+  13 - #20
+  14 - #21
+  15 - #22
+  16 - #23
+  17 - #24
+  18 - #25
+  19 - #26
+  1A - #27 (Free Play)
+  1B - Manual Assignment
+Number of Coins for 1 Credit: byte, read-only unless Coin Assignments is 1B, 1, 2, 3, 4, 5, 6, 7, 8, 9
+Chute 1 Coin Multiplier: byte, read-only unless Coin Assignments is 1B, 1, 2, 3, 4, 5, 6, 7, 8, 9
+Chute 2 Coin Multiplier: byte, read-only unless Coin Assignments is 1B, 1, 2, 3, 4, 5, 6, 7, 8, 9
+Bonus Coin on X Credits: byte, read-only unless Coin Assignments is 1B, 0, 2, 3, 4, 5, 6, 7, 8, 9
+Sequence 1: nibble, 1, 2, 3, 4, 5
+Sequence 2: nibble, 1, 2, 3, 4, 5
+Sequence 3: nibble, 1, 2, 3, 4, 5
+Sequence 4: nibble, 1, 2, 3, 4, 5
+Sequence 5: nibble, 1, 2, 3, 4, 5
+Sequence 6: nibble, 1, 2, 3, 4, 5
+Sequence 7: nibble, 1, 2, 3, 4, 5
+Sequence 8: nibble, 1, 2, 3, 4, 5

@@ -1,5 +1,5 @@
 import struct
-from typing import cast
+from typing import Optional, Union, cast, overload
 
 
 class NaomiEEPRomException(Exception):
@@ -18,35 +18,84 @@ class ArrayBridge:
     def data(self) -> bytes:
         return self.__parent._data[self.__offset1:(self.__offset1 + self.__length)]
 
-    def __getitem__(self, key: int) -> bytes:
-        if key < 0 or key >= self.__length:
-            raise NaomiEEPRomException(f"Cannot get bytes outside of {self.name} EEPRom section!")
+    @overload
+    def __getitem__(self, key: int) -> int:
+        ...
 
-        # Arbitrarily choose the first section.
-        realkey = key + self.__offset1
-        return self.__parent._data[realkey:(realkey + 1)]
+    @overload
+    def __getitem__(self, key: slice) -> bytes:
+        ...
 
-    def __setitem__(self, key: int, val: bytes) -> None:
-        if len(val) != 1:
+    def __getitem__(self, key: Union[int, slice]) -> Union[int, bytes]:
+        if isinstance(key, int):
+            if key < 0 or key >= self.__length:
+                raise NaomiEEPRomException(f"Cannot get bytes outside of {self.name} EEPRom section!")
+
+            # Arbitrarily choose the first section.
+            realkey = key + self.__offset1
+            return self.__parent._data[realkey]
+
+        elif isinstance(key, slice):
+            # Determine start of slice
+            if key.start is None:
+                start = self.__offset1
+            elif key.start < 0:
+                raise Exception("Do not support negative indexing!")
+            else:
+                start = self.__offset1 + key.start
+
+            if key.stop is None:
+                stop = self.__offset1 + self.__length
+            elif key.stop < 0:
+                raise Exception("Do not support negative indexing!")
+            elif key.stop > self.__length:
+                raise NaomiEEPRomException(f"Cannot get bytes outside of {self.name} EEPRom section!")
+            else:
+                stop = self.__offset1 + key.stop
+
+            # Arbitrarily choose the first section.
+            return self.__parent._data[slice(start, stop, key.step)]
+
+        else:
+            raise NotImplementedError("Not implemented!")
+
+    def __setitem__(self, key: Union[int, slice], val: Union[int, bytes]) -> None:
+        if isinstance(key, int):
+            if key < 0 or key >= self.__length:
+                raise NaomiEEPRomException(f"Cannot set bytes outside of {self.name} EEPRom section!")
+            if isinstance(val, int):
+                val = bytes([val])
+
+            # Make sure we set both bytes in each section.
+            for realkey in [key + self.__offset1, key + self.__offset2]:
+                self.__parent._data = self.__parent._data[:realkey] + val + self.__parent._data[realkey + 1:]
+            if len(self.__parent._data) != 128:
+                raise Exception("Logic error!")
+
+        else:
             raise NaomiEEPRomException("Cannot set more than one byte at a time!")
-        if key < 0 or key >= self.__length:
-            raise NaomiEEPRomException(f"Cannot set bytes outside of {self.name} EEPRom section!")
-
-        # Make sure we set both bytes in each section.
-        for realkey in [key + self.__offset1, key + self.__offset2]:
-            self.__parent._data = self.__parent._data[:realkey] + val + self.__parent._data[realkey + 1:]
-        if len(self.__parent._data) != 128:
-            raise Exception("Logic error!")
 
 
 class NaomiEEPRom:
 
     @staticmethod
-    def default(serial: bytes) -> "NaomiEEPRom":
+    def default(serial: bytes, game_defaults: Optional[bytes] = None) -> "NaomiEEPRom":
         if len(serial) != 4:
             raise NaomiEEPRomException("Invalid game serial!")
-        data = bytes([0x10]) + serial + bytes([0x18, 0x10, 0x00, 0x01, 0x01, 0x01, 0x00, 0x11, 0x11, 0x11, 0x11])
-        return NaomiEEPRom(NaomiEEPRom.crc(data) + data + NaomiEEPRom.crc(data) + data + b'\0xFF' * (128 - (18 * 2)))
+
+        if game_defaults is None:
+            game_settings = b'\0xFF' * (128 - (18 * 2))
+        else:
+            header = NaomiEEPRom.crc(game_defaults) + struct.pack("<BB", (len(game_defaults), len(game_defaults)))
+            game_settings = header + header + game_defaults + game_defaults
+
+            padding_len = (128 - (18 * 2) - (4 * 2)) - len(game_settings)
+            if padding_len > 0:
+                game_settings += b'\0xFF' * padding_len
+
+        system = bytes([0x10]) + serial + bytes([0x18, 0x10, 0x00, 0x01, 0x01, 0x01, 0x00, 0x11, 0x11, 0x11, 0x11])
+        system_crc = NaomiEEPRom.crc(system)
+        return NaomiEEPRom(system_crc + system + system_crc + system + game_settings)
 
     def __init__(self, data: bytes) -> None:
         if not self.validate(data, only_system=True):
@@ -87,6 +136,10 @@ class NaomiEEPRom:
 
     @staticmethod
     def validate(data: bytes, *, only_system: bool = False) -> bool:
+        # First, make sure its the right length.
+        if len(data) != 128:
+            return False
+
         # Returns whether the settings chunk passes CRC.
         sys_section1 = data[2:18]
         sys_section2 = data[20:36]
@@ -159,11 +212,17 @@ class NaomiEEPRom:
         return self._data
 
     @property
+    def serial(self) -> bytes:
+        # Arbitrarily choose the first enclave.
+        return self._data[3:7]
+
+    @property
     def system(self) -> ArrayBridge:
         return ArrayBridge(self, "system", 16, 2, 20)
 
     @property
     def length(self) -> int:
+        # Arbitrarily choose the first enclave.
         return cast(int, struct.unpack("<B", self._data[38:39])[0])
 
     @length.setter
@@ -180,18 +239,57 @@ class NaomiEEPRom:
         length = self.length
         return ArrayBridge(self, "game", length, 44, 44 + length)
 
-    def __getitem__(self, key: int) -> bytes:
-        if key < 0 or key >= 128:
-            raise NaomiEEPRomException("Cannot get bytes outside of 128-byte EEPRom!")
-        return self._data[key:(key + 1)]
+    @overload
+    def __getitem__(self, key: int) -> int:
+        ...
 
-    def __setitem__(self, key: int, val: bytes) -> None:
-        if len(val) != 1:
+    @overload
+    def __getitem__(self, key: slice) -> bytes:
+        ...
+
+    def __getitem__(self, key: Union[int, slice]) -> Union[int, bytes]:
+        if isinstance(key, int):
+            if key < 0 or key >= 128:
+                raise NaomiEEPRomException("Cannot get bytes outside of 128-byte EEPRom!")
+
+            # Arbitrarily choose the first section.
+            return self._data[key]
+
+        elif isinstance(key, slice):
+            # Determine start of slice
+            if key.start is None:
+                start = 0
+            elif key.start < 0:
+                raise Exception("Do not support negative indexing!")
+            else:
+                start = key.start
+
+            if key.stop is None:
+                stop = 128
+            elif key.stop < 0:
+                raise Exception("Do not support negative indexing!")
+            elif key.stop > 128:
+                raise NaomiEEPRomException("Cannot get bytes outside of 128-byte EEPRom!")
+            else:
+                stop = key.stop
+
+            return self._data[slice(start, stop, key.step)]
+
+        else:
+            raise NotImplementedError("Not implemented!")
+
+    def __setitem__(self, key: Union[int, slice], val: Union[int, bytes]) -> None:
+        if isinstance(key, int):
+            if key in {0, 1, 18, 19, 36, 37, 40, 41}:
+                raise NaomiEEPRomException("Cannot manually set CRC bytes!")
+            if key < 0 or key >= 128:
+                raise NaomiEEPRomException("Cannot set bytes outside of 128-byte EEPRom!")
+            if isinstance(val, int):
+                val = bytes([val])
+
+            self._data = self._data[:key] + val + self._data[key + 1:]
+            if len(self._data) != 128:
+                raise Exception("Logic error!")
+
+        else:
             raise NaomiEEPRomException("Cannot set more than one byte at a time!")
-        if key in {0, 1, 18, 19, 36, 37, 40, 41}:
-            raise NaomiEEPRomException("Cannot manually set CRC bytes!")
-        if key < 0 or key >= 128:
-            raise NaomiEEPRomException("Cannot set bytes outside of 128-byte EEPRom!")
-        self._data = self._data[:key] + val + self._data[key + 1:]
-        if len(self._data) != 128:
-            raise Exception("Logic error!")
