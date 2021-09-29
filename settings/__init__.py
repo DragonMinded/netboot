@@ -20,13 +20,30 @@ class SettingType(Enum):
 
 
 class Condition:
+    # A wrapper class to encapsulate that a setting is read-only based on the
+    # value of another setting.
+
     def __init__(self, name: str, values: List[int], negate: bool) -> None:
         self.name = name
         self.values = values
         self.negate = negate
 
+    def evaluate(self, settings: List["Setting"]) -> bool:
+        for setting in settings:
+            if setting.name == self.name:
+                if setting.current in self.values:
+                    return self.negate
+                else:
+                    return not self.negate
+        return False
+
 
 class Setting:
+    # A single setting, complete with its name, size (and optional length if
+    # the size is a byte), whether it is read-only, the allowed values for
+    # the setting and finally the current value (if it has been parsed out
+    # of a valid EEPROM file).
+
     def __init__(
         self,
         name: str,
@@ -74,6 +91,10 @@ class Setting:
 
 
 class Settings:
+    # A collection of settings as well as the type of settings this is (game versus
+    # system). This is also responsible for parsing and creating sections in an actual
+    # EEPROM file based on the settings themselves.
+
     def __init__(self, settings: List[Setting], type: SettingType = SettingType.UNKNOWN) -> None:
         self.settings = settings
         self.type = type
@@ -132,6 +153,8 @@ class Settings:
 
 
 class SettingsWrapper:
+    # A wrapper class to hold both a system and game settings section together.
+
     def __init__(self, system: Settings, game: Settings) -> None:
         self.system = system
         self.game = game
@@ -150,6 +173,11 @@ class SettingsWrapper:
 
 
 class SettingsConfig:
+    # A class that can manifest a list of settings given a particular
+    # file. It is not responsible for parsing any settings. It is only
+    # responsible for creating the list of settings given a settings
+    # definition file.
+
     def __init__(self, settings: List[Setting]) -> None:
         self.settings = settings
 
@@ -187,6 +215,10 @@ class SettingsConfig:
 
         cur_setting: Optional[Setting] = None
         for line in lines:
+            # Skip blank lines.
+            if not line.strip():
+                continue
+
             if ":" not in line:
                 # Assume that this is a setting entry.
                 if cur_setting is None:
@@ -281,6 +313,9 @@ class SettingsConfig:
 
 
 class SettingsManager:
+    # A manager class that can handle manifesting and saving settings given a directory
+    # of definition files.
+
     def __init__(self, directory: str) -> None:
         self.__directory = directory
 

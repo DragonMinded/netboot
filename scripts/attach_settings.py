@@ -4,6 +4,7 @@ import os
 import sys
 
 from naomi import NaomiSettingsPatcher
+from settings import SettingsManager, Condition
 
 
 # The root of the repo.
@@ -87,6 +88,13 @@ def main() -> int:
         type=str,
         help='The Naomi ROM file we should print settings information from.',
     )
+    info_parser.add_argument(
+        '--settings-directory',
+        metavar='DIR',
+        type=str,
+        default=os.path.join(root, 'settings/definitions'),
+        help='The directory containing settings definition files.',
+    )
 
     # Grab what we're doing
     args = parser.parse_args()
@@ -151,6 +159,55 @@ def main() -> int:
             print(f"ROM has settings attached, with trojan version {info.date.year:04}-{info.date.month:02}-{info.date.day:02}!")
             print(f"Settings change sentinel is {'enabled' if info.enable_sentinel else 'disabled'}.")
             print(f"Debug printing is {'enabled' if info.enable_debugging else 'disabled'}.")
+
+            # Grab the actual EEPRom so we can print the settings within.
+            manager = SettingsManager(args.settings_directory)
+            eepromdata = patcher.get_settings()
+            config = None
+
+            if eepromdata is not None:
+                try:
+                    config = manager.from_eeprom(eepromdata)
+                except Exception:
+                    # We don't have the directory configured, so skip this.
+                    pass
+
+            if config is not None:
+                print("System Settings:")
+
+                for setting in config.system.settings:
+                    # Don't show read-only settints.
+                    if setting.read_only is True:
+                        continue
+                    if isinstance(setting.read_only, Condition):
+                        if setting.read_only.evaluate(config.system.settings):
+                            continue
+
+                    # This shouldn't happen, but make mypy happy.
+                    if setting.current is None:
+                        continue
+
+                    print(f"  {setting.name}: {setting.values[setting.current]}")
+
+                print("Game Settings:")
+
+                if config.game.settings:
+                    for setting in config.game.settings:
+                        # Don't show read-only settints.
+                        if setting.read_only is True:
+                            continue
+                        if isinstance(setting.read_only, Condition):
+                            if setting.read_only.evaluate(config.system.settings):
+                                continue
+
+                        # This shouldn't happen, but make mypy happy.
+                        if setting.current is None:
+                            continue
+
+                        print(f"  {setting.name}: {setting.values[setting.current]}")
+                else:
+                    print(f"  No game settings, game will use its own defaults.")
+
     else:
         print(f"Invalid action {args.action}!", file=sys.stderr)
         return 1
