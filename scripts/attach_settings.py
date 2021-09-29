@@ -32,7 +32,7 @@ def main() -> int:
         'eeprom',
         metavar='EEPROM',
         type=str,
-        help='The actual EEPROM settings files we should attach to the ROM.',
+        help='The actual EEPROM settings file we should attach to the ROM.',
     )
     attach_parser.add_argument(
         '--exe',
@@ -58,11 +58,29 @@ def main() -> int:
         help='Display debugging information to the screen instead of silently saving settings.',
     )
 
+    extract_parser = subparsers.add_parser(
+        'extract',
+        help='Extract a 128-byte EEPRom file from a commercial Naomi ROM we have previously attached settings to.',
+        description='Extract a 128-byte EEPRom file from a commercial Naomi ROM we have previously attached settings to.',
+    )
+    extract_parser.add_argument(
+        'rom',
+        metavar='ROM',
+        type=str,
+        help='The Naomi ROM file we should extract the settings from.',
+    )
+    extract_parser.add_argument(
+        'eeprom',
+        metavar='EEPROM',
+        type=str,
+        help='The actual EEPROM settings file we should write after extracting from the ROM.',
+    )
+
     # Grab what we're doing
     args = parser.parse_args()
 
     if args.action == "attach":
-        # Grab the rom, parse it
+        # Grab the rom, parse it.
         with open(args.rom, "rb") as fp:
             data = fp.read()
 
@@ -88,8 +106,25 @@ def main() -> int:
             print(f"Added settings to {args.rom}.")
             with open(args.rom, "wb") as fp:
                 fp.write(patcher.data)
+    elif args.action == "extract":
+        # Grab the rom, parse it.
+        with open(args.rom, "rb") as fp:
+            data = fp.read()
+
+        # Now, search for the settings.
+        patcher = NaomiSettingsPatcher(data, b"")
+        settings = patcher.get_settings()
+
+        if settings is None:
+            print("ROM does not have any settings attached!", file=sys.stderr)
+            return 1
+
+        print(f"Wrote settings to {args.eeprom}.")
+        with open(args.eeprom, "wb") as fp:
+            fp.write(settings)
     else:
-        raise Exception(f"Invalid action {args.action}!")
+        print(f"Invalid action {args.action}!", file=sys.stderr)
+        return 1
 
     return 0
 

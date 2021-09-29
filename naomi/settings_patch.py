@@ -35,6 +35,8 @@ class NaomiSettingsPatcher:
         for i in range(len(data) - 24):
             if all(x == 0xEE for x in data[i:(i + 4)]) and all(x == 0xEE for x in data[(i + 20):(i + 24)]):
                 original_start, trojan_start, sentinel, debug = struct.unpack("<IIII", data[(i + 4):(i + 20)])
+                if sentinel not in {0, 1} or debug not in {0, 1}:
+                    continue
                 return (
                     original_start,
                     trojan_start,
@@ -51,19 +53,22 @@ class NaomiSettingsPatcher:
         # Only look at main executables.
         executable = naomi.main_executable
         for sec in executable.sections:
-            try:
-                # Grab the old entrypoint from the existing modification since the ROM header
-                # entrypoint will be the old trojan EXE.
-                data = self.data[sec.offset:(sec.offset + sec.length)]
-                entrypoint, _, _, _ = self.__get_config(data)
+            # Constrain the search to the section that we jump to, since that will always
+            # be where our trojan is.
+            if executable.entrypoint >= sec.load_address and executable.entrypoint < (sec.load_address + sec.length):
+                try:
+                    # Grab the old entrypoint from the existing modification since the ROM header
+                    # entrypoint will be the old trojan EXE.
+                    data = self.data[sec.offset:(sec.offset + sec.length)]
+                    self.__get_config(data)
 
-                # Returns the requested EEPRom settings that should be written prior
-                # to the game starting.
-                for i in range(len(data) - 128):
-                    if NaomiEEPRom.validate(data[i:(i + 128)]):
-                        return data[i:(i + 128)]
-            except Exception:
-                pass
+                    # Returns the requested EEPRom settings that should be written prior
+                    # to the game starting.
+                    for i in range(len(data) - 128):
+                        if NaomiEEPRom.validate(data[i:(i + 128)]):
+                            return data[i:(i + 128)]
+                except Exception:
+                    pass
 
         # Couldn't find a section that matched.
         return None
