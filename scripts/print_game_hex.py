@@ -1,8 +1,14 @@
 #! /usr/bin/env python3
 import argparse
+import os
 import sys
 
 from naomi import NaomiEEPRom
+from settings import SettingsManager, ReadOnlyCondition, SettingsParseException, SettingsSaveException
+
+
+# The root of the repo.
+root = os.path.realpath(os.path.join(os.path.basename(os.path.realpath(__file__)), ".."))
 
 
 def main() -> int:
@@ -16,6 +22,18 @@ def main() -> int:
         type=str,
         help='The actual EEPROM settings file we should attach to the ROM.',
     )
+    parser.add_argument(
+        '--display-parsed-settings',
+        action="store_true",
+        help="Attempt to parse EEPROM and display settings as well.",
+    )
+    parser.add_argument(
+        '--settings-directory',
+        metavar='DIR',
+        type=str,
+        default=os.path.join(root, 'settings/definitions'),
+        help='The directory containing settings definition files.',
+    )
 
     # Grab what we're doing
     args = parser.parse_args()
@@ -28,6 +46,52 @@ def main() -> int:
         hexstr = eeprom.game.data.hex()
         chunks = [hexstr[i:(i + 2)] for i in range(0, len(hexstr), 2)]
         print(f"Serial: {eeprom.serial.decode('ascii')}, Game Settings:", " ".join(chunks))
+
+        if args.display_parsed_settings:
+            # Grab the actual EEPRom so we can print the settings within.
+            manager = SettingsManager(args.settings_directory)
+
+            try:
+                config = manager.from_eeprom(data)
+
+                print("System Settings:")
+
+                for setting in config.system.settings:
+                    # Don't show read-only settints.
+                    if setting.read_only is True:
+                        continue
+                    if isinstance(setting.read_only, ReadOnlyCondition):
+                        if setting.read_only.evaluate(config.system.settings):
+                            continue
+
+                    # This shouldn't happen, but make mypy happy.
+                    if setting.current is None:
+                        continue
+
+                    print(f"  {setting.name}: {setting.values[setting.current]}")
+
+                print("Game Settings:")
+
+                if config.game.settings:
+                    for setting in config.game.settings:
+                        # Don't show read-only settints.
+                        if setting.read_only is True:
+                            continue
+                        if isinstance(setting.read_only, ReadOnlyCondition):
+                            if setting.read_only.evaluate(config.game.settings):
+                                continue
+
+                        # This shouldn't happen, but make mypy happy.
+                        if setting.current is None:
+                            continue
+
+                        print(f"  {setting.name}: {setting.values[setting.current]}")
+                else:
+                    print("  No game settings, game will use its own defaults.")
+            except (SettingsParseException, SettingsSaveException) as e:
+                print(f"Error in \"{e.filename}\":", str(e), file=sys.stderr)
+                return 1
+
     else:
         print(f"Serial: {eeprom.serial.decode('ascii')}, Game Settings: INVALID")
 
