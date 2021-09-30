@@ -19,23 +19,41 @@ class SettingType(Enum):
     GAME = auto()
 
 
+class SettingsParseException(Exception):
+    def __init__(self, msg: str, filename: str) -> None:
+        super().__init__(msg)
+        self.filename = filename
+
+
+class SettingsSaveException(Exception):
+    def __init__(self, msg: str, filename: str) -> None:
+        super().__init__(msg)
+        self.filename = filename
+
+
 class ReadOnlyCondition:
     # A wrapper class to encapsulate that a setting is read-only based on the
     # value of another setting.
 
-    def __init__(self, name: str, values: List[int], negate: bool) -> None:
+    def __init__(self, filename: str, setting: str, name: str, values: List[int], negate: bool) -> None:
+        self.filename = filename
+        self.setting = setting
         self.name = name
         self.values = values
         self.negate = negate
 
     def evaluate(self, settings: List["Setting"]) -> bool:
         for setting in settings:
-            if setting.name == self.name:
+            if setting.name.lower() == self.name.lower():
                 if setting.current in self.values:
                     return self.negate
                 else:
                     return not self.negate
-        return False
+
+        raise SettingsSaveException(
+            f"The setting \"{self.setting}\" depends on the value for \"{self.name}\" but that setting does not seem to exist! Perhaps you misspelled \"{self.name}\"?",
+            self.filename,
+        )
 
 
 class DefaultCondition:
@@ -51,13 +69,15 @@ class DefaultCondition:
 class DefaultConditionGroup:
     # A wrapper class to encapsulate a set of rules for defaulting a setting.
 
-    def __init__(self, conditions: List[DefaultCondition]) -> None:
+    def __init__(self, filename: str, setting: str, conditions: List[DefaultCondition]) -> None:
+        self.filename = filename
+        self.setting = setting
         self.conditions = conditions
 
-    def evaluate(self, settings: List["Setting"]) -> int:
+    def evaluate(self, filename: str, name: str, settings: List["Setting"]) -> int:
         for cond in self.conditions:
             for setting in settings:
-                if setting.name == cond.name:
+                if setting.name.lower() == cond.name.lower():
                     current = setting.current if setting.current is not None else setting.default
 
                     if cond.negate and current not in cond.values:
@@ -65,7 +85,15 @@ class DefaultConditionGroup:
                     if not cond.negate and current in cond.values:
                         return cond.default
 
-        raise Exception("Cannot select a default for current settings!")
+        namelist = list({f'"{c.name}"' for c in self.conditions})
+        if len(namelist) > 2:
+            namelist = [", ".join(namelist[:-1]), namelist[-1]]
+        names = " or ".join(namelist)
+
+        raise SettingsSaveException(
+            f"The default for setting \"{self.setting}\" could not be determined! Perhaps you misspelled one of {names}, or you forgot a value?",
+            self.filename,
+        )
 
 
 class Setting:
@@ -134,6 +162,9 @@ class Setting:
     def __str__(self) -> str:
         return json.dumps(self.to_json(), indent=2)
 
+    def __repr__(self) -> str:
+        return str(self)
+
 
 class Settings:
     # A collection of settings as well as the type of settings this is (game versus
@@ -171,7 +202,7 @@ class Settings:
                     location += 1
             elif setting.size == SettingSizeEnum.BYTE:
                 if halves != 0:
-                    raise Exception("Logic error!")
+                    raise SettingsParseException(f"The setting \"{setting.name}\" follows a lonesome nibble. Nibble settings must always be in pairs!", config.filename)
                 if setting.length == 1:
                     setting.current = struct.unpack("<B", data[location:(location + 1)])[0]
                 elif setting.length == 2:
@@ -179,7 +210,7 @@ class Settings:
                 elif setting.length == 4:
                     setting.current = struct.unpack("<I", data[location:(location + 4)])[0]
                 else:
-                    raise Exception(f"Cannot convert setting of length {setting.length}!")
+                    raise SettingsParseException(f"Cannot parse setting \"{setting.name}\" with unrecognized size \"{setting.length}\"!", config.filename)
 
                 location += setting.length
 
@@ -195,6 +226,9 @@ class Settings:
 
     def __str__(self) -> str:
         return json.dumps(self.to_json(), indent=2)
+
+    def __repr__(self) -> str:
+        return str(self)
 
 
 class SettingsWrapper:
@@ -216,6 +250,9 @@ class SettingsWrapper:
     def __str__(self) -> str:
         return json.dumps(self.to_json(), indent=2)
 
+    def __repr__(self) -> str:
+        return str(self)
+
 
 class SettingsConfig:
     # A class that can manifest a list of settings given a particular
@@ -223,53 +260,72 @@ class SettingsConfig:
     # responsible for creating the list of settings given a settings
     # definition file.
 
-    def __init__(self, settings: List[Setting]) -> None:
+    def __init__(self, filename: str, settings: List[Setting]) -> None:
+        self.filename = filename
         self.settings = settings
 
     @staticmethod
     def blank() -> "SettingsConfig":
-        return SettingsConfig([])
+        # It would be weird to display "NO FILE" to the user when there is
+        # an error, but virtually all errors arise from parsing the settings
+        # file itself, so if this is blank its unlikely errors will happen.
+        return SettingsConfig("NO FILE", [])
 
     @staticmethod
-    def __get_kv(setting: str) -> Dict[int, str]:
-        if "-" in setting:
-            if " to " in setting:
-                raise Exception("Cannot have range in setting value with a dash in it!")
+    def __get_kv(filename: str, name: str, setting: str) -> Dict[int, str]:
+        try:
+            if "-" in setting:
+                if " to " in setting:
+                    raise SettingsParseException(
+                        f"Setting \"{name}\" cannot have a range for valid values that includes a dash! \"{setting}\" should be specified like \"20 to E0\".",
+                        filename,
+                    )
 
-            k, v = setting.split("-", 1)
-            key = int(k.strip(), 16)
-            value = v.strip()
-
-            return {key: value}
-        else:
-            if " to " in setting:
-                low, high = setting.split(" to ", 1)
-                low = low.strip()
-                high = high.strip()
-
-                retdict: Dict[int, str] = {}
-                for x in range(int(low, 16), int(high, 16) + 1):
-                    retdict[x] = f"{x}"
-                return retdict
-            else:
-                key = int(setting.strip(), 16)
-                value = f"{key}"
+                k, v = setting.split("-", 1)
+                key = int(k.strip(), 16)
+                value = v.strip()
 
                 return {key: value}
+            else:
+                if " to " in setting:
+                    low, high = setting.split(" to ", 1)
+                    low = low.strip()
+                    high = high.strip()
+
+                    retdict: Dict[int, str] = {}
+                    for x in range(int(low, 16), int(high, 16) + 1):
+                        retdict[x] = f"{x}"
+                    return retdict
+                else:
+                    key = int(setting.strip(), 16)
+                    value = f"{key}"
+
+                    return {key: value}
+        except ValueError:
+            raise SettingsParseException(
+                f"Failed to parse setting \"{name}\", could not understand value \"{setting}\".",
+                filename,
+            )
 
     @staticmethod
-    def __get_vals(setting: str) -> Tuple[str, List[int]]:
-        name, rest = setting.split(" is ", 1)
-        name = name.strip()
-        vals: List[int] = []
+    def __get_vals(filename: str, name: str, setting: str) -> Tuple[str, List[int]]:
+        try:
+            name, rest = setting.split(" is ", 1)
+            name = name.strip()
+            vals: List[int] = []
 
-        for val in rest.split(" or "):
-            vals.append(int(val, 16))
+            for val in rest.split(" or "):
+                vals.append(int(val, 16))
 
-        return name, vals
+            return name, vals
+        except ValueError:
+            raise SettingsParseException(
+                f"Failed to parse setting \"{name}\", could not understand if condition \"{setting}\".",
+                filename,
+            )
 
     @staticmethod
-    def from_data(data: str) -> "SettingsConfig":
+    def from_data(filename: str, data: str) -> "SettingsConfig":
         rawlines = data.splitlines()
         lines: List[str] = []
         settings: List[Setting] = []
@@ -285,7 +341,7 @@ class SettingsConfig:
             if ":" not in line:
                 # Assume that this is a setting entry.
                 if not lines:
-                    raise Exception("Cannot have setting section before setting!")
+                    raise SettingsParseException(f"Missing setting name before size, read-only specifier, defaults or value in \"{line}\". Perhaps you forgot a colon?", filename)
 
                 cur = lines[-1]
                 if cur.strip()[-1] == ":":
@@ -330,32 +386,34 @@ class SettingsConfig:
                     elif "nibble" in units:
                         size = SettingSizeEnum.NIBBLE
                     else:
-                        raise Exception(f"Unrecognized unit {units}!")
+                        raise SettingsParseException(f"Unrecognized unit \"{units}\" for setting \"{name}\". Perhaps you misspelled \"byte\" or \"nibble\"?", filename)
                     if size != SettingSizeEnum.BYTE and length != 1:
-                        raise Exception(f"Invalid length for unit {units}!")
+                        raise SettingsParseException(f"Invalid length \"{length}\" for setting \"{name}\". You should only specify a length for bytes.", filename)
 
                 elif "read-only" in bit:
+                    condstr = None
                     if " if " in bit:
-                        readonlystr, rest = bit.split(" if ", 1)
+                        readonlystr, condstr = bit.split(" if ", 1)
                         negate = True
                     elif " unless " in bit:
-                        readonlystr, rest = bit.split(" unless ", 1)
+                        readonlystr, condstr = bit.split(" unless ", 1)
                         negate = False
                     else:
                         # Its unconditionally read-only.
                         read_only = True
-                        continue
+                        readonlystr = bit
 
                     if readonlystr.strip() != "read-only":
-                        raise Exception(f"Cannot parse read-only condition {bit}!")
-                    condname, condvalues = SettingsConfig.__get_vals(rest)
-                    read_only = ReadOnlyCondition(condname, condvalues, negate)
+                        raise SettingsParseException(f"Cannot parse read-only condition \"{bit}\" for setting \"{name}\"!", filename)
+                    if condstr is not None:
+                        condname, condvalues = SettingsConfig.__get_vals(filename, name, condstr)
+                        read_only = ReadOnlyCondition(filename, name, condname, condvalues, negate)
 
                 elif "default" in bit:
                     if " is " in bit:
                         defstr, rest = bit.split(" is ", 1)
                         if defstr.strip() != "default":
-                            raise Exception(f"Cannot parse default {bit}!")
+                            raise SettingsParseException(f"Cannot parse default \"{bit}\" for setting \"{name}\"!", filename)
 
                         condstr = None
                         if " if " in rest:
@@ -370,7 +428,7 @@ class SettingsConfig:
 
                         rest = rest.strip().replace(" ", "").replace("\t", "")
                         defbytes = bytes([int(rest[i:(i + 2)], 16) for i in range(0, len(rest), 2)])
-                        if len(defbytes) == 1:
+                        if size != SettingSizeEnum.UNKNOWN and len(defbytes) == 1:
                             defaultint = defbytes[0]
                         else:
                             if size == SettingSizeEnum.NIBBLE:
@@ -383,28 +441,39 @@ class SettingsConfig:
                                 elif length == 4:
                                     defaultint = struct.unpack("<I", defbytes[0:4])[0]
                                 else:
-                                    raise Exception(f"Cannot convert default {bit}!")
+                                    raise SettingsParseException(
+                                        f"Cannot convert default \"{bit}\" for setting \"{name}\" because we don't know how to handle length \"{length}\"!",
+                                        filename,
+                                    )
                             else:
-                                raise Exception("Must place default after size specifier!")
+                                raise SettingsParseException(f"Must place default \"{bit}\" after size specifier in setting \"{name}\"!", filename)
 
                         if condstr is None:
                             if default is not None:
-                                raise Exception("Cannot specify more than one unconditional default!")
+                                if isinstance(default, DefaultConditionGroup):
+                                    raise SettingsParseException(f"Cannot specify an unconditional default alongside conditional defaults for setting \"{name}\"!", filename)
+                                else:
+                                    raise SettingsParseException(f"Cannot specify more than one default for setting \"{name}\"!", filename)
                             default = defaultint
                         else:
                             if default is None:
-                                default = DefaultConditionGroup([])
+                                default = DefaultConditionGroup(filename, name, [])
                             if not isinstance(default, DefaultConditionGroup):
-                                raise Exception("Cannot mix and match unconditional and conditional defaults!")
+                                raise SettingsParseException(f"Cannot specify an unconditional default alongside conditional defaults for setting \"{name}\"!", filename)
 
-                            condname, condvalues = SettingsConfig.__get_vals(condstr)
+                            condname, condvalues = SettingsConfig.__get_vals(filename, name, condstr)
                             default.conditions.append(DefaultCondition(condname, condvalues, negate, defaultint))
                     else:
-                        raise Exception(f"Default missing for default section in {bit}!")
+                        raise SettingsParseException(f"Cannot parse default for setting \"{name}\"! Specify defaults like \"default is 0\".", filename)
 
                 else:
                     # Assume this is a setting value.
-                    values.update(SettingsConfig.__get_kv(bit))
+                    values.update(SettingsConfig.__get_kv(filename, name, bit))
+
+            if size == SettingSizeEnum.UNKNOWN:
+                raise SettingsParseException(f"Setting \"{name}\" is missing a size specifier!", filename)
+            if read_only is not True and not values:
+                raise SettingsParseException(f"Setting \"{name}\" is missing any valid values!", filename)
 
             settings.append(
                 Setting(
@@ -424,9 +493,9 @@ class SettingsConfig:
                 halves = 1 - halves
             elif setting.size == SettingSizeEnum.BYTE:
                 if halves != 0:
-                    raise Exception(f"Setting {setting.name} comes after a single nibble, but it needs to be byte-aligned!")
+                    raise SettingsParseException(f"The setting \"{setting.name}\" follows a lonesome nibble. Nibble settings must always be in pairs!", filename)
 
-        return SettingsConfig(settings)
+        return SettingsConfig(filename, settings)
 
     def defaults(self) -> bytes:
         pending = 0
@@ -440,7 +509,7 @@ class SettingsConfig:
                 default = setting.default
             elif isinstance(setting.default, DefaultConditionGroup):
                 # Must evaluate settings to figure out the default for this.
-                default = setting.default.evaluate(self.settings)
+                default = setting.default.evaluate(self.filename, setting.name, self.settings)
 
             if setting.size == SettingSizeEnum.NIBBLE:
                 if halves == 0:
@@ -454,7 +523,7 @@ class SettingsConfig:
                     halves = 0
             elif setting.size == SettingSizeEnum.BYTE:
                 if halves != 0:
-                    raise Exception("Logic error!")
+                    raise SettingsSaveException(f"The setting \"{setting.name}\" follows a lonesome nibble. Nibble settings must always be in pairs!", self.filename)
                 if setting.length == 1:
                     defaults.append(struct.pack("<B", default))
                 elif setting.length == 2:
@@ -462,7 +531,7 @@ class SettingsConfig:
                 elif setting.length == 4:
                     defaults.append(struct.pack("<I", default))
                 else:
-                    raise Exception(f"Cannot convert setting of length {setting.length}!")
+                    raise SettingsSaveException(f"Cannot save setting \"{setting.name}\" with unrecognized size {setting.length}!", self.filename)
 
         return b"".join(defaults)
 
@@ -484,7 +553,7 @@ class SettingsManager:
         with open(files[fname], "r") as fp:
             data = fp.read()
 
-        return SettingsConfig.from_data(data)
+        return SettingsConfig.from_data(fname, data)
 
     def from_serial(self, serial: bytes) -> SettingsWrapper:
         config = self.__serial_to_config(serial)
@@ -501,7 +570,7 @@ class SettingsManager:
         # Now load the system settings.
         with open(os.path.join(self.__directory, "system.settings"), "r") as fp:
             systemdata = fp.read()
-        systemconfig = SettingsConfig.from_data(systemdata)
+        systemconfig = SettingsConfig.from_data("system.settings", systemdata)
 
         # Now load the game settings, or if it doesn't exist, default to only
         # allowing system settings to be set.

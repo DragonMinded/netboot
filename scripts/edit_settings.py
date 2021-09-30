@@ -3,7 +3,7 @@ import argparse
 import os
 import sys
 
-from settings import SettingsManager
+from settings import SettingsManager, SettingsParseException, SettingsSaveException
 
 
 # The root of the repo.
@@ -41,11 +41,15 @@ def main() -> int:
     # First, try to open the EEPRom file. If it does not exist, then we need to create a default.
     manager = SettingsManager(args.settings_directory)
     try:
-        with open(args.eeprom, "rb") as fp:
-            data = fp.read()
-        settings = manager.from_eeprom(data)
-    except OSError:
-        settings = manager.from_serial(args.serial.encode('ascii'))
+        try:
+            with open(args.eeprom, "rb") as fp:
+                data = fp.read()
+            settings = manager.from_eeprom(data)
+        except OSError:
+            settings = manager.from_serial(args.serial.encode('ascii'))
+    except (SettingsParseException, SettingsSaveException) as e:
+        print(f"Error in \"{e.filename}\":", str(e), file=sys.stderr)
+        return 1
 
     print(settings)
 

@@ -4,7 +4,7 @@ import os
 import sys
 
 from naomi import NaomiSettingsPatcher
-from settings import SettingsManager, ReadOnlyCondition
+from settings import SettingsManager, ReadOnlyCondition, SettingsParseException, SettingsSaveException
 
 
 # The root of the repo.
@@ -165,34 +165,18 @@ def main() -> int:
             eepromdata = patcher.get_settings()
             config = None
 
-            if eepromdata is not None:
-                try:
-                    config = manager.from_eeprom(eepromdata)
-                except Exception:
-                    # We don't have the directory configured, so skip this.
-                    pass
+            try:
+                if eepromdata is not None:
+                    try:
+                        config = manager.from_eeprom(eepromdata)
+                    except FileNotFoundError:
+                        # We don't have the directory configured, so skip this.
+                        pass
 
-            if config is not None:
-                print("System Settings:")
+                if config is not None:
+                    print("System Settings:")
 
-                for setting in config.system.settings:
-                    # Don't show read-only settints.
-                    if setting.read_only is True:
-                        continue
-                    if isinstance(setting.read_only, ReadOnlyCondition):
-                        if setting.read_only.evaluate(config.system.settings):
-                            continue
-
-                    # This shouldn't happen, but make mypy happy.
-                    if setting.current is None:
-                        continue
-
-                    print(f"  {setting.name}: {setting.values[setting.current]}")
-
-                print("Game Settings:")
-
-                if config.game.settings:
-                    for setting in config.game.settings:
+                    for setting in config.system.settings:
                         # Don't show read-only settints.
                         if setting.read_only is True:
                             continue
@@ -205,8 +189,28 @@ def main() -> int:
                             continue
 
                         print(f"  {setting.name}: {setting.values[setting.current]}")
-                else:
-                    print("  No game settings, game will use its own defaults.")
+
+                    print("Game Settings:")
+
+                    if config.game.settings:
+                        for setting in config.game.settings:
+                            # Don't show read-only settints.
+                            if setting.read_only is True:
+                                continue
+                            if isinstance(setting.read_only, ReadOnlyCondition):
+                                if setting.read_only.evaluate(config.game.settings):
+                                    continue
+
+                            # This shouldn't happen, but make mypy happy.
+                            if setting.current is None:
+                                continue
+
+                            print(f"  {setting.name}: {setting.values[setting.current]}")
+                    else:
+                        print("  No game settings, game will use its own defaults.")
+            except (SettingsParseException, SettingsSaveException) as e:
+                print(f"Error in \"{e.filename}\":", str(e), file=sys.stderr)
+                return 1
 
     else:
         print(f"Invalid action {args.action}!", file=sys.stderr)
