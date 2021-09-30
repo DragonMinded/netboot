@@ -52,7 +52,6 @@ def main() -> int:
         return 1
 
     # TODO: Invoke CLI editor, allow changing settings.
-    print(settings)
 
     # Now, write out the EEPROM.
     eeprom = manager.to_eeprom(settings)

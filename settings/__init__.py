@@ -34,6 +34,12 @@ class SettingsSaveException(Exception):
         self.filename = filename
 
 
+class JSONParseException(Exception):
+    def __init__(self, msg: str, context: List[str]) -> None:
+        super().__init__(msg)
+        self.context = context
+
+
 class ReadOnlyCondition:
     # A wrapper class to encapsulate that a setting is read-only based on the
     # value of another setting.
@@ -128,6 +134,121 @@ class Setting:
         if length > 1 and size != SettingSizeEnum.BYTE:
             raise Exception("Logic error!")
 
+    @staticmethod
+    def from_json(filename: str, jsondict: Dict[str, Any], context: List[str]) -> "Setting":
+        # Convert JSON dictionary back to a Setting class.
+        name = jsondict.get('name')
+        if not isinstance(name, str):
+            raise JSONParseException(f"\"name\" key in JSON has invalid data \"{name}\"!", context)
+
+        sizestr = jsondict.get('size')
+        if not isinstance(sizestr, str):
+            raise JSONParseException(f"\"size\" key in JSON has invalid data \"{sizestr}\"!", context)
+        try:
+            size = SettingSizeEnum[sizestr]
+        except KeyError:
+            size = SettingSizeEnum.UNKNOWN
+        if size == SettingSizeEnum.UNKNOWN:
+            raise JSONParseException(f"\"size\" key in JSON has invalid data \"{sizestr}\"!", context)
+
+        length = jsondict.get('length')
+        if not isinstance(length, int):
+            raise JSONParseException(f"\"length\" key in JSON has invalid data \"{length}\"!", context)
+
+        current = jsondict.get('current')
+        if current is not None and not isinstance(current, int):
+            raise JSONParseException(f"\"current\" key in JSON has invalid data \"{current}\"!", context)
+
+        valuedict = jsondict.get('values')
+        values: Optional[Dict[int, str]] = None
+        if valuedict is not None:
+            if not isinstance(valuedict, dict):
+                raise JSONParseException(f"\"values\" key in JSON has invalid data \"{valuedict}\"!", context)
+            try:
+                values = {int(k): str(v) for (k, v) in valuedict.items()}
+            except ValueError:
+                pass
+            if values is None:
+                raise JSONParseException(f"\"values\" key in JSON has invalid data \"{valuedict}\"!", context)
+
+        readonlydict = jsondict.get('readonly')
+        readonly: Union[bool, ReadOnlyCondition]
+        if readonlydict is True:
+            readonly = True
+        elif readonlydict is False:
+            readonly = False
+        elif isinstance(readonlydict, dict):
+            # Parse out conditional.
+            roname = readonlydict.get('name')
+            if not isinstance(roname, str):
+                raise JSONParseException(f"\"name\" key in JSON has invalid data \"{roname}\"!", [*context, "readonly"])
+
+            rovaluelist = readonlydict.get('values')
+            if not isinstance(rovaluelist, list):
+                raise JSONParseException(f"\"values\" key in JSON has invalid data \"{rovaluelist}\"!", [*context, "readonly"])
+            rovalues = None
+            try:
+                rovalues = [int(k) for k in rovaluelist]
+            except ValueError:
+                pass
+            if rovalues is None:
+                raise JSONParseException(f"\"values\" key in JSON has invalid data \"{rovaluelist}\"!", [*context, "readonly"])
+
+            ronegate = readonlydict.get('negate')
+            if not isinstance(ronegate, bool):
+                raise JSONParseException(f"\"negate\" key in JSON has invalid data \"{ronegate}\"!", [*context, "readonly"])
+
+            readonly = ReadOnlyCondition(filename, name, roname, rovalues, ronegate)
+        else:
+            raise JSONParseException(f"\"readonly\" key in JSON has invalid data \"{readonlydict}\"!", context)
+
+        defaultdict = jsondict.get('default')
+        default: Optional[Union[int, DefaultConditionGroup]] = None
+        if defaultdict is None or isinstance(defaultdict, int):
+            default = defaultdict
+        elif isinstance(defaultdict, list):
+            # Go through each entry in the list and parse out the conditionals.
+            default = DefaultConditionGroup(filename, name, [])
+
+            for i, defaultblob in enumerate(defaultdict):
+                # Parse out conditional.
+                defname = defaultblob.get('name')
+                if not isinstance(defname, str):
+                    raise JSONParseException(f"\"name\" key in JSON has invalid data \"{defname}\"!", [*context, f"default[{i}]"])
+
+                defvaluelist = defaultblob.get('values')
+                if not isinstance(defvaluelist, list):
+                    raise JSONParseException(f"\"values\" key in JSON has invalid data \"{defvaluelist}\"!", [*context, f"default[{i}]"])
+                defvalues = None
+                try:
+                    defvalues = [int(k) for k in defvaluelist]
+                except ValueError:
+                    pass
+                if defvalues is None:
+                    raise JSONParseException(f"\"values\" key in JSON has invalid data \"{defvaluelist}\"!", [*context, f"default[{i}]"])
+
+                defnegate = defaultblob.get('negate')
+                if not isinstance(defnegate, bool):
+                    raise JSONParseException(f"\"negate\" key in JSON has invalid data \"{defnegate}\"!", [*context, f"default[{i}]"])
+
+                defdefault = defaultblob.get('default')
+                if not isinstance(defdefault, int):
+                    raise JSONParseException(f"\"default\" key in JSON has invalid data \"{defdefault}\"!", [*context, f"default[{i}]"])
+
+                default.conditions.append(DefaultCondition(defname, defvalues, defnegate, defdefault))
+        else:
+            raise JSONParseException(f"\"default\" key in JSON has invalid data \"{defaultdict}\"!", context)
+
+        return Setting(
+            name,
+            size,
+            length,
+            readonly,
+            values,
+            current,
+            default,
+        )
+
     def to_json(self) -> Dict[str, Any]:
         jdict = {
             'name': self.name,
@@ -148,7 +269,7 @@ class Setting:
                 "negate": self.read_only.negate,
             }
 
-        if isinstance(self.default, int):
+        if self.default is None or isinstance(self.default, int):
             jdict['default'] = self.default
         elif isinstance(self.default, DefaultConditionGroup):
             jdict['default'] = [
@@ -270,6 +391,35 @@ class Settings:
 
         return length
 
+    @staticmethod
+    def from_json(type: SettingType, config: "SettingsConfig", jsondict: Dict[str, Any], context: List[str]) -> "Settings":
+        # First, parse out the keys that we know we need.
+        typestr = jsondict.get('type')
+        if not isinstance(typestr, str) or typestr != type.name:
+            raise JSONParseException(f"\"type\" key in JSON has invalid data \"{typestr}\"!", context)
+        filename = jsondict.get('filename')
+        if not isinstance(filename, str) or filename != config.filename:
+            raise JSONParseException(f"\"filename\" key in JSON has invalid data \"{filename}\"!", context)
+        settings = jsondict.get('settings')
+        if not isinstance(settings, list):
+            raise JSONParseException(f"\"settings\" key in JSON has invalid data \"{settings}\"!", context)
+
+        # Now, parse out the settings in the dict.
+        parsedsettings = [Setting.from_json(config.filename, s, [*context, f"settings[{i}]"]) for (i, s) in enumerate(settings)]
+
+        # Finally, go through our config and match up settings to their values.
+        loadedsettings = config.settings
+        for setting in loadedsettings:
+            for parsedsetting in parsedsettings:
+                if parsedsetting.name.lower() == setting.name.lower():
+                    # It's a match
+                    setting.current = parsedsetting.current
+                    break
+            else:
+                raise JSONParseException(f"Setting \"{setting.name}\" could not be found in JSON!", context)
+
+        return Settings(config.filename, loadedsettings, type=type)
+
     def to_json(self) -> Dict[str, Any]:
         return {
             'type': self.type.name,
@@ -298,8 +448,35 @@ class SettingsWrapper:
         self.game.type = SettingType.GAME
 
     @staticmethod
-    def from_json(settings_files: Dict[str, str], jsondict: Dict[str, Any]) -> "SettingsWrapper":
-        raise NotImplementedError("TODO")
+    def from_json(settings_files: Dict[str, str], jsondict: Dict[str, Any], context: List[str]) -> "SettingsWrapper":
+        # First, verify that we at least know about the system settings file.
+        if "system.settings" not in settings_files:
+            raise FileNotFoundError("system.settings does not seem to exist in settings definition directory!")
+
+        # Now, grab the sections that we know we can parse.
+        serial = jsondict.get('serial')
+        if not isinstance(serial, str) or len(serial) != 4:
+            raise JSONParseException(f"\"serial\" key in JSON has invalid data \"{serial}\"!", context)
+        serialbytes = serial.encode('ascii')
+        gamejson = jsondict.get('game')
+        if not isinstance(gamejson, dict):
+            raise JSONParseException(f"\"game\" key in JSON has invalid data \"{gamejson}\"!", context)
+        systemjson = jsondict.get('system')
+        if not isinstance(systemjson, dict):
+            raise JSONParseException(f"\"system\" key in JSON has invalid data \"{systemjson}\"!", context)
+
+        # First, load the system settings.
+        with open(os.path.join(settings_files["system.settings"]), "r") as fp:
+            systemdata = fp.read()
+        systemconfig = SettingsConfig.from_data("system.settings", systemdata)
+
+        # Now load the game settings, or if it doesn't exist, default to only allowing system settings to be set.
+        gameconfig = SettingsManager.serial_to_config(settings_files, serialbytes) or SettingsConfig.blank()
+
+        # Finally parse the EEPRom based on the config.
+        system = Settings.from_json(SettingType.SYSTEM, systemconfig, systemjson, [*context, "system"])
+        game = Settings.from_json(SettingType.GAME, gameconfig, gamejson, [*context, "game"])
+        return SettingsWrapper(serialbytes, system, game)
 
     def to_json(self) -> Dict[str, Any]:
         return {
@@ -610,8 +787,12 @@ class SettingsManager:
     def __init__(self, directory: str) -> None:
         self.__directory = directory
 
-    def __serial_to_config(self, serial: bytes) -> Optional[SettingsConfig]:
-        files = {f: os.path.join(self.__directory, f) for f in os.listdir(self.__directory) if os.path.isfile(os.path.join(self.__directory, f))}
+    @property
+    def files(self) -> Dict[str, str]:
+        return {f: os.path.join(self.__directory, f) for f in os.listdir(self.__directory) if os.path.isfile(os.path.join(self.__directory, f))}
+
+    @staticmethod
+    def serial_to_config(files: Dict[str, str], serial: bytes) -> Optional[SettingsConfig]:
         fname = f"{serial.decode('ascii')}.settings"
 
         if fname not in files:
@@ -623,7 +804,7 @@ class SettingsManager:
         return SettingsConfig.from_data(fname, data)
 
     def from_serial(self, serial: bytes) -> SettingsWrapper:
-        config = self.__serial_to_config(serial)
+        config = self.serial_to_config(self.files, serial)
         defaults = None
         if config is not None:
             defaults = config.defaults()
@@ -641,18 +822,15 @@ class SettingsManager:
 
         # Now load the game settings, or if it doesn't exist, default to only
         # allowing system settings to be set.
-        gameconfig = self.__serial_to_config(eeprom.serial) or SettingsConfig.blank()
+        gameconfig = self.serial_to_config(self.files, eeprom.serial) or SettingsConfig.blank()
 
         # Finally parse the EEPRom based on the config.
         system = Settings.from_config(SettingType.SYSTEM, systemconfig, eeprom)
         game = Settings.from_config(SettingType.GAME, gameconfig, eeprom)
         return SettingsWrapper(eeprom.serial, system, game)
 
-    def from_json(self, jsondict: Dict[str, Any]) -> SettingsWrapper:
-        return SettingsWrapper.from_json(
-            {f: os.path.join(self.__directory, f) for f in os.listdir(self.__directory) if os.path.isfile(os.path.join(self.__directory, f))},
-            jsondict,
-        )
+    def from_json(self, jsondict: Dict[str, Any], context: Optional[List[str]] = None) -> SettingsWrapper:
+        return SettingsWrapper.from_json(self.files, jsondict, context or [])
 
     def to_eeprom(self, settings: SettingsWrapper) -> bytes:
         # First, create the EEPROM.
