@@ -1,10 +1,10 @@
 # Whether attract sounds are enabled for the startup chime and in-game.
-Attract Sounds: nibble
+Attract Sounds: half-byte
   0 - Off
   1 - On
 
 # Whether the monitor should be horizontal or vertical.
-Monitor Orientation: nibble
+Monitor Orientation: half-byte
   0 - Horizontal
   1 - Vertical
 
@@ -17,14 +17,14 @@ Serial Number: 4 bytes, read-only
 Unknown: byte, read-only
 
 # The cabinet configuration for number of controls.
-Number of Players: nibble
+Number of Players: half-byte
   0 - 1 Player
   1 - 2 Players
   2 - 3 Players
   3 - 4 Players
 
 # Whether the coin chutes should be considered common or have separate functionality.
-Coin Chute: nibble
+Coin Chute: half-byte
   0 - Common
   1 - Individual
 
@@ -76,11 +76,11 @@ Chute 2 Coin Multiplier: byte, read-only unless Coin Assignments is 1B, values a
 Bonus Coin on X Credits: byte, read-only unless Coin Assignments is 1B, values are 0, 2, 3, 4, 5, 6, 7, 8, 9
 
 # Continue sequence texts. Presumably this is for games that support coins/bill acceptors/etc.
-Sequence 1: nibble, values are 1 to 5
-Sequence 2: nibble, values are 1 to 5
-Sequence 3: nibble, values are 1 to 5
-Sequence 4: nibble, values are 1 to 5
-Sequence 5: nibble, values are 1 to 5
-Sequence 6: nibble, values are 1 to 5
-Sequence 7: nibble, values are 1 to 5
-Sequence 8: nibble, values are 1 to 5
+Sequence 1: half-byte, values are 1 to 5
+Sequence 2: half-byte, values are 1 to 5
+Sequence 3: half-byte, values are 1 to 5
+Sequence 4: half-byte, values are 1 to 5
+Sequence 5: half-byte, values are 1 to 5
+Sequence 6: half-byte, values are 1 to 5
+Sequence 7: half-byte, values are 1 to 5
+Sequence 8: half-byte, values are 1 to 5

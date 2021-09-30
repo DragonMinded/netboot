@@ -206,7 +206,7 @@ class Settings:
                     location += 1
             elif setting.size == SettingSizeEnum.BYTE:
                 if halves != 0:
-                    raise SettingsParseException(f"The setting \"{setting.name}\" follows a lonesome nibble. Nibble settings must always be in pairs!", config.filename)
+                    raise SettingsParseException(f"The setting \"{setting.name}\" follows a lonesome half-byte. Half-byte settings must always be in pairs!", config.filename)
                 if setting.length == 1:
                     setting.current = struct.unpack("<B", data[location:(location + 1)])[0]
                 elif setting.length == 2:
@@ -390,7 +390,7 @@ class SettingsConfig:
                 restbits = [rest]
 
             for bit in restbits:
-                if "byte" in bit or "nibble" in bit:
+                if "byte" in bit or "nibble" in bit or "half-byte" in bit:
                     if " " in bit:
                         lenstr, units = bit.split(" ", 1)
                         length = int(lenstr.strip())
@@ -398,12 +398,12 @@ class SettingsConfig:
                     else:
                         units = bit.strip()
 
-                    if "byte" in units:
-                        size = SettingSizeEnum.BYTE
-                    elif "nibble" in units:
+                    if "nibble" in units or "half-byte" in units:
                         size = SettingSizeEnum.NIBBLE
+                    elif "byte" in units:
+                        size = SettingSizeEnum.BYTE
                     else:
-                        raise SettingsParseException(f"Unrecognized unit \"{units}\" for setting \"{name}\". Perhaps you misspelled \"byte\" or \"nibble\"?", filename)
+                        raise SettingsParseException(f"Unrecognized unit \"{units}\" for setting \"{name}\". Perhaps you misspelled \"byte\" or \"half-byte\"?", filename)
                     if size != SettingSizeEnum.BYTE and length != 1:
                         raise SettingsParseException(f"Invalid length \"{length}\" for setting \"{name}\". You should only specify a length for bytes.", filename)
 
@@ -510,7 +510,7 @@ class SettingsConfig:
                 halves = 1 - halves
             elif setting.size == SettingSizeEnum.BYTE:
                 if halves != 0:
-                    raise SettingsParseException(f"The setting \"{setting.name}\" follows a lonesome nibble. Nibble settings must always be in pairs!", filename)
+                    raise SettingsParseException(f"The setting \"{setting.name}\" follows a lonesome half-byte. Half-byte settings must always be in pairs!", filename)
 
         return SettingsConfig(filename, settings)
 
@@ -540,7 +540,7 @@ class SettingsConfig:
                     halves = 0
             elif setting.size == SettingSizeEnum.BYTE:
                 if halves != 0:
-                    raise SettingsSaveException(f"The setting \"{setting.name}\" follows a lonesome nibble. Nibble settings must always be in pairs!", self.filename)
+                    raise SettingsSaveException(f"The setting \"{setting.name}\" follows a lonesome half-byte. Half-byte settings must always be in pairs!", self.filename)
                 if setting.length == 1:
                     defaults.append(struct.pack("<B", default))
                 elif setting.length == 2:
@@ -608,6 +608,9 @@ class SettingsManager:
         # First, creat the EEPROM.
         eeprom = NaomiEEPRom.default(settings.serial)
 
+        # TODO: Move this to "Settings" object as a "length" attribute, keep the same
+        # calculations. Then, use this length to compare to the game's length when
+        # doing a valid parse, throw if they are different.
         # Now, calculate the length of the game section, so we can create a valid
         # game chunk.
         halves = 0
@@ -624,7 +627,7 @@ class SettingsManager:
             elif setting.size == SettingSizeEnum.BYTE:
                 # First, make sure we aren't in a pending nibble state.
                 if halves != 0:
-                    raise SettingsSaveException(f"The setting \"{setting.name}\" follows a lonesome nibble. Nibble settings must always be in pairs!", settings.game.filename)
+                    raise SettingsSaveException(f"The setting \"{setting.name}\" follows a lonesome half-byte. Half-byte settings must always be in pairs!", settings.game.filename)
 
                 if setting.length not in {1, 2, 4}:
                     raise SettingsSaveException(f"Cannot save setting \"{setting.name}\" with unrecognized size {setting.length}!", settings.game.filename)
@@ -695,7 +698,7 @@ class SettingsManager:
                 elif setting.size == SettingSizeEnum.BYTE:
                     # First, make sure we aren't in a pending nibble state.
                     if halves != 0:
-                        raise SettingsSaveException(f"The setting \"{setting.name}\" follows a lonesome nibble. Nibble settings must always be in pairs!", settingsgroup.filename)
+                        raise SettingsSaveException(f"The setting \"{setting.name}\" follows a lonesome half-byte. Half-byte settings must always be in pairs!", settingsgroup.filename)
 
                     if setting.length not in {1, 2, 4}:
                         raise SettingsSaveException(f"Cannot save setting \"{setting.name}\" with unrecognized size {setting.length}!", settingsgroup.filename)
