@@ -24,9 +24,12 @@ def main() -> int:
         data = fp.read()
 
     eeprom = NaomiEEPRom(data)
-    hexstr = eeprom.game.data.hex()
-    chunks = [hexstr[i:(i + 2)] for i in range(0, len(hexstr), 2)]
-    print(f"Serial: {eeprom.serial.decode('ascii')}, Game Settings:", " ".join(chunks))
+    if eeprom.game.valid:
+        hexstr = eeprom.game.data.hex()
+        chunks = [hexstr[i:(i + 2)] for i in range(0, len(hexstr), 2)]
+        print(f"Serial: {eeprom.serial.decode('ascii')}, Game Settings:", " ".join(chunks))
+    else:
+        print(f"Serial: {eeprom.serial.decode('ascii')}, Game Settings: INVALID")
 
     return 0
 

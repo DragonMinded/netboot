@@ -51,7 +51,13 @@ def main() -> int:
         print(f"Error in \"{e.filename}\":", str(e), file=sys.stderr)
         return 1
 
+    # TODO: Invoke CLI editor, allow changing settings.
     print(settings)
+
+    # Now, write out the EEPROM.
+    eeprom = manager.to_eeprom(settings)
+    with open(args.eeprom, "wb") as fp:
+        fp.write(eeprom)
 
     return 0
 

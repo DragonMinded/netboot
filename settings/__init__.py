@@ -239,15 +239,21 @@ class Settings:
 class SettingsWrapper:
     # A wrapper class to hold both a system and game settings section together.
 
-    def __init__(self, system: Settings, game: Settings) -> None:
+    def __init__(self, serial: bytes, system: Settings, game: Settings) -> None:
+        self.serial = serial
         self.system = system
         self.game = game
 
         self.system.type = SettingType.SYSTEM
         self.game.type = SettingType.GAME
 
+    @staticmethod
+    def from_json(settings_files: Dict[str, str], jsondict: Dict[str, Any]) -> "SettingsWrapper":
+        raise NotImplementedError("TODO")
+
     def to_json(self) -> Dict[str, Any]:
         return {
+            'serial': self.serial.decode('ascii'),
             'system': self.system.to_json(),
             'game': self.game.to_json(),
         }
@@ -584,4 +590,119 @@ class SettingsManager:
         # Finally parse the EEPRom based on the config.
         system = Settings.from_config(SettingType.SYSTEM, systemconfig, eeprom)
         game = Settings.from_config(SettingType.GAME, gameconfig, eeprom)
-        return SettingsWrapper(system, game)
+        return SettingsWrapper(eeprom.serial, system, game)
+
+    def from_json(self, jsondict: Dict[str, Any]) -> SettingsWrapper:
+        return SettingsWrapper.from_json(
+            {f: os.path.join(self.__directory, f) for f in os.listdir(self.__directory) if os.path.isfile(os.path.join(self.__directory, f))},
+            jsondict,
+        )
+
+    def to_eeprom(self, settings: SettingsWrapper) -> bytes:
+        # First, creat the EEPROM.
+        eeprom = NaomiEEPRom.default(settings.serial)
+
+        # Now, calculate the length of the game section, so we can create a valid
+        # game chunk.
+        halves = 0
+        length = 0
+        for setting in settings.game.settings:
+            if setting.size == SettingSizeEnum.NIBBLE:
+                # Update our length.
+                if halves == 0:
+                    halves = 1
+                else:
+                    halves = 0
+                    length += 1
+
+            elif setting.size == SettingSizeEnum.BYTE:
+                # First, make sure we aren't in a pending nibble state.
+                if halves != 0:
+                    raise SettingsSaveException(f"The setting \"{setting.name}\" follows a lonesome nibble. Nibble settings must always be in pairs!", settings.game.filename)
+
+                if setting.length not in {1, 2, 4}:
+                    raise SettingsSaveException(f"Cannot save setting \"{setting.name}\" with unrecognized size {setting.length}!", settings.game.filename)
+
+                # Update our length.
+                length += setting.length
+
+        # Now, update the game length.
+        eeprom.length = length
+
+        for section, settingsgroup in [
+            (eeprom.system, settings.system),
+            (eeprom.game, settings.game),
+        ]:
+            pending = 0
+            halves = 0
+            location = 0
+
+            if not section.valid:
+                # If we couldn't make this section correct, completely skip out on it.
+                continue
+
+            for setting in settingsgroup.settings:
+                # First, calculate what the default should be in case we need to use it.
+                if setting.default is None:
+                    default = None
+                elif isinstance(setting.default, int):
+                    default = setting.default
+                elif isinstance(setting.default, DefaultConditionGroup):
+                    # Must evaluate settings to figure out the default for this.
+                    default = setting.default.evaluate(settingsgroup.filename, setting.name, settingsgroup.settings)
+
+                # Now, figure out if we should defer to the default over the current value
+                # (if it is read-only) or if we should use the current value.
+                if isinstance(setting.read_only, ReadOnlyCondition):
+                    read_only = setting.read_only.evaluate(settingsgroup.settings)
+                elif setting.read_only is True:
+                    read_only = True
+                elif setting.read_only is False:
+                    read_only = False
+
+                if read_only:
+                    # If it is read-only, then only take the current value if the default doesn't
+                    # exist. This lets settings that are selectively read-only get a conditional
+                    # default if one exists that takes precedence over the current value.
+                    value = setting.current if default is None else default
+                else:
+                    # If the setting is not read-only, then only take the default if the current
+                    # value is None.
+                    value = default if setting.current is None else setting.current
+
+                # Now, write out the setting by updating the EEPROM in the correct location.
+                if setting.size == SettingSizeEnum.NIBBLE:
+                    # First, if we have anything to write, write it.
+                    if value is not None:
+                        if halves == 0:
+                            pending = (value & 0xF) << 4
+                        else:
+                            section[location] = (value & 0xF) | pending
+
+                    # Now, update our position.
+                    if halves == 0:
+                        halves = 1
+                    else:
+                        halves = 0
+                        location += 1
+
+                elif setting.size == SettingSizeEnum.BYTE:
+                    # First, make sure we aren't in a pending nibble state.
+                    if halves != 0:
+                        raise SettingsSaveException(f"The setting \"{setting.name}\" follows a lonesome nibble. Nibble settings must always be in pairs!", settingsgroup.filename)
+
+                    if setting.length not in {1, 2, 4}:
+                        raise SettingsSaveException(f"Cannot save setting \"{setting.name}\" with unrecognized size {setting.length}!", settingsgroup.filename)
+
+                    if value is not None:
+                        if setting.length == 1:
+                            section[location:(location + 1)] = struct.pack("<B", value)
+                        elif setting.length == 2:
+                            section[location:(location + 2)] = struct.pack("<H", value)
+                        elif setting.length == 4:
+                            section[location:(location + 4)] = struct.pack("<I", value)
+
+                    # Now, update our position.
+                    location += setting.length
+
+        return eeprom.data

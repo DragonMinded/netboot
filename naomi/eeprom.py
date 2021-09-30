@@ -1,5 +1,5 @@
 import struct
-from typing import Optional, Union, cast, overload
+from typing import Callable, Optional, Union, cast, overload
 
 
 class NaomiEEPRomException(Exception):
@@ -7,12 +7,17 @@ class NaomiEEPRomException(Exception):
 
 
 class ArrayBridge:
-    def __init__(self, parent: "NaomiEEPRom", name: str, length: int, offset1: int, offset2: int) -> None:
+    def __init__(self, parent: "NaomiEEPRom", valid_callback: Callable[[bytes], bool], name: str, length: int, offset1: int, offset2: int) -> None:
         self.name = name
+        self.__callback = valid_callback
         self.__length = length
         self.__offset1 = offset1
         self.__offset2 = offset2
         self.__parent = parent
+
+    @property
+    def valid(self) -> bool:
+        return self.__callback(self.__parent._data)
 
     @property
     def data(self) -> bytes:
@@ -66,14 +71,53 @@ class ArrayBridge:
             if isinstance(val, int):
                 val = bytes([val])
 
+            if len(val) != 1:
+                raise NaomiEEPRomException(f"Cannot change size of {self.name} EEPRom section when assigning!")
+
             # Make sure we set both bytes in each section.
             for realkey in [key + self.__offset1, key + self.__offset2]:
                 self.__parent._data = self.__parent._data[:realkey] + val + self.__parent._data[realkey + 1:]
+
+            # Sanity check what we did here.
             if len(self.__parent._data) != 128:
                 raise Exception("Logic error!")
 
         else:
-            raise NaomiEEPRomException("Cannot set more than one byte at a time!")
+            # Determine start of slice
+            if key.start is None:
+                start = 0
+            elif key.start < 0:
+                raise Exception("Do not support negative indexing!")
+            else:
+                start = key.start
+
+            if key.stop is None:
+                stop = self.__length
+            elif key.stop < 0:
+                raise Exception("Do not support negative indexing!")
+            elif key.stop > self.__length:
+                raise NaomiEEPRomException(f"Cannot set bytes outside of {self.name} EEPRom section!")
+            else:
+                stop = key.stop
+
+            if key.step not in {None, 1}:
+                raise NaomiEEPRomException(f"Cannot set bytes with stride != 1 for {self.name} EEPRom section!")
+
+            # Check input to function.
+            if not isinstance(val, bytes):
+                raise NaomiEEPRomException(f"Cannot change size of {self.name} EEPRom section when assigning!")
+            if len(val) != (stop - start):
+                raise NaomiEEPRomException(f"Cannot change size of {self.name} EEPRom section when assigning!")
+
+            # Make sure we set both bytes in each section.
+            for realstart, realstop in [
+                (start + self.__offset1, stop + self.__offset1),
+                (start + self.__offset2, stop + self.__offset2),
+            ]:
+                self.__parent._data = self.__parent._data[:realstart] + val + self.__parent._data[realstop:]
+
+            if len(self.__parent._data) != 128:
+                raise Exception("Logic error!")
 
 
 class NaomiEEPRom:
@@ -93,7 +137,7 @@ class NaomiEEPRom:
             if padding_len > 0:
                 game_settings += b'\xFF' * padding_len
 
-        system = bytes([0x10]) + serial + bytes([0x18, 0x10, 0x00, 0x01, 0x01, 0x01, 0x00, 0x11, 0x11, 0x11, 0x11])
+        system = bytes([0x10]) + serial + bytes([0x09, 0x10, 0x00, 0x01, 0x01, 0x01, 0x00, 0x11, 0x11, 0x11, 0x11])
         system_crc = NaomiEEPRom.crc(system)
         return NaomiEEPRom(system_crc + system + system_crc + system + game_settings)
 
@@ -140,10 +184,30 @@ class NaomiEEPRom:
         if len(data) != 128:
             return False
 
+        if not NaomiEEPRom.__validate_system(data):
+            return False
+        if only_system:
+            return True
+        return NaomiEEPRom.__validate_game(data)
+
+    @staticmethod
+    def __validate_system(data: bytes) -> bool:
         # Returns whether the settings chunk passes CRC.
         sys_section1 = data[2:18]
         sys_section2 = data[20:36]
 
+        if data[0:2] != NaomiEEPRom.crc(sys_section1):
+            # The CRC doesn't match!
+            return False
+        if data[18:20] != NaomiEEPRom.crc(sys_section2):
+            # The CRC doesn't match!
+            return False
+
+        # System section is good
+        return True
+
+    @staticmethod
+    def __validate_game(data: bytes) -> bool:
         game_size1, game_size2 = struct.unpack("<BB", data[38:40])
         if game_size1 != game_size2:
             # These numbers should always match.
@@ -157,20 +221,12 @@ class NaomiEEPRom:
         game_section1 = data[44:(44 + game_size1)]
         game_section2 = data[(44 + game_size1):(44 + game_size1 + game_size3)]
 
-        if data[0:2] != NaomiEEPRom.crc(sys_section1):
+        if data[36:38] != NaomiEEPRom.crc(game_section1):
             # The CRC doesn't match!
             return False
-        if data[18:20] != NaomiEEPRom.crc(sys_section2):
+        if data[40:42] != NaomiEEPRom.crc(game_section2):
             # The CRC doesn't match!
             return False
-
-        if not only_system:
-            if data[36:38] != NaomiEEPRom.crc(game_section1):
-                # The CRC doesn't match!
-                return False
-            if data[40:42] != NaomiEEPRom.crc(game_section2):
-                # The CRC doesn't match!
-                return False
 
         # Everything looks good!
         return True
@@ -218,11 +274,13 @@ class NaomiEEPRom:
 
     @property
     def system(self) -> ArrayBridge:
-        return ArrayBridge(self, "system", 16, 2, 20)
+        return ArrayBridge(self, NaomiEEPRom.__validate_system, "system", 16, 2, 20)
 
     @property
     def length(self) -> int:
         # Arbitrarily choose the first enclave.
+        if not NaomiEEPRom.__validate_game(self._data):
+            return 0
         return cast(int, struct.unpack("<B", self._data[38:39])[0])
 
     @length.setter
@@ -234,10 +292,14 @@ class NaomiEEPRom:
         if len(self._data) != 128:
             raise Exception("Logic error!")
 
+        # Force the checksum to be updated so that the "valid" attribute on any
+        # ArrayBridge becomes true.
+        self.__fix_crc()
+
     @property
     def game(self) -> ArrayBridge:
         length = self.length
-        return ArrayBridge(self, "game", length, 44, 44 + length)
+        return ArrayBridge(self, NaomiEEPRom.__validate_game, "game", length, 44, 44 + length)
 
     @overload
     def __getitem__(self, key: int) -> int:
@@ -292,4 +354,37 @@ class NaomiEEPRom:
                 raise Exception("Logic error!")
 
         else:
-            raise NaomiEEPRomException("Cannot set more than one byte at a time!")
+            # Determine start of slice
+            if key.start is None:
+                start = 0
+            elif key.start < 0:
+                raise Exception("Do not support negative indexing!")
+            else:
+                start = key.start
+
+            if key.stop is None:
+                stop = 128
+            elif key.stop < 0:
+                raise Exception("Do not support negative indexing!")
+            elif key.stop > 128:
+                raise NaomiEEPRomException("Cannot set bytes outside of 128-byte EEPRom!")
+            else:
+                stop = key.stop
+
+            if key.step not in {None, 1}:
+                raise NaomiEEPRomException("Cannot set bytes with stride != 1 for 128-byte EEPRom!")
+
+            # Check input to function.
+            if not isinstance(val, bytes):
+                raise NaomiEEPRomException("Cannot change size of 128-byte EEPRom assigning!")
+            if len(val) != (stop - start):
+                raise NaomiEEPRomException("Cannot change size of 128-byte EEPRom when assigning!")
+            for off in range(start, stop):
+                if off in {0, 1, 18, 19, 36, 37, 40, 41}:
+                    raise NaomiEEPRomException("Cannot manually set CRC bytes!")
+
+            # Now, set the bytes.
+            self._data = self._data[:start] + val + self._data[stop:]
+
+            if len(self._data) != 128:
+                raise Exception("Logic error!")
