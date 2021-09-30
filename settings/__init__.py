@@ -284,22 +284,28 @@ class SettingsConfig:
 
     @staticmethod
     def __get_kv(filename: str, name: str, setting: str) -> Dict[int, str]:
+        realsetting = setting.strip()
+        if realsetting.startswith("values are "):
+            realsetting = realsetting[11:]
+        if realsetting.startswith("value is "):
+            realsetting = realsetting[9:]
+
         try:
-            if "-" in setting:
-                if " to " in setting:
+            if "-" in realsetting:
+                if " to " in realsetting:
                     raise SettingsParseException(
                         f"Setting \"{name}\" cannot have a range for valid values that includes a dash! \"{setting}\" should be specified like \"20 to E0\".",
                         filename,
                     )
 
-                k, v = setting.split("-", 1)
+                k, v = realsetting.split("-", 1)
                 key = int(k.strip(), 16)
                 value = v.strip()
 
                 return {key: value}
             else:
-                if " to " in setting:
-                    low, high = setting.split(" to ", 1)
+                if " to " in realsetting:
+                    low, high = realsetting.split(" to ", 1)
                     low = low.strip()
                     high = high.strip()
 
@@ -308,7 +314,7 @@ class SettingsConfig:
                         retdict[x] = f"{x}"
                     return retdict
                 else:
-                    key = int(setting.strip(), 16)
+                    key = int(realsetting.strip(), 16)
                     value = f"{key}"
 
                     return {key: value}
