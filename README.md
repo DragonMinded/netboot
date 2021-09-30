@@ -74,6 +74,20 @@ To output information about a particular binary, run like so:
 python3 -m scripts.rominfo somefile.bin
 ```
 
+### eeprominfo
+
+This script will read an EEPROM and output the serial number as well as the game section as hex digits. Currently it only supports Naomi EEPROMs. Optionally it can load a settings definition for the EEPROM out of the `settings/definitions/` directory and print the current settings contained in the EEPROM. This is most useful when reverse-engineering the settings format for a particular game. Invoke the script like so to see options:
+
+```
+python3 -m scripts.eeprominfo --help
+```
+
+To output information about an EEPROM file as extracted from demul, run like so:
+
+```
+python3 -m scripts.eeprominfo dummy.eeprom
+```
+
 ### attach_sram
 
 This script will take an SRAM file from an emulator such as demul and attach it to an Atomiswave conversion game so that your Naomi initializes the SRAM with its contents. If an Atomiswave conversion ROM already has an SRAM initialization section, it will overwrite it with the new SRAM. Otherwise, it enlarges the ROM to make room for the init section. Use this to set up defaults for a game using the test menu in an emulator and apply those settings to your game for netbooting with chosen defaults. Invoke the script like so to see options:
@@ -88,9 +102,32 @@ To attach a SRAM file from demul to a ROM named demo.bin, run like so:
 python3 -m scripts.attach_sram demo.bin dummy.sram
 ```
 
+### attach_settings
+
+This script will take an EEPROM file from an emulator such as demul and attach it to Naomi game so that your Naomi initializes the EEPROM with its contents. If a Naomi ROM already has an EEPROM initialization section, it will overwrite it with the new EEPROM. Otherwise, it enlarges the ROM to make room for the init section. Use this to set up defaults for a game using the test menu in an emulator and apply those settings to your game for netbooting with chosen defaults. Invoke the script like so to see options:
+
+```
+python3 -m scripts.attach_settings --help
+```
+
+To attach an EEPROM file from demul to a ROM named demo.bin, run like so:
+
+```
+python3 -m scripts.attach_settings attach demo.bin dummy.eeprom
+```
+
+### edit_settings
+
+This script spawns a command-line EEPROM file editor. Use this to create a new EEPROM file from scratch or edit an EEPROM file that you've previously made using an emulator. Note that editing settings for an arbitrary game requires that the game have a settings definition file in `settings/definitions/`. Settings definitions are looked up using the game's serial number which is found both in the rom header for a game (use `scripts.rominfo` to view this) and in a previously-created EEPROM file (use `scripts.eeprominfo` to view this). The resulting edited EEPROM can be attached to a Naomi ROM using `scripts.attach_settings` so that the game will load those settings when it boots up. Invoke the script like so to see options:
+
+
+```
+python3 -m scripts.edit_settings --help
+```
+
 ### Free-Play/No Attract Patch Generators
 
-Both `scripts.make_freeplay_patch` and `scripts.make_no_attract_patch` can be invoked in the same manner, and will produce a patch that applies either forced free-play or forced silent attract mode. You can run them like so:
+Both `scripts.make_freeplay_patch` and `scripts.make_no_attract_patch` can be invoked in the same manner, and will produce a patch that applies either forced free-play or forced silent attract mode. Note that these patches are considered obsolete, as you can customize all system settings using `scripts.attach_settings` as documented above. You can run them like so:
 
 ```
 python3 -m scripts.make_no_attract_patch game.bin --patch-file game_no_attract.binpatch

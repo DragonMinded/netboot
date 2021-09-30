@@ -14,7 +14,7 @@ root = os.path.realpath(os.path.join(os.path.basename(os.path.realpath(__file__)
 def main() -> int:
     # Create the argument parser
     parser = argparse.ArgumentParser(
-        description="Utility for printing hex digits for a game's settings section in an EEPRom file.",
+        description="Utility for printing EEPROM hex digits for a game's settings section in an EEPRom file.",
     )
     parser.add_argument(
         'eeprom',
