@@ -21,9 +21,8 @@ Continue: byte
   0 - Off
   1 - On
 
-# I don't know what this is for. It might be a setting available outside of
-# the JP region?
-Unknown: byte, read-only, default is 0
+# Voice type setting, only available when the region is Korea.
+Voice Type: byte, read-only unless Region is 3, default is 0, 0 - Off, 1 - On
 
 # Game difficulty, damage and timer settings. Self-explanatory.
 Difficulty: byte, default is 1
@@ -47,8 +46,9 @@ Timer Speed: byte, default is 1
   3 - 4 (High)
 
 # Memory card kit installed, and whether we should write to it.
-VM-Kit Type: byte, default is 0, 0 - No Use, 1 - SEGA, 2 - Capcom
-VM Write: byte, default is 0, 0 - Off, 1 - On
+# Only available when the region is Japan.
+VM-Kit Type: byte, default is 0, read-only unless Region is 0, 0 - No Use, 1 - SEGA, 2 - Capcom
+VM Write: byte, default is 0, read-only unless Region is 0, 0 - Off, 1 - On
 
 # Whether the game is forced to normal, turbo or user selectable speed.
 Game Speed: byte, default is 0, 0 - Free Select, 1 - Normal, 2 - Turbo
