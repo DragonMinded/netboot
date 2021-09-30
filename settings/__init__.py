@@ -19,6 +19,9 @@ class SettingType(Enum):
     GAME = auto()
 
 
+NO_FILE: str = "NO FILE"
+
+
 class SettingsParseException(Exception):
     def __init__(self, msg: str, filename: str) -> None:
         super().__init__(msg)
@@ -171,7 +174,8 @@ class Settings:
     # system). This is also responsible for parsing and creating sections in an actual
     # EEPROM file based on the settings themselves.
 
-    def __init__(self, settings: List[Setting], type: SettingType = SettingType.UNKNOWN) -> None:
+    def __init__(self, filename: str, settings: List[Setting], type: SettingType = SettingType.UNKNOWN) -> None:
+        self.filename = filename
         self.settings = settings
         self.type = type
 
@@ -214,11 +218,12 @@ class Settings:
 
                 location += setting.length
 
-        return Settings(settings, type=type)
+        return Settings(config.filename, settings, type=type)
 
     def to_json(self) -> Dict[str, Any]:
         return {
             'type': self.type.name,
+            'filename': self.filename if self.filename != NO_FILE else None,
             'settings': [
                 setting.to_json() for setting in self.settings
             ],
@@ -269,7 +274,7 @@ class SettingsConfig:
         # It would be weird to display "NO FILE" to the user when there is
         # an error, but virtually all errors arise from parsing the settings
         # file itself, so if this is blank its unlikely errors will happen.
-        return SettingsConfig("NO FILE", [])
+        return SettingsConfig(NO_FILE, [])
 
     @staticmethod
     def __get_kv(filename: str, name: str, setting: str) -> Dict[int, str]:
