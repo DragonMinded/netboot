@@ -43,9 +43,10 @@ def main() -> int:
 
     eeprom = NaomiEEPRom(data)
     if eeprom.game.valid:
-        hexstr = eeprom.game.data.hex()
-        chunks = [hexstr[i:(i + 2)] for i in range(0, len(hexstr), 2)]
-        print(f"Serial: {eeprom.serial.decode('ascii')}, Game Settings:", " ".join(chunks))
+        gamehexstr = eeprom.game.data.hex()
+        gamechunks = [gamehexstr[i:(i + 2)] for i in range(0, len(gamehexstr), 2)]
+        print(f"Serial: {eeprom.serial.decode('ascii')}")
+        print(f"Game Settings Hex: {' '.join(gamechunks)}")
 
         if args.display_parsed_settings:
             # Grab the actual EEPRom so we can print the settings within.
@@ -54,23 +55,7 @@ def main() -> int:
             try:
                 config = manager.from_eeprom(data)
 
-                print("System Settings:")
-
-                for setting in config.system.settings:
-                    # Don't show read-only settints.
-                    if setting.read_only is True:
-                        continue
-                    if isinstance(setting.read_only, ReadOnlyCondition):
-                        if setting.read_only.evaluate(config.system.settings):
-                            continue
-
-                    # This shouldn't happen, but make mypy happy.
-                    if setting.current is None:
-                        continue
-
-                    print(f"  {setting.name}: {setting.values[setting.current]}")
-
-                print("Game Settings:")
+                print("Parsed Game Settings:")
 
                 if config.game.settings:
                     for setting in config.game.settings:
