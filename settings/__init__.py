@@ -4,7 +4,7 @@ import struct
 from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from naomi.eeprom import NaomiEEPRom
+from naomi.eeprom import NaomiEEPRom, NaomiEEPRomException
 
 
 class SettingSizeEnum(Enum):
@@ -194,10 +194,14 @@ class Settings:
 
         for setting in settings:
             if setting.size == SettingSizeEnum.NIBBLE:
-                if halves == 0:
-                    setting.current = (data[location] >> 4) & 0xF
-                else:
-                    setting.current = data[location] & 0xF
+                try:
+                    if halves == 0:
+                        setting.current = (data[location] >> 4) & 0xF
+                    else:
+                        setting.current = data[location] & 0xF
+                except NaomiEEPRomException:
+                    # Out of range, ignore this read.
+                    pass
 
                 if halves == 0:
                     halves = 1
@@ -207,18 +211,64 @@ class Settings:
             elif setting.size == SettingSizeEnum.BYTE:
                 if halves != 0:
                     raise SettingsParseException(f"The setting \"{setting.name}\" follows a lonesome half-byte. Half-byte settings must always be in pairs!", config.filename)
-                if setting.length == 1:
-                    setting.current = struct.unpack("<B", data[location:(location + 1)])[0]
-                elif setting.length == 2:
-                    setting.current = struct.unpack("<H", data[location:(location + 2)])[0]
-                elif setting.length == 4:
-                    setting.current = struct.unpack("<I", data[location:(location + 4)])[0]
-                else:
-                    raise SettingsParseException(f"Cannot parse setting \"{setting.name}\" with unrecognized size \"{setting.length}\"!", config.filename)
+
+                try:
+                    if setting.length == 1:
+                        setting.current = struct.unpack("<B", data[location:(location + 1)])[0]
+                    elif setting.length == 2:
+                        setting.current = struct.unpack("<H", data[location:(location + 2)])[0]
+                    elif setting.length == 4:
+                        setting.current = struct.unpack("<I", data[location:(location + 4)])[0]
+                    else:
+                        raise SettingsParseException(f"Cannot parse setting \"{setting.name}\" with unrecognized size \"{setting.length}\"!", config.filename)
+                except NaomiEEPRomException:
+                    # Out of range, ignore this read.
+                    pass
 
                 location += setting.length
 
-        return Settings(config.filename, settings, type=type)
+        final_settings = Settings(config.filename, settings, type=type)
+        if type == SettingType.SYSTEM:
+            expected = 16
+            sectype = "system"
+        elif type == SettingType.GAME:
+            expected = eeprom.length
+            sectype = "game"
+        else:
+            raise Exception(f"Cannot load settings with a config of type {type.name}!")
+
+        if final_settings.length != expected:
+            raise SettingsParseException(
+                f"Unexpected final size of {sectype} section, expected {expected} bytes but definition file covers {final_settings.length} bytes!",
+                config.filename,
+            )
+        return final_settings
+
+    @property
+    def length(self) -> int:
+        halves = 0
+        length = 0
+        for setting in self.settings:
+            if setting.size == SettingSizeEnum.NIBBLE:
+                # Update our length.
+                if halves == 0:
+                    halves = 1
+                else:
+                    halves = 0
+                    length += 1
+
+            elif setting.size == SettingSizeEnum.BYTE:
+                # First, make sure we aren't in a pending nibble state.
+                if halves != 0:
+                    raise SettingsSaveException(f"The setting \"{setting.name}\" follows a lonesome half-byte. Half-byte settings must always be in pairs!", self.filename)
+
+                if setting.length not in {1, 2, 4}:
+                    raise SettingsSaveException(f"Cannot save setting \"{setting.name}\" with unrecognized size {setting.length}!", self.filename)
+
+                # Update our length.
+                length += setting.length
+
+        return length
 
     def to_json(self) -> Dict[str, Any]:
         return {
@@ -605,38 +655,11 @@ class SettingsManager:
         )
 
     def to_eeprom(self, settings: SettingsWrapper) -> bytes:
-        # First, creat the EEPROM.
+        # First, create the EEPROM.
         eeprom = NaomiEEPRom.default(settings.serial)
 
-        # TODO: Move this to "Settings" object as a "length" attribute, keep the same
-        # calculations. Then, use this length to compare to the game's length when
-        # doing a valid parse, throw if they are different.
-        # Now, calculate the length of the game section, so we can create a valid
-        # game chunk.
-        halves = 0
-        length = 0
-        for setting in settings.game.settings:
-            if setting.size == SettingSizeEnum.NIBBLE:
-                # Update our length.
-                if halves == 0:
-                    halves = 1
-                else:
-                    halves = 0
-                    length += 1
-
-            elif setting.size == SettingSizeEnum.BYTE:
-                # First, make sure we aren't in a pending nibble state.
-                if halves != 0:
-                    raise SettingsSaveException(f"The setting \"{setting.name}\" follows a lonesome half-byte. Half-byte settings must always be in pairs!", settings.game.filename)
-
-                if setting.length not in {1, 2, 4}:
-                    raise SettingsSaveException(f"Cannot save setting \"{setting.name}\" with unrecognized size {setting.length}!", settings.game.filename)
-
-                # Update our length.
-                length += setting.length
-
         # Now, update the game length.
-        eeprom.length = length
+        eeprom.length = settings.game.length
 
         for section, settingsgroup in [
             (eeprom.system, settings.system),
