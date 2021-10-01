@@ -67,6 +67,11 @@ class NaomiSettingsPatcher:
 
         raise NaomiSettingsPatcherException("Couldn't find config in executable!")
 
+    def get_serial(self) -> bytes:
+        # Parse the ROM header so we can grab the game serial code.
+        naomi = NaomiRom(self.data)
+        return naomi.serial
+
     def get_info(self) -> Optional[NaomiSettingsInfo]:
         # Parse the ROM header so we can narrow our search.
         naomi = NaomiRom(self.data)

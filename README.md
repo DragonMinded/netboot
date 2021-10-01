@@ -104,7 +104,15 @@ python3 -m scripts.attach_sram demo.bin dummy.sram
 
 ### attach_settings
 
-This script will take an EEPROM file from an emulator such as demul and attach it to Naomi game so that your Naomi initializes the EEPROM with its contents. If a Naomi ROM already has an EEPROM initialization section, it will overwrite it with the new EEPROM. Otherwise, it enlarges the ROM to make room for the init section. Use this to set up defaults for a game using the test menu in an emulator and apply those settings to your game for netbooting with chosen defaults. Invoke the script like so to see options:
+In 'attach' mode, this script will take an EEPROM file from an emulator such as demul and attach it to Naomi game so that your Naomi initializes the EEPROM with its contents. If a Naomi ROM already has an EEPROM initialization section, it will overwrite it with the new EEPROM. Otherwise, it enlarges the ROM to make room for the init section. Use this to set up defaults for a game using the test menu in an emulator and apply those settings to your game for netbooting with chosen defaults.
+
+In 'extract' mode, this script will extract a previously-attached EEPROM from a Naomi game so that you can load it in an emulator such as demul. If the ROM does not have an attached EEPROM settings file, it will not extract anything.
+
+In 'info' mode, this script will print information about any attached EEPROM settings on an existing ROM, displaying what version of the settings trojan was used, whether some options were selected and the full list of settings chosen for the game.
+
+In 'edit' mode, this script will extract an existing EEPROM settings file from a ROM, let you edit those settings, and then save the settings back to the ROM. If the Naomi ROM does not have any EEPROM settings already attached, it will create them using defaults stored in the definition files before letting you edit those defaults and then save them.
+
+Invoke the script like so to see options:
 
 ```
 python3 -m scripts.attach_settings --help
@@ -114,6 +122,12 @@ To attach an EEPROM file from demul to a ROM named demo.bin, run like so:
 
 ```
 python3 -m scripts.attach_settings attach demo.bin dummy.eeprom
+```
+
+To edit the settings you just attached, run like so:
+
+```
+python3 -m scripts.attach_settings edit demo.bin
 ```
 
 ### edit_settings

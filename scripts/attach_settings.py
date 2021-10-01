@@ -4,7 +4,7 @@ import os
 import sys
 
 from naomi import NaomiSettingsPatcher
-from settings import SettingsManager, ReadOnlyCondition, SettingsParseException, SettingsSaveException
+from settings import SettingsEditor, SettingsManager, ReadOnlyCondition, SettingsParseException, SettingsSaveException
 
 
 # The root of the repo.
@@ -14,7 +14,7 @@ root = os.path.realpath(os.path.join(os.path.basename(os.path.realpath(__file__)
 def main() -> int:
     # Create the argument parser
     parser = argparse.ArgumentParser(
-        description="Utility for attaching pre-selected settings to a commercial Naomi ROM.",
+        description="Utility for attaching, extracting and editing pre-selected settings to a commercial Naomi ROM.",
     )
     subparsers = parser.add_subparsers(help='Action to take', dest='action')
 
@@ -94,6 +94,48 @@ def main() -> int:
         type=str,
         default=os.path.join(root, 'settings/definitions'),
         help='The directory containing settings definition files.',
+    )
+
+    edit_parser = subparsers.add_parser(
+        'edit',
+        help='Created or edit a 128-byte EEPRom settings file and attach it to a commercial Naomi ROM.',
+        description='Created or edit a 128-byte EEPRom settings file and attach it to a commercial Naomi ROM.',
+    )
+    edit_parser.add_argument(
+        'rom',
+        metavar='ROM',
+        type=str,
+        help='The Naomi ROM file we should edit the settings for.',
+    )
+    edit_parser.add_argument(
+        '--exe',
+        metavar='EXE',
+        type=str,
+        default=os.path.join(root, 'homebrew/settingstrojan/settingstrojan.bin'),
+        help='The settings executable that we should attach to the ROM. Defaults to %(default)s.',
+    )
+    edit_parser.add_argument(
+        '--settings-directory',
+        metavar='DIR',
+        type=str,
+        default=os.path.join(root, 'settings/definitions'),
+        help='The directory containing settings definition files.',
+    )
+    edit_parser.add_argument(
+        '--output-file',
+        metavar='BIN',
+        type=str,
+        help='A different file to output to instead of updating the binary specified directly.',
+    )
+    edit_parser.add_argument(
+        '--enable-sentinel',
+        action='store_true',
+        help='Write a sentinel in main RAM to detect when the same game has had settings changed.',
+    )
+    edit_parser.add_argument(
+        '--enable-debugging',
+        action='store_true',
+        help='Display debugging information to the screen instead of silently saving settings.',
     )
 
     # Grab what we're doing
@@ -211,6 +253,50 @@ def main() -> int:
             except (SettingsParseException, SettingsSaveException) as e:
                 print(f"Error in \"{e.filename}\":", str(e), file=sys.stderr)
                 return 1
+
+    elif args.action == "edit":
+        # Grab the rom, parse it.
+        with open(args.rom, "rb") as fp:
+            data = fp.read()
+
+        # Grab the attachment. This should be the specific settingstrojan binary blob as compiled
+        # out of the homebrew/settingstrojan directory.
+        with open(args.exe, "rb") as fp:
+            exe = fp.read()
+
+        # First, try to extract existing eeprom for editing.
+        patcher = NaomiSettingsPatcher(data, exe)
+        eepromdata = patcher.get_settings()
+
+        manager = SettingsManager(args.settings_directory)
+        if eepromdata is None:
+            # We need to make them up from scratch.
+            parsedsettings = manager.from_serial(patcher.get_serial())
+        else:
+            # We have an eeprom to edit.
+            parsedsettings = manager.from_eeprom(eepromdata)
+
+        # Now, edit those created or extracted settings.
+        editor = SettingsEditor(parsedsettings)
+        if editor.run():
+            # If the editor signals to us that the user wanted to save the settings
+            # then we should patch them into the binary.
+            eepromdata = manager.to_eeprom(parsedsettings)
+            patcher.put_settings(
+                eepromdata,
+                enable_sentinel=args.enable_sentinel,
+                enable_debugging=args.enable_debugging,
+                verbose=True,
+            )
+
+            if args.output_file:
+                print(f"Added settings to {args.output_file}.")
+                with open(args.output_file, "wb") as fp:
+                    fp.write(patcher.data)
+            else:
+                print(f"Added settings to {args.rom}.")
+                with open(args.rom, "wb") as fp:
+                    fp.write(patcher.data)
 
     else:
         print(f"Invalid action {args.action}!", file=sys.stderr)
