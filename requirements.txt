@@ -2,6 +2,7 @@ flake8
 flask
 mypy
 psutil
-pycrypto
+pycryptodome
 pyyaml
 git+https://github.com/DragonMinded/arcadeutils.git@main#egg=arcadeutils
+git+https://github.com/DragonMinded/dragoncurses.git@trunk#egg=dragoncurses

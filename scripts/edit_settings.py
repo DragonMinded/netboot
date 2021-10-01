@@ -3,7 +3,7 @@ import argparse
 import os
 import sys
 
-from settings import SettingsManager, SettingsParseException, SettingsSaveException
+from settings import SettingsEditor, SettingsManager, SettingsParseException, SettingsSaveException
 
 
 # The root of the repo.
@@ -51,7 +51,9 @@ def main() -> int:
         print(f"Error in \"{e.filename}\":", str(e), file=sys.stderr)
         return 1
 
-    # TODO: Invoke CLI editor, allow changing settings.
+    # Now, invoke the CLI editor so settings can be edited.
+    editor = SettingsEditor(settings)
+    editor.run()
 
     # Now, write out the EEPROM.
     eeprom = manager.to_eeprom(settings)

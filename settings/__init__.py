@@ -10,6 +10,7 @@ from settings.settings import (
     SettingsWrapper,
     SettingsManager,
 )
+from settings.editor import SettingsEditor
 
 __all__ = [
     "SettingsParseException",
@@ -22,4 +23,5 @@ __all__ = [
     "Settings",
     "SettingsWrapper",
     "SettingsManager",
+    "SettingsEditor",
 ]
