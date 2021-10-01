@@ -140,36 +140,43 @@ class TabComponent(Component):
 
 
 class SettingsComponent(Component):
-
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, serial: str, settings: Settings) -> None:
         super().__init__()
         self.__all_settings = settings.settings
         self.__settings = [s for s in settings.settings if s.read_only is not True]
-        self.__labels = [
-            LabelComponent(setting.name)
-            for setting in self.__settings
-        ]
-        self.__inputs = [
-            ClickableSelectInputComponent(
-                setting.values[setting.current or list(setting.values.keys())[0]],
-                [v for _, v in setting.values.items()],
-                focused=False
-            ).on_click(self.__click_select)
-            for setting in self.__settings
-        ]
-        self.__inputs[0].focus = True
-        self.__calculate_visible()
-        self.__container = ListComponent(
-            [
-                ListComponent(
-                    list(pair),
-                    direction=ListComponent.DIRECTION_LEFT_TO_RIGHT,
-                )
-                for pair in zip(self.__labels, self.__inputs)
-            ],
-            direction=ListComponent.DIRECTION_TOP_TO_BOTTOM,
-            size=2,
-        )
+        self.__container: Component
+        if settings.settings:
+            self.__labels = [
+                LabelComponent(setting.name)
+                for setting in self.__settings
+            ]
+            self.__inputs = [
+                ClickableSelectInputComponent(
+                    setting.values[setting.current or list(setting.values.keys())[0]],
+                    [v for _, v in setting.values.items()],
+                    focused=False
+                ).on_click(self.__click_select)
+                for setting in self.__settings
+            ]
+            self.__inputs[0].focus = True
+            self.__calculate_visible()
+            self.__container = ListComponent(
+                [
+                    ListComponent(
+                        list(pair),
+                        direction=ListComponent.DIRECTION_LEFT_TO_RIGHT,
+                    )
+                    for pair in zip(self.__labels, self.__inputs)
+                ],
+                direction=ListComponent.DIRECTION_TOP_TO_BOTTOM,
+                size=2,
+            )
+        else:
+            self.__container = LabelComponent(
+                f"Settings definition file \"{serial}.settings\" is missing.\n"
+                "As a result, we cannot display or edit game settings for this game!",
+                formatted=True,
+            )
 
     def __calculate_visible(self) -> None:
         for i, setting in enumerate(self.__settings):
@@ -288,11 +295,11 @@ class EditorScene(Scene):
                 [
                     (
                         "&System Settings",
-                        SettingsComponent(self.settings["settings"].system),
+                        SettingsComponent(self.settings["settings"].serial.decode('ascii'), self.settings["settings"].system),
                     ),
                     (
                         "&Game Settings",
-                        SettingsComponent(self.settings["settings"].game),
+                        SettingsComponent(self.settings["settings"].serial.decode('ascii'), self.settings["settings"].game),
                     ),
                 ]
             ),
@@ -356,7 +363,9 @@ class SettingsEditor:
         self.settings = settings
         DragonCursesSettings.enable_unicode = enable_unicode
 
-    def run(self) -> None:
+    def run(self) -> bool:
+        # Run the editor, return True if the user requested to save the EEPROM,
+        # return False if the user requested to abandon changes.
         os.environ.setdefault('ESCDELAY', '0')
 
         context = {'settings': copy.deepcopy(self.settings)}
@@ -375,3 +384,6 @@ class SettingsEditor:
                     if cursetting.name == newsetting.name:
                         cursetting.current = newsetting.current
                         break
+            return True
+        else:
+            return False

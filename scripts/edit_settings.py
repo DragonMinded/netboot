@@ -53,12 +53,11 @@ def main() -> int:
 
     # Now, invoke the CLI editor so settings can be edited.
     editor = SettingsEditor(settings)
-    editor.run()
-
-    # Now, write out the EEPROM.
-    eeprom = manager.to_eeprom(settings)
-    with open(args.eeprom, "wb") as fp:
-        fp.write(eeprom)
+    if editor.run():
+        # Now, write out the EEPROM.
+        eeprom = manager.to_eeprom(settings)
+        with open(args.eeprom, "wb") as fp:
+            fp.write(eeprom)
 
     return 0
 
