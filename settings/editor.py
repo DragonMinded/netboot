@@ -26,7 +26,7 @@ from dragoncurses.input import (
 from dragoncurses.settings import Settings as DragonCursesSettings
 from typing import Any, Callable, Dict, List, Tuple, Union
 
-from settings.settings import SettingsWrapper, Settings
+from settings.settings import SettingsWrapper, Settings, ReadOnlyCondition
 
 
 class ClickableSelectInputComponent(ClickableComponent, SelectInputComponent):
@@ -143,6 +143,7 @@ class SettingsComponent(Component):
 
     def __init__(self, settings: Settings) -> None:
         super().__init__()
+        self.__all_settings = settings.settings
         self.__settings = [s for s in settings.settings if s.read_only is not True]
         self.__labels = [
             LabelComponent(setting.name)
@@ -157,6 +158,7 @@ class SettingsComponent(Component):
             for setting in self.__settings
         ]
         self.__inputs[0].focus = True
+        self.__calculate_visible()
         self.__container = ListComponent(
             [
                 ListComponent(
@@ -169,8 +171,24 @@ class SettingsComponent(Component):
             size=2,
         )
 
+    def __calculate_visible(self) -> None:
+        for i, setting in enumerate(self.__settings):
+            if isinstance(setting.read_only, ReadOnlyCondition):
+                read_only = setting.read_only.evaluate(self.__all_settings)
+
+                self.__labels[i].visible = not read_only
+                self.__inputs[i].visible = not read_only
+                if read_only and self.__inputs[i].focus:
+                    self.__inputs[i].focus = False
+                    if i + 1 < len(self.__inputs):
+                        self.__inputs[i + 1].focus = True
+
     def __click_select(self, component: Component, button: str) -> bool:
         if button == Buttons.LEFT:
+            if isinstance(component, ClickableSelectInputComponent):
+                if not component.visible:
+                    return False
+
             for inp in self.__inputs:
                 inp.focus = inp is component
         # Allow this input to continue propagating, so we can focus on and also click
@@ -197,17 +215,23 @@ class SettingsComponent(Component):
         if isinstance(event, KeyboardInputEvent):
             if event.character == Keys.UP:
                 for i, component in enumerate(self.__inputs):
-                    if i != 0 and component.focus:
-                        component.focus = False
-                        self.__inputs[i - 1].focus = True
-                        break
+                    if i > 0 and component.focus:
+                        # Find previous setting that isn't invisible.
+                        for j in range(i - 1, -1, -1):
+                            if self.__inputs[j].visible:
+                                component.focus = False
+                                self.__inputs[j].focus = True
+                                return True
                 return True
             if event.character == Keys.DOWN:
                 for i, component in enumerate(self.__inputs):
                     if i != (len(self.__inputs) - 1) and component.focus:
-                        component.focus = False
-                        self.__inputs[i + 1].focus = True
-                        break
+                        # Find next setting that isn't invisible.
+                        for j in range(i + 1, len(self.__inputs)):
+                            if self.__inputs[j].visible:
+                                component.focus = False
+                                self.__inputs[j].focus = True
+                                return True
                 return True
 
         inputhandled = self.__container._handle_input(event)
@@ -219,6 +243,8 @@ class SettingsComponent(Component):
                     break
             else:
                 raise Exception(f"Logic error! {self.__inputs[i].selected} {setting.values}")
+        self.__calculate_visible()
+
         return inputhandled
 
 
