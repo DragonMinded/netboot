@@ -25,7 +25,7 @@ def main() -> int:
         '--settings-directory',
         metavar='DIR',
         type=str,
-        default=os.path.join(root, 'settings/definitions'),
+        default=os.path.join(root, 'settings', 'definitions'),
         help='The directory containing settings definition files.',
     )
     parser.add_argument(

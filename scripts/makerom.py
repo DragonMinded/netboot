@@ -1,6 +1,7 @@
 #! /usr/bin/env python3
 import argparse
 import datetime
+import os
 import sys
 from typing import List
 
@@ -98,7 +99,7 @@ def main() -> int:
         action='append',
         help=(
             'An executable section that will be loaded into RAM. Must be specified '
-            'in the form of /path/to/file,0x12345678 where the hexidecimal number is '
+            f'in the form of {os.path.sep}path{os.path.sep}to{os.path.sep}file,0x12345678 where the hexidecimal number is '
             'the load offset in main RAM.'
         )
     )
@@ -116,7 +117,7 @@ def main() -> int:
         action='append',
         help=(
             'A test mode section that will be loaded into RAM. Must be specified '
-            'in the form of /path/to/file,0x12345678 where the hexidecimal number is '
+            f'in the form of {os.path.sep}path{os.path.sep}to{os.path.sep}file,0x12345678 where the hexidecimal number is '
             'the load offset in main RAM.'
         )
     )

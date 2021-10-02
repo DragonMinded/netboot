@@ -39,7 +39,7 @@ def main() -> int:
         '--exe',
         metavar='EXE',
         type=str,
-        default=os.path.join(root, 'homebrew/settingstrojan/settingstrojan.bin'),
+        default=os.path.join(root, 'homebrew', 'settingstrojan', 'settingstrojan.bin'),
         help='The settings executable that we should attach to the ROM. Defaults to %(default)s.',
     )
     attach_parser.add_argument(
@@ -92,7 +92,7 @@ def main() -> int:
         '--settings-directory',
         metavar='DIR',
         type=str,
-        default=os.path.join(root, 'settings/definitions'),
+        default=os.path.join(root, 'settings', 'definitions'),
         help='The directory containing settings definition files.',
     )
 
@@ -111,14 +111,14 @@ def main() -> int:
         '--exe',
         metavar='EXE',
         type=str,
-        default=os.path.join(root, 'homebrew/settingstrojan/settingstrojan.bin'),
+        default=os.path.join(root, 'homebrew', 'settingstrojan', 'settingstrojan.bin'),
         help='The settings executable that we should attach to the ROM. Defaults to %(default)s.',
     )
     edit_parser.add_argument(
         '--settings-directory',
         metavar='DIR',
         type=str,
-        default=os.path.join(root, 'settings/definitions'),
+        default=os.path.join(root, 'settings', 'definitions'),
         help='The directory containing settings definition files.',
     )
     edit_parser.add_argument(
