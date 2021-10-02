@@ -30,10 +30,10 @@ def jsonify(func: Callable[..., Dict[str, Any]]) -> Callable[..., Response]:
     @wraps(func)
     def decoratedfunction(*args: Any, **kwargs: Any) -> Response:
         try:
-            return flask_jsonify({**func(*args, **kwargs), "error": False})  # type: ignore
+            return flask_jsonify({**func(*args, **kwargs), "error": False})
         except Exception as e:
             print(traceback.format_exc())
-            return flask_jsonify({  # type: ignore
+            return flask_jsonify({
                 'error': True,
                 'message': str(e),
             })
@@ -209,16 +209,19 @@ def updaterom(filename: str) -> Dict[str, Any]:
         raise Exception("This isn't a valid ROM file!")
     if name not in dirman.games(directory):
         raise Exception("This isn't a valid ROM file!")
-    for region, name in request.json.items():
-        dirman.rename_game(filename, region, name)
-    serialize_app(app)
-    return {
-        Cabinet.REGION_JAPAN: dirman.game_name(filename, Cabinet.REGION_JAPAN),
-        Cabinet.REGION_USA: dirman.game_name(filename, Cabinet.REGION_USA),
-        Cabinet.REGION_EXPORT: dirman.game_name(filename, Cabinet.REGION_EXPORT),
-        Cabinet.REGION_KOREA: dirman.game_name(filename, Cabinet.REGION_KOREA),
-        Cabinet.REGION_AUSTRALIA: dirman.game_name(filename, Cabinet.REGION_AUSTRALIA),
-    }
+    if request.json is not None:
+        for region, name in request.json.items():
+            dirman.rename_game(filename, region, name)
+        serialize_app(app)
+        return {
+            Cabinet.REGION_JAPAN: dirman.game_name(filename, Cabinet.REGION_JAPAN),
+            Cabinet.REGION_USA: dirman.game_name(filename, Cabinet.REGION_USA),
+            Cabinet.REGION_EXPORT: dirman.game_name(filename, Cabinet.REGION_EXPORT),
+            Cabinet.REGION_KOREA: dirman.game_name(filename, Cabinet.REGION_KOREA),
+            Cabinet.REGION_AUSTRALIA: dirman.game_name(filename, Cabinet.REGION_AUSTRALIA),
+        }
+    else:
+        raise Exception("Expected JSON data in request!")
 
 
 @app.route('/patches', methods=['DELETE'])
@@ -303,6 +306,8 @@ def cabinet(ip: str) -> Dict[str, Any]:
 @app.route('/cabinets/<ip>', methods=['PUT'])
 @jsonify
 def createcabinet(ip: str) -> Dict[str, Any]:
+    if request.json is None:
+        raise Exception("Expected JSON data in request!")
     cabman = app.config['CabinetManager']
     dirman = app.config['DirectoryManager']
     if cabman.cabinet_exists(ip):
@@ -328,6 +333,8 @@ def createcabinet(ip: str) -> Dict[str, Any]:
 @app.route('/cabinets/<ip>', methods=['POST'])
 @jsonify
 def updatecabinet(ip: str) -> Dict[str, Any]:
+    if request.json is None:
+        raise Exception("Expected JSON data in request!")
     cabman = app.config['CabinetManager']
     dirman = app.config['DirectoryManager']
     old_cabinet = cabman.cabinet(ip)
@@ -389,6 +396,8 @@ def romsforcabinet(ip: str) -> Dict[str, Any]:
 
 @app.route('/cabinets/<ip>/games', methods=['POST'])
 def updateromsforcabinet(ip: str) -> Response:
+    if request.json is None:
+        raise Exception("Expected JSON data in request!")
     cabman = app.config['CabinetManager']
     cabinet = cabman.cabinet(ip)
     for game in request.json['games']:
@@ -406,6 +415,8 @@ def updateromsforcabinet(ip: str) -> Response:
 
 @app.route('/cabinets/<ip>/filename', methods=['POST'])
 def changegameforcabinet(ip: str) -> Response:
+    if request.json is None:
+        raise Exception("Expected JSON data in request!")
     cabman = app.config['CabinetManager']
     cab = cabman.cabinet(ip)
     cab.filename = request.json['filename']
