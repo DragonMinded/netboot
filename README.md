@@ -14,18 +14,20 @@ Remember to append a `--upgrade` to the above command if you are refreshing pack
 
 ## Script Invocation
 
+For all of these scripts, they should run out of the box on Linux and Mac once you've run the above installation command. However, on Windows you will have to prefix all commands with `python3`. For example, instead of running `./netdimm_send --help` you would instead run `python3 ./netdimm_send --help`.
+
 ### netdimm_send
 
 This script handles sending a single binary to a single cabinet, assuming it is on and ready for connection. Invoke the script like so to see options:
 
 ```
-python3 -m scripts.netdimm_send --help
+./netdimm_send --help
 ```
 
 You can invoke it identically to the original triforcetools.py as well. Assuming your NetDimm is at 192.168.1.1, the following will load the ROM named `my_favorite_game.bin` from the current directory:
 
 ```
-python3 -m scripts.netdimm_send 192.168.1.1 my_favorite_game.bin
+./netdimm_send 192.168.1.1 my_favorite_game.bin
 ```
 
 As well as sending a single game to a Net Dimm, this script can optionally handle applying patches. See `--help` for more details.
@@ -35,7 +37,7 @@ As well as sending a single game to a Net Dimm, this script can optionally handl
 This script will monitor a cabinet, and send a single binary to that cabinet whenever it powers on. It will run indefinitely, waiting for the cabinet to power on before sending, and then waiting again for the cabinet to be powered off and back on again before sending again. Invoke the script like so to see options:
 
 ```
-python3 -m scripts.netdimm_ensure --help
+./netdimm_ensure --help
 ```
 
 It works identically to netdimm_send, except for it only supports a zero PIC, and it tries its best to always ensure the cabinet has the right game. Run it just like you would netdimm_send. Just like `netdimm_send`, this script can optionally handle applying patches. See `--help` for more details.
@@ -45,19 +47,19 @@ It works identically to netdimm_send, except for it only supports a zero PIC, an
 This script can either diff two same-length binaries and produce a patch similar to the files found in `patches/` or it can take a binary and one or more patch files and produce a new binary with the patches applied. Note that this is just a frontend to the same utility that lives in <https://github.com/DragonMinded/arcadeutils> and as such all documentation there applies here as well. Invoke the script like so to see options:
 
 ```
-python3 -m scripts.binary_patch --help
+./binary_patch --help
 ```
 
 To diff two binary files, outputting their differences to a file, run like so:
 
 ```
-python3 -m scripts.binary_patch diff file1.bin file2.bin --patch-file differences.binpatch
+./binary_patch diff file1.bin file2.bin --patch-file differences.binpatch
 ```
 
 To apply a patch to a binary file, outputting it to a new file, run like so:
 
 ```
-python3 -m scripts.binary_patch patch file.bin newfile.bin --patch-file differences.binpatch
+./binary_patch patch file.bin newfile.bin --patch-file differences.binpatch
 ```
 
 ### rominfo
@@ -65,13 +67,13 @@ python3 -m scripts.binary_patch patch file.bin newfile.bin --patch-file differen
 This script will read a rom and output information found in the header. Currently it only supports Naomi ROMs but it can be extended to Triforce and Chihiro ROMs as well if somebody wants to put in the effort. Invoke the script like so to see options:
 
 ```
-python3 -m scripts.rominfo --help
+./rominfo --help
 ```
 
 To output information about a particular binary, run like so:
 
 ```
-python3 -m scripts.rominfo somefile.bin
+./rominfo somefile.bin
 ```
 
 ### eeprominfo
@@ -79,13 +81,13 @@ python3 -m scripts.rominfo somefile.bin
 This script will read an EEPROM and output the serial number as well as the game section as hex digits. Currently it only supports Naomi EEPROMs. Optionally it can load a settings definition for the EEPROM out of the `settings/definitions/` directory and print the current settings contained in the EEPROM. This is most useful when reverse-engineering the settings format for a particular game. Invoke the script like so to see options:
 
 ```
-python3 -m scripts.eeprominfo --help
+./eeprominfo --help
 ```
 
 To output information about an EEPROM file as extracted from demul, run like so:
 
 ```
-python3 -m scripts.eeprominfo dummy.eeprom
+./eeprominfo dummy.eeprom
 ```
 
 ### attach_sram
@@ -93,13 +95,13 @@ python3 -m scripts.eeprominfo dummy.eeprom
 This script will take an SRAM file from an emulator such as demul and attach it to an Atomiswave conversion game so that your Naomi initializes the SRAM with its contents. If an Atomiswave conversion ROM already has an SRAM initialization section, it will overwrite it with the new SRAM. Otherwise, it enlarges the ROM to make room for the init section. Use this to set up defaults for a game using the test menu in an emulator and apply those settings to your game for netbooting with chosen defaults. Invoke the script like so to see options:
 
 ```
-python3 -m scripts.attach_sram --help
+./attach_sram --help
 ```
 
 To attach a SRAM file from demul to a ROM named demo.bin, run like so:
 
 ```
-python3 -m scripts.attach_sram demo.bin dummy.sram
+./attach_sram demo.bin dummy.sram
 ```
 
 ### attach_settings
@@ -115,19 +117,19 @@ In 'edit' mode, this script will extract an existing EEPROM settings file from a
 Invoke the script like so to see options:
 
 ```
-python3 -m scripts.attach_settings --help
+./attach_settings --help
 ```
 
 To attach an EEPROM file from demul to a ROM named demo.bin, run like so:
 
 ```
-python3 -m scripts.attach_settings attach demo.bin dummy.eeprom
+./attach_settings attach demo.bin dummy.eeprom
 ```
 
 To edit the settings you just attached, run like so:
 
 ```
-python3 -m scripts.attach_settings edit demo.bin
+./attach_settings edit demo.bin
 ```
 
 ### edit_settings
@@ -136,7 +138,7 @@ This script spawns a command-line EEPROM file editor. Use this to create a new E
 
 
 ```
-python3 -m scripts.edit_settings --help
+./edit_settings --help
 ```
 
 ### Free-Play/No Attract Patch Generators
@@ -144,15 +146,15 @@ python3 -m scripts.edit_settings --help
 Both `scripts.make_freeplay_patch` and `scripts.make_no_attract_patch` can be invoked in the same manner, and will produce a patch that applies either forced free-play or forced silent attract mode. Note that these patches are considered obsolete, as you can customize all system settings using `scripts.attach_settings` as documented above. You can run them like so:
 
 ```
-python3 -m scripts.make_no_attract_patch game.bin --patch-file game_no_attract.binpatch
-python3 -m scripts.make_freeplay_patch game.bin --patch-file game_freeplay.binpatch
+./make_no_attract_patch game.bin --patch-file game_no_attract.binpatch
+./make_freeplay_patch game.bin --patch-file game_freeplay.binpatch
 ```
 
 You can also see options available for running by running it with the `--help` option:
 
 ```
-python3 -m scripts.make_no_attract_patch --help
-python3 -m scripts.make_freeplay_patch --help
+./make_no_attract_patch --help
+./make_freeplay_patch --help
 ```
 
 ## Web Interface
@@ -162,7 +164,7 @@ Along with scripts, several libraries and a series of patches, this repository a
 To try it out with the test server run the following:
 
 ```
-python3 -m scripts.host_debug_server --config config.yaml
+./host_debug_server --config config.yaml
 ```
 
 Like the other scripts, you can run this command with the `--help` flag to see additional options. By default, the config will look for roms in the `roms/` directory, and look for patches in the `patches/` directory. It will listen on port 80. You do not want to run the above script to serve traffic on a production setup as it is single-threaded and will dump its caches if you change any files. By default, the server interface will hide advanced options, such as cabinet configuration. To show the options, either type the word 'config' on the home page, or go to the `/config` page. Both of these will un-hide the configuration options until you choose again to hide them.
