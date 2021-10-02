@@ -93,7 +93,7 @@ def main() -> int:
         metavar='DIR',
         type=str,
         default=os.path.join(root, 'settings', 'definitions'),
-        help='The directory containing settings definition files.',
+        help='The directory containing settings definition files. Defaults to %(default)s.',
     )
 
     edit_parser = subparsers.add_parser(
@@ -119,7 +119,7 @@ def main() -> int:
         metavar='DIR',
         type=str,
         default=os.path.join(root, 'settings', 'definitions'),
-        help='The directory containing settings definition files.',
+        help='The directory containing settings definition files. Defaults to %(default)s.',
     )
     edit_parser.add_argument(
         '--output-file',

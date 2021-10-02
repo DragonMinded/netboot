@@ -26,7 +26,7 @@ def main() -> int:
         metavar='DIR',
         type=str,
         default=os.path.join(root, 'settings', 'definitions'),
-        help='The directory containing settings definition files.',
+        help='The directory containing settings definition files. Defaults to %(default)s.',
     )
     parser.add_argument(
         '--serial',
