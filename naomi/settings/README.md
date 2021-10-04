@@ -89,6 +89,27 @@ identifying the correct files for patching given an EEPROM or ROM serial.
 It is also responsible for taking a modified list of settings and writing
 a new EEPROM file.
 
+Note that since this is parsing user-supplied settings definitions files,
+there can be errors in processing those files. In any function that returns
+a `SettingsWrapper` instance, a `SettingsParseException` can be thrown.
+This is a subclass of `Exception` so you can get the error message to
+display to a user by calling `str()` on the exception instance. The instance
+will also have a `filename` property which is the filename of the settings
+definition file that caused the problem.
+
+There can also be problems in saving EEPROM settings given the same definitions
+files. In this case, a `SettingsSaveException` can be thrown. This is identical
+to `SettingsParseException` save for the source, so all of the above documentation
+applies.
+
+There can also be problems in deserializing JSON data when calling the
+`from_json()` method. In this case, a `JSONParseException` can be thrown. Similar
+to the above two exceptions, calling `str()` on the instance will give you back
+an error message that can be displayed to a user. The instance will also have
+a `context` property which is the exact location in the JSON where the failure
+occured as represented by a list of attributes that were dereferenced in the
+JSON to get to the section that had an error.
+
 ### Default Constructor
 
 Takes a single string argument "directory" which points at the directory
