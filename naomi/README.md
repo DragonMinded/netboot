@@ -273,6 +273,16 @@ from naomi import NaomiSettingsPatcher, get_default_trojan
 patcher = NaomiSettingsPatcher(somedata, get_default_trojan())
 ```
 
+### data property
+
+The same bytes as passed to the `NaomiSettingsPatcher` constructor. After calling
+`put_settings()` as documented below, this will be updated to the new ROM contents
+with the settings applied. A recommended workflow is to patch ROMs on-the-fly when
+netbooting by creating an instance of `NaomiSettingsPatcher` with the ROM data you
+were about to send, calling `put_settings()` with the settings you wish to attach,
+and then getting the data using this property and sending it down the wire to the
+Naomi system.
+
 ### get_serial() method
 
 An instance of NaomiSettingsPatcher has the `get_serial()` method. When called, this
