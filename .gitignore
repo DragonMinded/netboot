@@ -8,6 +8,13 @@ __pycache__/
 build/
 libnaomi.a
 MANIFEST.in
+build/
+dist/
+sdist/
+wheels/
+*.egg-info/
+*.egg
+MANIFEST
 homebrew/examples/hellonaomi/hellonaomi.bin
 homebrew/examples/hellocpp/hellocpp.bin
 homebrew/examples/inputtest/inputtest.bin

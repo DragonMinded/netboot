@@ -2,24 +2,23 @@ import os
 from setuptools import setup
 
 
-def requires(req: str) -> str:
-    if "git+" not in req:
-        return req
-    if "#egg" not in req:
-        raise Exception(f"Unknown egg package for {req}!")
-    _, egg = req.split("#egg", 1)
-    egg = egg.strip()
-    if egg.startswith("="):
-        egg = egg[1:].strip()
-    return egg
-
-
 if 'FULL_INSTALLATION' in os.environ:
     # We want to install this entire repo as an installation, so that we can
     # use it to run a netboot server.
     with open("MANIFEST.in", "w") as wfp:
         with open("MANIFEST.install", "r") as rfp:
             wfp.write(rfp.read())
+
+    def requires(req: str) -> str:
+        if "git+" not in req:
+            return req
+        if "#egg" not in req:
+            raise Exception(f"Unknown egg package for {req}!")
+        _, egg = req.split("#egg", 1)
+        egg = egg.strip()
+        if egg.startswith("="):
+            egg = egg[1:].strip()
+        return egg
 
     setup(
         name='netboot',
@@ -44,29 +43,32 @@ if 'FULL_INSTALLATION' in os.environ:
 else:
     # We want to install only the parts of this repo useful as a third-party
     # package so that other code can depend on us.
-    with open("MANIFEST.in", "w") as wfp:
-        with open("MANIFEST.package", "r") as rfp:
-            wfp.write(rfp.read())
+    with open(os.path.join("naomi", "README.md"), "r", encoding="utf-8") as fh:
+        long_description = fh.read()
 
     setup(
         name='netboot',
         version='0.1',
         description='Code libraries for working with Naomi/Triforce/Chihiro.',
+        long_description=long_description,
+        long_description_content_type="text/markdown",
         author='DragonMinded',
+        author_email='dragonminded@dragonminded.com',
         license='Public Domain',
+        url='https://github.com/DragonMinded/netboot',
         packages=[
             # Package for 3rd party.
             'naomi',
             'naomi.settings',
+            # Include default trojan.
             'homebrew.settingstrojan',
         ],
         package_data={
-            "naomi": ["py.typed"],
+            # Make sure mypy sees us as typed.
+            "naomi": ["py.typed", "README.md"],
             "naomi.settings": ["py.typed"],
+            # Make sure to actually include the trojan data.
+            "homebrew.settingstrojan": ["settingstrojan.bin"],
         },
-        install_requires=[
-            # Nothing is a dependency if we are just doing a package for 3rdparty.
-        ],
-        include_package_data=True,
-        zip_safe=False,
+        python_requires=">=3.6",
     )
