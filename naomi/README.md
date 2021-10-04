@@ -249,3 +249,76 @@ configuration by unpacking the NaomiExecutable instance given.
 This property is identical to the `main_executable` property, except for it
 represents the code and entrypoint that the Naomi BIOS will use when executing
 the "Game Test Mode" section of the test menu. It can be similarly read and written.
+
+## NaomiSettingsPatcher
+
+The NaomiSettingsPatcher class provides logic for attaching an EEPROM configuration
+file to a Naomi ROM so that it can be written to the EEPROM when netbooting that
+ROM. Note that this is not a supported feature of the Naomi platform, so it uses
+an executable stub that it attaches to the ROM in order to make this work. If you
+do not care what executable stub is attached and only want to patch settings into
+a ROM file, use the `get_default_trojan` function which will return a bytes
+object suitable for passing into a `NaomiSettingsPatcher` constructor.
+
+### Default Constructor
+
+Takes a bytes "rom" argument and a bytes "trojan" argument creates an instance of
+NaomiSettingsPatcher which can attach or retrieve previously-attached EEPROM settings
+in a Naomi ROM file suitable for netbooting. An example of how to initialize this
+is as follows:
+
+```
+from naomi import NaomiSettingsPatcher, get_default_trojan
+
+patcher = NaomiSettingsPatcher(somedata, get_default_trojan())
+```
+
+### get_serial() method
+
+An instance of NaomiSettingsPatcher has the `get_serial()` method. When called, this
+will examine the serial of the Naomi ROM passed into the constructor and return the
+4 byte serial number, suitable for matching against an EEPROM's system serial.
+
+### get_info() method
+
+Returns an optional instance of NaomiSettingsInfo if the ROM has a configured settings
+section. If the ROM does not have a configured settings section, this returns None.
+The NaomiSettingsInfo instance represents the configuration passed to `put_settings()`
+on a previous invocation.
+
+### get_settings() method
+
+Returns a 128-byte EEPROM bytestring that was previously attached to the Naomi ROM,
+or None if this ROM does not include any EEPROM settings.
+
+### put_settings() method
+
+given a bytes "settings" argument which is a valid 128-byte EEPROM, ensures that it
+is attached to the Naomi ROM such that the settings are written when netbooting the
+ROM image. If there are already settings attached to the ROM, this overwrites those
+with new settings. If there are not already settings attached, this does the work
+necessary to attach the settings file as well as the writing trojan supplied to the
+`NaomiSettingsPatcher` constructor.
+
+Valid EEPROM files can be obtained form a number of places. If you use an emulator
+to set up system and game settings, then the EEPROM file that emulator writes can
+usually be supplied here to make your game boot to the same settings. If you use
+the `NaomiEEPRom` class to manipulate an EEPROM, the data it produces can also be
+supplied here to force the Naomi to use the same settings.
+
+Optionally, pass in the boolean keyword argument "enable_sentinel" set to True and
+the Naomi ROM will re-initialize the settings when netbooting even if the last game
+netbooted was this game. Use this when iterating over settings that you want to choose
+so that you can ensure the settings are written. If you do not provide this argument,
+the default behavior is that settings will not be overwritten when we netboot a game
+that is already running on the system.
+
+Optionally, pass in the boolean keyword argument "enable_debugging" set to True
+which forces the Naomi to display debugging information on the screen before booting
+the game. Use this to see what is actually going on under the hood when using the
+settings patching feature.
+
+Optionally, pass in the boolean keyword argument "verbose" set to True which forces
+the `put_settings()` function to output progress text to stdout. Use this if you are
+making a command-line tool and wish to display information about the patch process
+to the user.
