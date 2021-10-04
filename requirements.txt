@@ -4,5 +4,5 @@ mypy
 psutil
 pycryptodome
 pyyaml
-git+https://github.com/DragonMinded/arcadeutils.git@main#egg=arcadeutils
+arcadeutils
 git+https://github.com/DragonMinded/dragoncurses.git@trunk#egg=dragoncurses
