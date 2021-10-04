@@ -526,7 +526,8 @@ class SettingsConfig:
                     )
 
                 k, v = realsetting.split("-", 1)
-                key = int(k.strip(), 16)
+                k = k.strip().replace(" ", "").replace("\t", "")
+                key = int(k, 16)
                 value = v.strip()
 
                 return {key: value}
@@ -535,6 +536,8 @@ class SettingsConfig:
                     low, high = realsetting.split(" to ", 1)
                     low = low.strip()
                     high = high.strip()
+                    low = low.strip().replace(" ", "").replace("\t", "")
+                    high = high.strip().replace(" ", "").replace("\t", "")
 
                     retdict: Dict[int, str] = {}
                     for x in range(int(low, 16), int(high, 16) + 1):
@@ -559,6 +562,7 @@ class SettingsConfig:
             vals: List[int] = []
 
             for val in rest.split(" or "):
+                val = val.strip().replace(" ", "").replace("\t", "")
                 vals.append(int(val, 16))
 
             return name, vals
@@ -780,7 +784,7 @@ class SettingsConfig:
         return b"".join(defaults)
 
 
-def get_default_settings_directory() -> bytes:
+def get_default_settings_directory() -> str:
     # Specifically for projects including this code as a 3rd-party dependency,
     # look up where we stick the default settings definitions files and return
     # that path as a string, suitable for passing into the "directory" param of

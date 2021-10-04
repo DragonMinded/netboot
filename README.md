@@ -239,11 +239,13 @@ flake8 --ignore E501 .
 
 By design, this code can be used as a library by other python code, and as it is Public Domain,
 it can be included wherever. I would prefer that you attribute me when possible, but it is not
-necessary. There is currently no PyPI package for netboot, but if you clone the repo and
-run `pip install .` on the root, the "naomi" and "naomi.settings" packages will be installed for
+necessary. The pieces of this repo which are appropriate for external consumption have been packaged
+into the PyPI project "naomiutils". Alternatively, you can check out this repo and then
+run `pip install .` on the root. The "naomi" and "naomi.settings" packages will be installed for
 you. Alternatively if you place the line `git+https://github.com/DragonMinded/netboot.git@trunk#egg=netboot`
 in your requirements file, then when you run `pip install -r requirements.txt` on your own code,
 the latest version of this package will be installed for you. Note that by default, the webserver
 components are NOT included in this package. However, the "homebrew/settingstrojan/settingstrojan.bin"
 file is included along with "naomi" and "naomi.settings" as a compiled version of this file needs to exist
-for some of the code to work.
+for some of the code to work. The "naomi/settings/definitions/" directory and settings files are also
+included as part of the "naomiutils" package so that you don't have to provide your own.
