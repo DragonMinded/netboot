@@ -26,7 +26,7 @@ from dragoncurses.input import (
 from dragoncurses.settings import Settings as DragonCursesSettings
 from typing import Any, Callable, Dict, List, Tuple, Union
 
-from settings.settings import SettingsWrapper, Settings, ReadOnlyCondition
+from naomi.settings.settings import SettingsWrapper, Settings, ReadOnlyCondition
 
 
 class ClickableSelectInputComponent(ClickableComponent, SelectInputComponent):

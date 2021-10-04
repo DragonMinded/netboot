@@ -24,15 +24,16 @@ if 'FULL_INSTALLATION' in os.environ:
     setup(
         name='netboot',
         version='0.1',
-        description='Code and utilities for netbooting a Naomi/Triforce/Chihiro, including a full server.',
+        description='Code and utilities for netbooting a Naomi/Triforce/Chihiro, including a full web and netboot server.',
         author='DragonMinded',
         license='Public Domain',
         packages=[
             # Core packages.
             'naomi',
+            'naomi.settings',
+            # Web server package.
             'netboot',
             'netboot.web',
-            'settings',
         ],
         install_requires=[
             requires(req) for req in open('requirements.txt').read().split('\n') if len(req) > 0
@@ -50,13 +51,13 @@ else:
     setup(
         name='netboot',
         version='0.1',
-        description='Code and utilities for netbooting a Naomi/Triforce/Chihiro.',
+        description='Code libraries for working with Naomi/Triforce/Chihiro.',
         author='DragonMinded',
         license='Public Domain',
         packages=[
             # Package for 3rd party.
             'naomi',
-            'settings',
+            'naomi.settings',
             'homebrew.settingstrojan',
         ],
         install_requires=[

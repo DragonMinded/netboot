@@ -1,4 +1,4 @@
-from settings.settings import (
+from naomi.settings.settings import (
     SettingsParseException,
     SettingsSaveException,
     JSONParseException,
@@ -11,15 +11,15 @@ from settings.settings import (
     SettingsManager,
 )
 try:
-    from settings.editor import SettingsEditor
+    from naomi.settings.editor import SettingsEditor
 except ModuleNotFoundError:
     # DragonCurses not installed, provide a dummy stub.
-    class SettingsEditor:
+    class SettingsEditor:  # type: ignore
         def __init__(self, settings: SettingsWrapper, enable_unicode: bool = True) -> None:
             self.settings = settings
 
-    def run(self) -> bool:
-        return False
+        def run(self) -> bool:
+            return False
 
 
 __all__ = [

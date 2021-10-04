@@ -4,7 +4,7 @@ import os
 import sys
 
 from naomi import NaomiSettingsPatcher
-from settings import SettingsEditor, SettingsManager, ReadOnlyCondition, SettingsParseException, SettingsSaveException
+from naomi.settings import SettingsEditor, SettingsManager, ReadOnlyCondition, SettingsParseException, SettingsSaveException
 
 
 # The root of the repo.
@@ -92,7 +92,7 @@ def main() -> int:
         '--settings-directory',
         metavar='DIR',
         type=str,
-        default=os.path.join(root, 'settings', 'definitions'),
+        default=os.path.join(root, 'naomi', 'settings', 'definitions'),
         help='The directory containing settings definition files. Defaults to %(default)s.',
     )
 
@@ -118,7 +118,7 @@ def main() -> int:
         '--settings-directory',
         metavar='DIR',
         type=str,
-        default=os.path.join(root, 'settings', 'definitions'),
+        default=os.path.join(root, 'naomi', 'settings', 'definitions'),
         help='The directory containing settings definition files. Defaults to %(default)s.',
     )
     edit_parser.add_argument(

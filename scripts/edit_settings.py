@@ -3,7 +3,7 @@ import argparse
 import os
 import sys
 
-from settings import SettingsEditor, SettingsManager, SettingsParseException, SettingsSaveException
+from naomi.settings import SettingsEditor, SettingsManager, SettingsParseException, SettingsSaveException
 
 
 # The root of the repo.
@@ -25,7 +25,7 @@ def main() -> int:
         '--settings-directory',
         metavar='DIR',
         type=str,
-        default=os.path.join(root, 'settings', 'definitions'),
+        default=os.path.join(root, 'naomi', 'settings', 'definitions'),
         help='The directory containing settings definition files. Defaults to %(default)s.',
     )
     parser.add_argument(
