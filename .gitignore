@@ -7,6 +7,7 @@ __pycache__/
 *.yaml
 build/
 libnaomi.a
+MANIFEST.in
 homebrew/examples/hellonaomi/hellonaomi.bin
 homebrew/examples/hellocpp/hellocpp.bin
 homebrew/examples/inputtest/inputtest.bin

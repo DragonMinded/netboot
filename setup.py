@@ -1,3 +1,4 @@
+import os
 from setuptools import setup
 
 
@@ -13,21 +14,54 @@ def requires(req: str) -> str:
     return egg
 
 
-setup(
-    name='netboot',
-    version='0.1',
-    description='Code and utilities for netbooting a Naomi/Triforce/Chihiro.',
-    author='DragonMinded',
-    license='Public Domain',
-    packages=[
-        # Core packages
-        'naomi',
-        'netboot',
-        'netboot.web',
-    ],
-    install_requires=[
-        requires(req) for req in open('requirements.txt').read().split('\n') if len(req) > 0
-    ],
-    include_package_data=True,
-    zip_safe=False,
-)
+if 'FULL_INSTALLATION' in os.environ:
+    # We want to install this entire repo as an installation, so that we can
+    # use it to run a netboot server.
+    with open("MANIFEST.in", "w") as wfp:
+        with open("MANIFEST.install", "r") as rfp:
+            wfp.write(rfp.read())
+
+    setup(
+        name='netboot',
+        version='0.1',
+        description='Code and utilities for netbooting a Naomi/Triforce/Chihiro, including a full server.',
+        author='DragonMinded',
+        license='Public Domain',
+        packages=[
+            # Core packages.
+            'naomi',
+            'netboot',
+            'netboot.web',
+            'settings',
+        ],
+        install_requires=[
+            requires(req) for req in open('requirements.txt').read().split('\n') if len(req) > 0
+        ],
+        include_package_data=True,
+        zip_safe=False,
+    )
+else:
+    # We want to install only the parts of this repo useful as a third-party
+    # package so that other code can depend on us.
+    with open("MANIFEST.in", "w") as wfp:
+        with open("MANIFEST.package", "r") as rfp:
+            wfp.write(rfp.read())
+
+    setup(
+        name='netboot',
+        version='0.1',
+        description='Code and utilities for netbooting a Naomi/Triforce/Chihiro.',
+        author='DragonMinded',
+        license='Public Domain',
+        packages=[
+            # Package for 3rd party.
+            'naomi',
+            'settings',
+            'homebrew.settingstrojan',
+        ],
+        install_requires=[
+            # Nothing is a dependency if we are just doing a package for 3rdparty.
+        ],
+        include_package_data=True,
+        zip_safe=False,
+    )

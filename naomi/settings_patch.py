@@ -1,8 +1,21 @@
 #! /usr/bin/env python3
+import os
 import struct
 from typing import Optional, Tuple
 
 from naomi import NaomiRom, NaomiRomSection, NaomiEEPRom
+
+
+def get_default_trojan() -> bytes:
+    # Specifically for projects including this code as a 3rd-party dependency,
+    # look up where we stick the default already-compiled trojan and return it
+    # as bytes that can be passed into the "trojan" param of the
+    # NaomiSettingsPatcher constructor. This way, they don't need to know our
+    # internal directory layout.
+    root = os.path.realpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
+    trojan = os.path.join(root, 'homebrew', 'settingstrojan', 'settingstrojan.bin')
+    with open(trojan, "rb") as bfp:
+        return bfp.read()
 
 
 class NaomiSettingsPatcherException(Exception):

@@ -7,7 +7,7 @@ from settings import SettingsEditor, SettingsManager, SettingsParseException, Se
 
 
 # The root of the repo.
-root = os.path.realpath(os.path.join(os.path.basename(os.path.realpath(__file__)), ".."))
+root = os.path.realpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
 
 
 def main() -> int:
