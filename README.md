@@ -173,6 +173,8 @@ Like the other scripts, you can run this command with the `--help` flag to see a
 
 Since this uses a series of threads to manage cabinets in the background, it can be somewhat difficult to install in a normal nginx/uWSGI setup. A wsgi file is provided in the `scripts/` directory that is meant to be used alongside a virtualenv with this repository installed in it. Config files should be copied to the same directory, and don't forget to update the ROMs/patches directories. If you do something similar to my setup below, don't forget to set up a virtualenv in the venv directory!
 
+Since the default configuration for this repository is to be used as a package in other code, setup.py will default to only installing the parts of the package that matter for that. If you want to use pip to update your virtualenv when running the below setup, you should run `FULL_INSTALLATION=1 pip install . --upgrade` to tell setup.py to install the web server packages as well.
+
 My uWSGI config looks something similar to the following:
 
 ```
@@ -232,3 +234,16 @@ The tools are also lint clean (save for line length lints which are useless driv
 ```
 flake8 --ignore E501 .
 ```
+
+## Including This Package
+
+By design, this code can be used as a library by other python code, and as it is Public Domain,
+it can be included wherever. I would prefer that you attribute me when possible, but it is not
+necessary. There is currently no PyPI package for netboot, but if you clone the repo and
+run `pip install .` on the root, the "naomi" and "naomi.settings" packages will be installed for
+you. Alternatively if you place the line `git+https://github.com/DragonMinded/netboot.git@trunk#egg=netboot`
+in your requirements file, then when you run `pip install -r requirements.txt` on your own code,
+the latest version of this package will be installed for you. Note that by default, the webserver
+components are NOT included in this package. However, the "homebrew/settingstrojan/settingstrojan.bin"
+file is included along with "naomi" and "naomi.settings" as a compiled version of this file needs to exist
+for some of the code to work.
