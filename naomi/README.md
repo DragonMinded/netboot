@@ -113,3 +113,139 @@ print(eeprom.game.valid)  # Will print "False" as the EEPROM was created without
 eeprom.length = 20
 print(eeprom.game.valid)  # Will print "True" as the EEPROM game section was initialized to be 20 bytes long.
 ```
+
+## NaomiRom
+
+The NaomiRom class provides high-level accessors to a Naomi ROM header as found
+at the beginning of a ROM file suitable for netbooting. It handles decoding all
+sections of the ROM header as well as allowing modification and even creation of
+new ROM header sections given valid data. Use this if you wish to manipulate or
+create your own Naomi ROM files form scratch.
+
+### Default Constructor
+
+Takes a single byte argument "data" and uses it as the ROM image where the header
+will be extracted. Note that there is no CRC over the ROM header so any data that
+is 1280 bytes or longer will appear valid.
+
+### NaomiRom.default
+
+An alternate constructor that creates an entirely blank Naomi ROM containing no
+loaded executable or test sections and no ROM name. Use this when you want to
+programatically construct a ROM image, such as when you are building a final ROM
+in a homebrew program you are building for the Naomi platform.
+
+### valid property
+
+An instance of NaomiRom has the "valid" property which will be "True" when the ROM
+passed into the constructor is a valid Naomi ROM and "False" otherwise. This is a
+read-only property as the vailidity of a ROM is entirely dictated by the data
+passed into the constructor.
+
+### data property
+
+The ROM data, as passed into the constructor for the instance of NaomiRom, or as
+created when using `NaomiRom.default` alternate constructor. Note that when any
+of the following properties are written, the `data` property will be changed to
+reflect those settings. Use this to retrieve the updated ROM after you've made
+adjustments to the values you wish to change.
+
+### publisher property
+
+The publisher of this ROM, as a string. When read, grabs the current publisher
+of the ROM image. When written, updates the publisher to the new string provided.
+
+### names property
+
+A list of names indexed by region. Given the current system region, the names that
+show up here will also be the names that show up in the test menu for a given game.
+Note that there are the following constants that can be used to index into the names
+list: `NaomiRom.REGION_JAPAN`, `NaomiRom.REGION_USA`, `NaomiRom.REGION_EXPORT`,
+`NaomiRom.REGION_KOREA`, `NaomiRom.REGION_AUSTRALIA`. Note that the last region,
+Australia, exists in many ROM files but is not accessible as there is no Australia
+BIOS for the Naomi platform. When read, grabs a list of names of the ROM given the
+region. When written, updates the list of names by region using the list provided.
+
+### sequencetexts property
+
+A list of 8 sequence texts that are used by the game for coin insertion messages.
+Many ROMs only have the first sequence set. When read, grabs all 8 sequence texts
+and returns a list of them. When written, updates the sequence texts to the new
+list of strings provided.
+
+### defaults property
+
+A NaomiEEPROMDefaults instance representing what defaults the BIOS will set in the
+system EEPROM section when initializing the EEPROM on first boot. When read, grabs
+the defaults and returns them. When written, extracts values from the provided
+NaomiEEPROMDefaults instance and updates the defaults in the ROM accordingly.
+
+### date property
+
+A `datetime.date` instance representing what date the ROM was build and released.
+When read, returns the current date in the ROM header. When written, updates the
+date of the ROM with the new `datetime.date` provided.
+
+### serial property
+
+A 4-byte bytestring representing the serial number of the ROM. This is used to tie
+EEPROM data to the ROM itself and lets the Naomi know when to reset certain defaults.
+When read, returns the current serial from the ROM header. When written, updates the
+serial in the ROM header.
+
+### regions property
+
+A list of integers representing valid regions this ROM will run under. Uses the
+same region constants as the `names` property. When read, returns a list of the
+valid regions this ROM executes under. When written, updates the list of regions
+the ROM is allowed to execute under. When booting, the Naomi BIOS will check the
+current region against this list and show an error if the current region is not
+included in the list.
+
+### players property
+
+A list of integers representing the valid number of player configurations that this
+ROM will boot under. Valid player numbers include 1, 2, 3 and 4. When read, returns
+a list of all valid number of player configurations that this game will boot with.
+When written, updates the list of player configurations. When booting, the Naomi
+BIOS will check the "Number of Players" setting in the system assignments and see
+if that setting appears in this list.
+
+### frequencies property
+
+A list of frequencies that the monitor is allowed to run at for this ROM. This
+includes the values 15 and 31. On read, returns the list of allowed frequencies.
+On write, updates the list of allowed frequencies. On boot, the Naomi BIOS will
+check the current horizontal refresh rate of the system as controlled by a DIP
+switch and show an error if it isn't in the list of allowed frequencies.
+
+### orientations property
+
+A list of strings representing the allowed orientations for the monitor for this
+ROM. The includes the values "horizontal" and "vertical". On read, returns the
+list of all acceptable orientations. On write, updates that list based on the
+provided list of strings. On boot, the Naomi BIOS will check the current "Monitor
+Orientation" setting in the system assignments and see if that orientation is
+on this list.
+
+### servicetype property
+
+A string value of either "individual" or "common" for the expected service button
+type for the ROM. On read, returns either "individual" or "common" to represent
+the current service type selected. On write, updates the service type to match
+the string provided.
+
+### main_executable property
+
+An instance of a NaomiExecutable including sections of the ROM that the Naomi
+BIOS will copy before executing the ROM, as well as the entrypoint in main RAM
+that the BIOS will jump to after copying sections. On read, returns the current
+list of sections to copy as well as the main entrypoint, as encapsulated as an
+instance of NaomiExecutable. On write, it updates the ROM to the new executable
+configuration by unpacking the NaomiExecutable instance given.
+
+### test_executable property
+
+This property is identical to the `main_executable` property, except for it
+represents the code and entrypoint that the Naomi BIOS will use when executing
+the "Game Test Mode" section of the test menu. It can be similarly read and written.
