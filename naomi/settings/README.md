@@ -9,6 +9,85 @@ relationships to each other. Settings editors can be built using this module
 which work together with `naomi.NaomiEEPRom` and `naomi.NaomiSettingsPatcher`
 to make the settings available when netbooting a game on a Naomi system.
 
+## Setting
+
+A single setting, with its name, default, current value, possible allowed values,
+and any possible relationship to other settings. Note that any relationship,
+if it exists, will only be to other Setting objects inside a `Settings` class.
+Note that you should not attempt to construct an instance of this yourself.
+You should only work with previously-constructed instances of it as found inside
+an instance of `Settings`.
+
+### name property
+
+The name of this setting, as a string. This is what you should display to a user
+if you are developing a settings editor.
+
+### size property
+
+The size of this setting, as an instance of SettingSizeEnum. The valid values
+for this are `SettingSizeEnum.NIBBLE` and `SettingSizeEnum.BYTE`. Note that if
+you are developing an editor, you can safely ignore this as the `values` property
+will include all valid values that this setting can be set to. You do not have to
+understand or manipulate this in any way and it is only present so that other
+parts of the `naomi.settings` module can do their job properly.
+
+### length property
+
+The length in bytes this setting takes up, if the `size` property is `SettingSizeEnum.BYTE`.
+If the `size` property is instead `SettingSizeEnum.NIBBLE` then this will always
+be set to 1. Note that much like the `size` property if you are implementing an
+editor you can safely ignore this property for the same rationale as above.
+
+### read_only property
+
+Whether this property is read-only or not. Some settings are not modifiable, such
+as the system serial number. Other settings are only modifiable if other settings
+are set to some value, such as the "Continue" setting on Marvel vs. Capcom 2 which
+is dependent on "Event" mode being off. If this property is "False" then this setting
+is user-editable under all circumstances. If this property is "True" then this setting
+is never user-editable. If this property is an instance of `ReadOnlyCondition` then
+it depends on some other settings for whether it is read-only. You can call the
+`evaluate()` method on the instance of `ReadOnlyCondition` which takes a list of
+`Setting` objects (this setting's siblings as found in a `Settings` object) and returns
+a boolean. If that boolean is "True", then this setting is currently read-only because
+of some other setting's value. If the boolean is "False", then the setting is currently
+editable because of some other setting's value.
+
+In the Naomi Test Mode, settings that are always read-only are hidden completely from
+the user. Settings which are never read-only are displayed to the user. And settings
+which are conditionally read-only will be conditionally hidden based on whether they
+are read-only. It is recommended that your editor perform a similar thing when you
+display settings. Settings whose `read_only` property is "False" should always be
+displayed. Settings whose `read_only` property is "True" should be completely hidden
+from the user. Settings whose `read_only` property is a `ReadOnlyCondition` should be
+evaluated and then the setting either grayed out when it is "True" or conditionally
+hidden from the user.
+
+### values property
+
+A dictionary whose keys are integers which the `current` property could be set
+to, and whose values are the strings which should be displayed to the user for
+those value selections. Note that if a setting is always read-only this may instead
+be None. It is guaranteed to be a dictionary with at least one value whenever a
+setting is user-editable.
+
+### current property
+
+The current integer value that the setting is set to. In order to display the correct
+thing to a user, you should use this as a key into the `values` property to look up
+the correct string to display.
+
+### default property
+
+The default value for this setting. Note that under some circumstances, this may
+not be available and will return None. You can safely ignore this property if you are
+developing an editor. If you wish to provide a "defaults" button in your editor, it
+is recommended to instead use the `from_serial()` method on an instance of
+`SettingsManager` which will return you a new `SettingsWrapper` with default values.
+This will correctly handle system and game defaults as well as dependendent default
+settings.
+
 ## Settings
 
 A class which represents a collection of settings that can be used to manipulate
