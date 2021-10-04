@@ -60,6 +60,10 @@ else:
             'naomi.settings',
             'homebrew.settingstrojan',
         ],
+        package_data={
+            "naomi": ["py.typed"],
+            "naomi.settings": ["py.typed"],
+        },
         install_requires=[
             # Nothing is a dependency if we are just doing a package for 3rdparty.
         ],
