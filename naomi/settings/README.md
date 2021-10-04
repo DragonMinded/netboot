@@ -8,3 +8,153 @@ representation of valid settings including their defaults, valid values and
 relationships to each other. Settings editors can be built using this module
 which work together with `naomi.NaomiEEPRom` and `naomi.NaomiSettingsPatcher`
 to make the settings available when netbooting a game on a Naomi system.
+
+## Settings
+
+A class which represents a collection of settings that can be used to manipulate
+a section of an EEPROM file. Note that you should not attempt to construct
+this yourself. You should only work with previously-constructed instances of
+it as found inside an instance of `SettingsWrapper`.
+
+### filename property
+
+The name of the settings definition file that was used to create this collection.
+Note that this is not a fully qualified path, but instead just the name of
+the file, like "system.settings" or "BBG0.settings". If you wish to look up
+the actual file location given this property, use the `files` property on an
+instance of `SettingsManager`.
+
+### type property
+
+An instance of SettingType which specifies whether this collection of settings
+is a system settings section or a game settings section in an EEPROM. Valid
+values are `SettingType.SYSTEM` and `SettingType.GAME`.
+
+### settings property
+
+A python list of `Setting` objects, representing the list of settings that
+can be mofidied or displayed. You should not assign to this property directly
+when modifying settings in a settings editor you are implementing. However,
+you are welcome to modify the properties of each setting in this list directly.
+
+### length property
+
+An integer representing how many bytes long the section of EEPROM represented
+by this collection is. For system settings, this will always be 16 since the
+system section is hardcoded at 16 bytes. For game settings, this will be
+determined by the settings definition file that was looked up for the game
+in question.
+
+## SettingsWrapper
+
+A class whose sole purpose is to encapsulate a group of system settings,
+game settings and the serial number of the game that the system and game
+settings go with. This is returned by many methods in `SettingsManager`
+and taken as a parameter of several more methods in `SettingsManager.
+
+Note that you should not attempt to construct this yourself. You should
+only work with previously-constructed instances of it as returned by
+methods in `SettingsManager`.
+
+### serial property
+
+The 4-byte serial of the game this `SettingsWrapper` instance has been
+created for.
+
+### system
+
+A collection of settings that manipulate the system section of the EEPROM
+for the game this instance has been created for. This is inside of a
+`Settings` wrapper object.
+
+### game
+
+A collection of settings that manipulate the game section of the EEPROM
+for the game this instance has been created for. This is inside of a
+`Settings` wrapper object.
+
+### to_json() method
+
+Converts the current instance of `SettingsWrapper` to a dictionary suitable
+for passing to `json.dumps`. This is provided as a convenience wrapper so
+that if you are implementing a web interface you don't have to serialize
+anything yourself. To unserialize a dictionary that you get from this method,
+call the `from_json` method on an instance of `SettingsManager`.
+
+## SettingsManager
+
+The `SettingsManager` class manages the ability to parse a 128-byte EEPROM
+file given a directory of settings definitions. It is responsible for
+identifying the correct files for patching given an EEPROM or ROM serial.
+It is also responsible for taking a modified list of settings and writing
+a new EEPROM file.
+
+### Default Constructor
+
+Takes a single string argument "directory" which points at the directory
+which contains settings definition files and returns an instance of the
+`SettingsManager` class. In this repository, that directory is
+`naomi/settings/definitions/`. Note that the settings definitions in this
+repository are not included in any packages by default.
+
+### files property
+
+An instance of `SettingsManager` has the "files" property, which returns
+a dictionary of recognized settings definitions in the directory supplied to
+the default constructor. The returned dictionary has keys representing the
+settings definition file, such as "system.settings" or "BBG0.settings". The
+values of the dictionary are fully qualified system paths to the file in
+question.
+
+### from_serial() method
+
+Takes a single bytes argument "serial" as retrieved from Naomi ROM header
+and uses that to construct a `SettingsWrapper` class representing the
+available settings for a game that has the serial number provided. This
+can be used when you want to edit settings for a game but do not have an
+EEPROM already created. This will read the definitions files and create
+a `SettingsWrapper` with default settings. This can be then passed to the
+`to_eeprom()` function to return a valid 128-byte EEPROM representing the
+default settings.
+
+### from_eeprom() method
+
+Takes a single bytes argument "data" as loaded from a valid 128-byte
+EEPROM file or as grabbed from the `data` property of an instance of
+`NaomiEEPRom` and constructs a `SettingsWrapper` class representing the
+available settings for a game that matches the serial number provided in
+the EEPROM file. This can be used when you want to edit the settings for
+a game and you already have the EEPROM file created. This will read the
+definitions file and parse out the current settings in the EEPROM and
+return a `SettingsWrapper` with those settings. This can then be modified
+and passed to the `to_eeprom()` function to return a valid 128-byte EEPROM
+representing the current settings.
+
+### from_json() method
+
+Takes a single dictionary argument "jsondict" and deserializes it to
+a `SettingsWrapper` instance. The dictionary argument can be retrieved
+by calling the `to_json()` method on an existing `SettingsWrapper` instance.
+This is provided specifically as a convenience method for code wishing to
+provide web editor interfaces. A recommended workflow is to create an
+instance of `SettingsManager`, request a `SettingsWrapper` by calling
+either `from_eeprom()` or `from_serial()` as appropriate, calling `to_json()`
+on the resulting `SettingsWrapper` class and then passing that to
+`json.dumps` to get valid JSON that can be sent to a JS frontend app. After
+the frontend app has manipulated the settings by modifying the current
+value of each setting, you can use `json.loads` to get back a dictionary
+that can be passed to this function to get a deserialized `SettingsWrapper`
+class. The deserialized `SettingsWrapper` instance can then be passed to
+the `to_eeprom()` function to return a valid 128-byte EEPROM representing
+the settings chosen by the JS frontend.
+
+### to_eeprom() method
+
+Given an instance of `SettingsWrapper` returned by either `from_serial()`,
+`from_eeprom()` or `from_json()`, calculates and returns a valid 128-byte
+EEPROM file that represents the settings. Use this when you are finished
+modifying system and game settings using code and wish to generate a valid
+EEPROM file that can be modified with `NaomiEEPRom`, placed in an emulator's
+data directory to load those settings or attached to a Naomi ROM using the
+`naomi.NaomiSettingsPatcher` class so that the settings are written when
+netbooting the rom on a Naomi system.

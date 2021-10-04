@@ -471,7 +471,7 @@ class SettingsWrapper:
         systemconfig = SettingsConfig.from_data("system.settings", systemdata)
 
         # Now load the game settings, or if it doesn't exist, default to only allowing system settings to be set.
-        gameconfig = SettingsManager.serial_to_config(settings_files, serialbytes) or SettingsConfig.blank()
+        gameconfig = SettingsManager._serial_to_config(settings_files, serialbytes) or SettingsConfig.blank()
 
         # Finally parse the EEPRom based on the config.
         system = Settings.from_json(SettingType.SYSTEM, systemconfig, systemjson, [*context, "system"])
@@ -789,10 +789,14 @@ class SettingsManager:
 
     @property
     def files(self) -> Dict[str, str]:
-        return {f: os.path.join(self.__directory, f) for f in os.listdir(self.__directory) if os.path.isfile(os.path.join(self.__directory, f))}
+        return {
+            f: os.path.join(self.__directory, f)
+            for f in os.listdir(self.__directory)
+            if os.path.isfile(os.path.join(self.__directory, f)) and f.endswith(".settings")
+        }
 
     @staticmethod
-    def serial_to_config(files: Dict[str, str], serial: bytes) -> Optional[SettingsConfig]:
+    def _serial_to_config(files: Dict[str, str], serial: bytes) -> Optional[SettingsConfig]:
         fname = f"{serial.decode('ascii')}.settings"
 
         if fname not in files:
@@ -804,7 +808,7 @@ class SettingsManager:
         return SettingsConfig.from_data(fname, data)
 
     def from_serial(self, serial: bytes) -> SettingsWrapper:
-        config = self.serial_to_config(self.files, serial)
+        config = self._serial_to_config(self.files, serial)
         defaults = None
         if config is not None:
             defaults = config.defaults()
@@ -822,7 +826,7 @@ class SettingsManager:
 
         # Now load the game settings, or if it doesn't exist, default to only
         # allowing system settings to be set.
-        gameconfig = self.serial_to_config(self.files, eeprom.serial) or SettingsConfig.blank()
+        gameconfig = self._serial_to_config(self.files, eeprom.serial) or SettingsConfig.blank()
 
         # Finally parse the EEPRom based on the config.
         system = Settings.from_config(SettingType.SYSTEM, systemconfig, eeprom)
