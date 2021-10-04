@@ -9,6 +9,7 @@ from naomi.settings.settings import (
     Settings,
     SettingsWrapper,
     SettingsManager,
+    get_default_settings_directory,
 )
 try:
     from naomi.settings.editor import SettingsEditor
@@ -34,4 +35,5 @@ __all__ = [
     "SettingsWrapper",
     "SettingsManager",
     "SettingsEditor",
+    "get_default_settings_directory",
 ]

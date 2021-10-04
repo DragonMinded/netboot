@@ -780,6 +780,14 @@ class SettingsConfig:
         return b"".join(defaults)
 
 
+def get_default_settings_directory() -> bytes:
+    # Specifically for projects including this code as a 3rd-party dependency,
+    # look up where we stick the default settings definitions files and return
+    # that path as a string, suitable for passing into the "directory" param of
+    # SettingsManager.
+    return os.path.realpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), "definitions"))
+
+
 class SettingsManager:
     # A manager class that can handle manifesting and saving settings given a directory
     # of definition files.

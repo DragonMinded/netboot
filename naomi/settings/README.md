@@ -168,6 +168,11 @@ identifying the correct files for patching given an EEPROM or ROM serial.
 It is also responsible for taking a modified list of settings and writing
 a new EEPROM file.
 
+Note that default definitions are included with this module. To grab the
+default definitions directory, use the `get_default_settings_directory` function
+which will return a fully qualified path to the settings directory of this
+module.
+
 Note that since this is parsing user-supplied settings definitions files,
 there can be errors in processing those files. In any function that returns
 a `SettingsWrapper` instance, a `SettingsParseException` can be thrown.
@@ -195,7 +200,15 @@ Takes a single string argument "directory" which points at the directory
 which contains settings definition files and returns an instance of the
 `SettingsManager` class. In this repository, that directory is
 `naomi/settings/definitions/`. Note that the settings definitions in this
-repository are not included in any packages by default.
+repository can be found by using the `get_default_settings_directory` function.
+An example of how to initialize this is as follows:
+
+```
+from naomi.settings import get_default_settings_directory, SettingsManager
+
+dir = get_default_settings_directory()
+man =  SettingsManager(dir)
+```
 
 ### files property
 

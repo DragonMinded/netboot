@@ -45,7 +45,11 @@ else:
     # package so that other code can depend on us.
     with open(os.path.join("naomi", "README.md"), "r", encoding="utf-8") as fh:
         long_description = fh.read()
+    long_description += os.linesep
     with open(os.path.join("naomi", "settings", "README.md"), "r", encoding="utf-8") as fh:
+        long_description += fh.read()
+    long_description += os.linesep
+    with open(os.path.join("naomi", "settings", "definitions", "README.md"), "r", encoding="utf-8") as fh:
         long_description += fh.read()
 
     setup(
@@ -62,6 +66,8 @@ else:
             # Package for 3rd party.
             'naomi',
             'naomi.settings',
+            # Include settings definitions.
+            'naomi.settings.definitions',
             # Include default trojan.
             'homebrew.settingstrojan',
         ],
@@ -69,6 +75,8 @@ else:
             # Make sure mypy sees us as typed.
             "naomi": ["py.typed", "README.md"],
             "naomi.settings": ["py.typed", "README.md"],
+            # Make sure to include all existing settings.
+            "naomi.settings.definitions": ["*.settings", "README.md"],
             # Make sure to actually include the trojan data.
             "homebrew.settingstrojan": ["settingstrojan.bin"],
         },

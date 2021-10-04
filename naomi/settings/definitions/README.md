@@ -1,0 +1,3 @@
+# Settings Definitions Format
+
+TODO.
