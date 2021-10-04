@@ -45,6 +45,8 @@ else:
     # package so that other code can depend on us.
     with open(os.path.join("naomi", "README.md"), "r", encoding="utf-8") as fh:
         long_description = fh.read()
+    with open(os.path.join("naomi", "settings", "README.md"), "r", encoding="utf-8") as fh:
+        long_description += fh.read()
 
     setup(
         name='netboot',
@@ -66,7 +68,7 @@ else:
         package_data={
             # Make sure mypy sees us as typed.
             "naomi": ["py.typed", "README.md"],
-            "naomi.settings": ["py.typed"],
+            "naomi.settings": ["py.typed", "README.md"],
             # Make sure to actually include the trojan data.
             "homebrew.settingstrojan": ["settingstrojan.bin"],
         },

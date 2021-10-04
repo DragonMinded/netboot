@@ -1,6 +1,6 @@
 # naomi
 
-Collection of utilities written in Python for manipulating Naomi ROM and EEPROM
+Collection of routines written in Python for manipulating Naomi ROM and EEPROM
 files. This is geared towards enthusiasts building their own netboot servers or
 RPI setups and provides libraries for examining ROM and manipulating ROM headers
 as well as attaching EEPROM settings to ROM files and manipulating their contents.
