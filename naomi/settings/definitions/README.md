@@ -144,7 +144,7 @@ another setting is set to a certain value. If you run into a setting such as
 this, you can specify that relationship like so:
 
 ```
-Sometimes Hidden Setting: byte, read-only if Other Setting is 1, values are 0-2
+Sometimes Hidden Setting: byte, read-only if Other Setting is 1, values are 0 to 2
 ```
 
 This defines a setting called "Sometimes Hidden Setting" which is a single byte
@@ -157,7 +157,7 @@ If you want to specify that a setting is read-only unless another setting is
 a certain value, you can do so like the following:
 
 ```
-Sometimes Hidden Setting: byte, read-only unless Other Setting is 1, values are 0-2
+Sometimes Hidden Setting: byte, read-only unless Other Setting is 1, values are 0 to 2
 ```
 
 This defines the same setting as the first example, but the read-only logic
@@ -168,7 +168,7 @@ If you need to specify multiple values for the other setting, you can do so
 like so:
 
 ```
-Sometimes Hidden Setting: byte, read-only if Other Setting is 1 or 2, values are 0-2
+Sometimes Hidden Setting: byte, read-only if Other Setting is 1 or 2, values are 0 to 2
 ```
 
 This defines the same setting as the first example, but the read-only logic
