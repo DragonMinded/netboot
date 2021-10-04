@@ -53,9 +53,9 @@ else:
         long_description += fh.read()
 
     setup(
-        name='netboot',
+        name='naomiutils',
         version='0.1',
-        description='Code libraries for working with Naomi/Triforce/Chihiro.',
+        description='Code libraries for working with Naomi ROMs and EEPROMs.',
         long_description=long_description,
         long_description_content_type="text/markdown",
         author='DragonMinded',
