@@ -32,4 +32,4 @@ Setting27: byte, read-only, default is 00
 VCenterUnknown: byte, read-only, default is value of Vertical Center (Now V) + 1
 Vertical Center (Now V): byte, default is 7f, values are 00 to ff in hex
 Setting30: byte, read-only, default is 00
-Setting10: byte, read-only, default is 00
+Setting31: byte, read-only, default is 00
