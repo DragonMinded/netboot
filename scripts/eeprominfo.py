@@ -28,6 +28,11 @@ def main() -> int:
         help="Attempt to parse EEPROM and display settings as well.",
     )
     parser.add_argument(
+        '--generate-default-settings-file',
+        action="store_true",
+        help="Attempt to generate a fresh settings definition file based on this EEPROM.",
+    )
+    parser.add_argument(
         '--settings-directory',
         metavar='DIR',
         type=str,
@@ -48,7 +53,22 @@ def main() -> int:
         print(f"Serial: {eeprom.serial.decode('ascii')}")
         print(f"Game Settings Hex: {' '.join(gamechunks)}")
 
-        if args.display_parsed_settings:
+        if args.generate_default_settings_file:
+            filename = f"{eeprom.serial.decode('ascii')}.settings"
+            pathname = os.path.join(args.settings_directory, filename)
+            if os.path.isfile(pathname):
+                print(f"Settings file {filename} already exists!", file=sys.stderr)
+                return 1
+
+            with open(pathname, "w") as fp:
+                for i, chunk in enumerate(gamechunks):
+                    loc = hex(i)[2:]
+                    if len(loc) < 2:
+                        loc = "0" + loc
+                    fp.write(f"Setting{loc}: byte, read-only, default is {chunk}{os.linesep}")
+            print(f"Settings file {filename} created with defaults from EEPROM!", file=sys.stderr)
+
+        elif args.display_parsed_settings:
             # Grab the actual EEPRom so we can print the settings within.
             manager = SettingsManager(args.settings_directory)
 
