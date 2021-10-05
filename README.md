@@ -144,7 +144,7 @@ This script spawns a command-line EEPROM file editor. Use this to create a new E
 
 ### Free-Play/No Attract Patch Generators
 
-Both `make_freeplay_patch` and `make_no_attract_patch` can be invoked in the same manner, and will produce a patch that applies either forced free-play or forced silent attract mode. Note that these patches are considered obsolete, as you can customize all system settings using `attach_settings` as documented above. You can run them like so:
+Both `make_freeplay_patch` and `make_no_attract_patch` can be invoked in the same manner, and will produce a patch that applies either forced free-play or forced silent attract mode. Note that these patches are considered obsolete, as you can customize all system settings using `attach_settings` or `edit_settings` as documented above. You can run them like so:
 
 ```
 ./make_no_attract_patch game.bin --patch-file game_no_attract.binpatch
