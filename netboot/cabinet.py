@@ -39,6 +39,7 @@ class Cabinet:
         description: str,
         filename: Optional[str],
         patches: Dict[str, Sequence[str]],
+        settings: Dict[str, Optional[bytes]],
         target: Optional[TargetEnum] = None,
         version: Optional[TargetVersionEnum] = None,
         quiet: bool = False,
@@ -46,6 +47,7 @@ class Cabinet:
         self.description: str = description
         self.region: CabinetRegionEnum = region
         self.patches: Dict[str, List[str]] = {rom: [p for p in patches[rom]] for rom in patches}
+        self.settings: Dict[str, Optional[bytes]] = {rom: settings[rom] for rom in settings}
         self.quiet = quiet
         self.__host: Host = Host(ip, target=target, version=version, quiet=self.quiet)
         self.__lock: threading.Lock = threading.Lock()
@@ -63,7 +65,7 @@ class Cabinet:
                 self.__state = state
 
     def __repr__(self) -> str:
-        return f"Cabinet(ip={repr(self.ip)}, description={repr(self.description)}, filename={repr(self.filename)}, patches={repr(self.patches)} target={repr(self.target)}, version={repr(self.version)})"
+        return f"Cabinet(ip={repr(self.ip)}, description={repr(self.description)}, filename={repr(self.filename)}, patches={repr(self.patches)} settings={repr(self.settings)}, target={repr(self.target)}, version={repr(self.version)})"
 
     @property
     def ip(self) -> str:
@@ -117,7 +119,7 @@ class Cabinet:
                     else:
                         self.__print(f"Cabinet {self.ip} sending game {self.__new_filename}.")
                         self.__current_filename = self.__new_filename
-                        self.__host.send(self.__new_filename, self.patches.get(self.__new_filename, []))
+                        self.__host.send(self.__new_filename, self.patches.get(self.__new_filename, []), self.settings.get(self.__new_filename, None))
                         self.__state = (CabinetStateEnum.STATE_SEND_CURRENT_GAME, 0)
                 return
 
@@ -216,6 +218,8 @@ class CabinetManager:
                     region=CabinetRegionEnum(str(cab['region']).lower()),
                     filename=str(cab['filename']) if cab['filename'] is not None else None,
                     patches={str(rom): [str(p) for p in cab['roms'][rom]] for rom in cab['roms']},
+                    # This is accessed differently since we have older YAML files that might need upgrading.
+                    settings={str(rom): (bytes(data) or None) for (rom, data) in cab.get('settings', {})},
                     target=TargetEnum(str(cab['target'])) if 'target' in cab else None,
                     version=TargetVersionEnum(str(cab['version'])) if 'version' in cab else None,
                 )
@@ -224,7 +228,7 @@ class CabinetManager:
         return CabinetManager(cabinets)
 
     def to_yaml(self, yaml_file: str) -> None:
-        data: Dict[str, Dict[str, Optional[Union[str, Dict[str, List[str]]]]]] = {}
+        data: Dict[str, Dict[str, Optional[Union[str, Dict[str, List[str]], Dict[str, List[int]]]]]] = {}
 
         with self.__lock:
             cabinets: List[Cabinet] = sorted([cab for _, cab in self.__cabinets.items()], key=lambda cab: cab.ip)
@@ -237,6 +241,9 @@ class CabinetManager:
                 'version': cab.version.value,
                 'filename': cab.filename,
                 'roms': cab.patches,
+                # Bytes isn't a serializable type, so serialize it as a list of ints. If the settings is
+                # None for a ROM, serialize it as an empty list.
+                'settings': {rom: [x for x in (settings or [])] for (rom, settings) in cab.settings.items()},
             }
 
         with open(yaml_file, "w") as fp:

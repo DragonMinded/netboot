@@ -13,6 +13,7 @@ from typing import Optional, Sequence, Tuple, TYPE_CHECKING
 from arcadeutils.binary import BinaryDiff
 from netboot.log import log
 from netboot.netboot import NetDimm, NetDimmException, TargetEnum, TargetVersionEnum
+from naomi import NaomiSettingsPatcher, get_default_trojan as get_default_naomi_trojan
 
 
 if TYPE_CHECKING:
@@ -23,6 +24,7 @@ def _send_file_to_host(
     host: str,
     filename: str,
     patches: Sequence[str],
+    settings: Optional[bytes],
     target: TargetEnum,
     version: TargetVersionEnum,
     parent_pid: int,
@@ -47,6 +49,13 @@ def _send_file_to_host(
                 differences = pp.readlines()
             differences = [d.strip() for d in differences if d.strip()]
             data = BinaryDiff.patch(data, differences)
+
+        # Attach any settings file requested.
+        if target == TargetEnum.TARGET_NAOMI:
+            if settings is not None:
+                patcher = NaomiSettingsPatcher(data, get_default_naomi_trojan())
+                patcher.put_settings(settings)
+                data = patcher.data
 
         # Send it
         netdimm.send(data, progress_callback=capture_progress)
@@ -214,7 +223,7 @@ class Host:
             self.__proc = None
             return
 
-    def send(self, filename: str, patches: Sequence[str]) -> None:
+    def send(self, filename: str, patches: Sequence[str], settings: Optional[bytes]) -> None:
         with self.__lock:
             if self.__proc is not None:
                 raise HostException("Host has active transfer already")
@@ -223,7 +232,7 @@ class Host:
             self.__print(f"Host {self.ip} started sending image.")
 
             # Start the send
-            self.__proc = multiprocessing.Process(target=_send_file_to_host, args=(self.ip, filename, patches, self.target, self.version, os.getpid(), self.__queue))
+            self.__proc = multiprocessing.Process(target=_send_file_to_host, args=(self.ip, filename, patches, settings, self.target, self.version, os.getpid(), self.__queue))
             self.__proc.start()
 
             # Don't yield control back until we have got the first response from the process

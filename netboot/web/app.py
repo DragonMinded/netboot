@@ -322,6 +322,7 @@ def createcabinet(ip: str) -> Dict[str, Any]:
         description=request.json['description'],
         filename=None,
         patches={rom: [] for rom in roms},
+        settings={rom: None for rom in roms},
         target=TargetEnum(request.json['target']),
         version=TargetVersionEnum(request.json['version']),
     )
@@ -344,6 +345,7 @@ def updatecabinet(ip: str) -> Dict[str, Any]:
         description=request.json['description'],
         filename=old_cabinet.filename,
         patches=old_cabinet.patches,
+        settings=old_cabinet.settings,
         target=TargetEnum(request.json['target']),
         version=TargetVersionEnum(request.json['version']),
     )

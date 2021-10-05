@@ -6,7 +6,7 @@ import sys
 import time
 import enum
 from netboot import Cabinet, CabinetStateEnum, CabinetRegionEnum, TargetEnum, TargetVersionEnum
-from typing import Any
+from typing import Any, Optional
 
 
 class EnumAction(argparse.Action):
@@ -78,11 +78,37 @@ def main() -> int:
             'image is sent without patching.'
         ),
     )
+    parser.add_argument(
+        '--settings-file',
+        metavar='FILE',
+        type=str,
+        help=(
+            'Settings to apply to image on-the-fly while sending to the NetDimm. '
+            'Currently only supported for the Naomi platform. For Naomi, the '
+            'settings file should be a valid 128-byte EEPROM file as obtained '
+            'from an emulator or as created using the "edit_settings" utility.'
+        ),
+    )
 
     args = parser.parse_args()
 
+    settings: Optional[bytes] = None
+    if args.settings_file:
+        with open(args.settings_file, "rb") as fp:
+            settings = fp.read()
+
     print(f"managing {args.ip} to ensure {args.image} is always loaded")
-    cabinet = Cabinet(args.ip, CabinetRegionEnum.REGION_UNKNOWN, "No description.", args.image, {args.image: args.patch_file or []}, target=args.target, version=args.version, quiet=True)
+    cabinet = Cabinet(
+        args.ip,
+        CabinetRegionEnum.REGION_UNKNOWN,
+        "No description.",
+        args.image,
+        {args.image: args.patch_file or []},
+        {args.image: settings},
+        target=args.target,
+        version=args.version,
+        quiet=True,
+    )
     while True:
         # Tick the state machine, display progress
         cabinet.tick()

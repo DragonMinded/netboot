@@ -6,6 +6,7 @@ import enum
 import sys
 from arcadeutils.binary import BinaryDiff
 from netboot import NetDimm, TargetEnum, TargetVersionEnum
+from naomi import NaomiSettingsPatcher, get_default_trojan as get_default_naomi_trojan
 from typing import Any, Optional
 
 
@@ -84,6 +85,17 @@ def main() -> int:
             'image is sent without patching.'
         ),
     )
+    parser.add_argument(
+        '--settings-file',
+        metavar='FILE',
+        type=str,
+        help=(
+            'Settings to apply to image on-the-fly while sending to the NetDimm. '
+            'Currently only supported for the Naomi platform. For Naomi, the '
+            'settings file should be a valid 128-byte EEPROM file as obtained '
+            'from an emulator or as created using the "edit_settings" utility.'
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -109,6 +121,16 @@ def main() -> int:
         except Exception as e:
             print(f"Could not patch {args.image}: {str(e)}", file=sys.stderr)
             return 1
+
+    # Grab any settings file that should be included.
+    if netdimm.target == TargetEnum.TARGET_NAOMI:
+        if args.settings_file:
+            with open(args.settings_file, "rb") as fp:
+                settings = fp.read()
+
+            patcher = NaomiSettingsPatcher(data, get_default_naomi_trojan())
+            patcher.put_settings(settings)
+            data = patcher.data
 
     # Send the binary, reboot into the game.
     netdimm.send(data, key)
