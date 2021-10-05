@@ -7,7 +7,7 @@ from typing import Callable, Dict, List, Any, cast
 
 from flask import Flask, Response, request, render_template, make_response, jsonify as flask_jsonify
 from werkzeug.routing import PathConverter
-from netboot import Cabinet, CabinetManager, DirectoryManager, PatchManager, NetDimm
+from netboot import Cabinet, CabinetRegionEnum, CabinetManager, DirectoryManager, PatchManager, TargetEnum, TargetVersionEnum
 
 
 current_directory: str = os.path.abspath(os.path.dirname(__file__))
@@ -46,16 +46,16 @@ def cabinet_to_dict(cab: Cabinet, dirmanager: DirectoryManager) -> Dict[str, Any
     return {
         'ip': cab.ip,
         'description': cab.description,
-        'region': cab.region,
+        'region': cab.region.value,
         'game': dirmanager.game_name(cab.filename, cab.region) if cab.filename is not None else "no game selected",
         'filename': cab.filename,
         'options': sorted(
             [{'file': filename, 'name': dirmanager.game_name(filename, cab.region)} for filename in cab.patches],
             key=lambda option: cast(str, option['name']),
         ),
-        'target': cab.target,
-        'version': cab.version,
-        'status': status,
+        'target': cab.target.value,
+        'version': cab.version.value,
+        'status': status.value,
         'progress': progress,
     }
 
@@ -114,11 +114,11 @@ def romconfig(filename: str) -> Response:
             'romconfig.html',
             filename=filename,
             names={
-                Cabinet.REGION_JAPAN: dirman.game_name(filename, Cabinet.REGION_JAPAN),
-                Cabinet.REGION_USA: dirman.game_name(filename, Cabinet.REGION_USA),
-                Cabinet.REGION_EXPORT: dirman.game_name(filename, Cabinet.REGION_EXPORT),
-                Cabinet.REGION_KOREA: dirman.game_name(filename, Cabinet.REGION_KOREA),
-                Cabinet.REGION_AUSTRALIA: dirman.game_name(filename, Cabinet.REGION_AUSTRALIA),
+                CabinetRegionEnum.REGION_JAPAN.value: dirman.game_name(filename, CabinetRegionEnum.REGION_JAPAN),
+                CabinetRegionEnum.REGION_USA.value: dirman.game_name(filename, CabinetRegionEnum.REGION_USA),
+                CabinetRegionEnum.REGION_EXPORT.value: dirman.game_name(filename, CabinetRegionEnum.REGION_EXPORT),
+                CabinetRegionEnum.REGION_KOREA.value: dirman.game_name(filename, CabinetRegionEnum.REGION_KOREA),
+                CabinetRegionEnum.REGION_AUSTRALIA.value: dirman.game_name(filename, CabinetRegionEnum.REGION_AUSTRALIA),
             }
         ),
         200
@@ -135,22 +135,22 @@ def cabinetconfig(ip: str) -> Response:
             'gameconfig.html',
             cabinet=cabinet_to_dict(cabinet, dirman),
             regions=[
-                Cabinet.REGION_JAPAN,
-                Cabinet.REGION_USA,
-                Cabinet.REGION_EXPORT,
-                Cabinet.REGION_KOREA,
-                Cabinet.REGION_AUSTRALIA,
+                CabinetRegionEnum.REGION_JAPAN.value,
+                CabinetRegionEnum.REGION_USA.value,
+                CabinetRegionEnum.REGION_EXPORT.value,
+                CabinetRegionEnum.REGION_KOREA.value,
+                CabinetRegionEnum.REGION_AUSTRALIA.value,
             ],
             targets=[
-                NetDimm.TARGET_NAOMI,
-                NetDimm.TARGET_CHIHIRO,
-                NetDimm.TARGET_TRIFORCE,
+                TargetEnum.TARGET_NAOMI.value,
+                TargetEnum.TARGET_CHIHIRO.value,
+                TargetEnum.TARGET_TRIFORCE.value,
             ],
             versions=[
-                NetDimm.TARGET_VERSION_3_01,
-                NetDimm.TARGET_VERSION_2_15,
-                NetDimm.TARGET_VERSION_2_03,
-                NetDimm.TARGET_VERSION_1_07,
+                TargetVersionEnum.TARGET_VERSION_3_01.value,
+                TargetVersionEnum.TARGET_VERSION_2_15.value,
+                TargetVersionEnum.TARGET_VERSION_2_03.value,
+                TargetVersionEnum.TARGET_VERSION_1_07.value,
             ],
         ),
         200
@@ -163,22 +163,22 @@ def addcabinet() -> Response:
         render_template(
             'addcabinet.html',
             regions=[
-                Cabinet.REGION_JAPAN,
-                Cabinet.REGION_USA,
-                Cabinet.REGION_EXPORT,
-                Cabinet.REGION_KOREA,
-                Cabinet.REGION_AUSTRALIA,
+                CabinetRegionEnum.REGION_JAPAN.value,
+                CabinetRegionEnum.REGION_USA.value,
+                CabinetRegionEnum.REGION_EXPORT.value,
+                CabinetRegionEnum.REGION_KOREA.value,
+                CabinetRegionEnum.REGION_AUSTRALIA.value,
             ],
             targets=[
-                NetDimm.TARGET_NAOMI,
-                NetDimm.TARGET_CHIHIRO,
-                NetDimm.TARGET_TRIFORCE,
+                TargetEnum.TARGET_NAOMI.value,
+                TargetEnum.TARGET_CHIHIRO.value,
+                TargetEnum.TARGET_TRIFORCE.value,
             ],
             versions=[
-                NetDimm.TARGET_VERSION_3_01,
-                NetDimm.TARGET_VERSION_2_15,
-                NetDimm.TARGET_VERSION_2_03,
-                NetDimm.TARGET_VERSION_1_07,
+                TargetVersionEnum.TARGET_VERSION_3_01.value,
+                TargetVersionEnum.TARGET_VERSION_2_15.value,
+                TargetVersionEnum.TARGET_VERSION_2_03.value,
+                TargetVersionEnum.TARGET_VERSION_1_07.value,
             ],
         ),
         200
@@ -211,14 +211,14 @@ def updaterom(filename: str) -> Dict[str, Any]:
         raise Exception("This isn't a valid ROM file!")
     if request.json is not None:
         for region, name in request.json.items():
-            dirman.rename_game(filename, region, name)
+            dirman.rename_game(filename, CabinetRegionEnum(region), name)
         serialize_app(app)
         return {
-            Cabinet.REGION_JAPAN: dirman.game_name(filename, Cabinet.REGION_JAPAN),
-            Cabinet.REGION_USA: dirman.game_name(filename, Cabinet.REGION_USA),
-            Cabinet.REGION_EXPORT: dirman.game_name(filename, Cabinet.REGION_EXPORT),
-            Cabinet.REGION_KOREA: dirman.game_name(filename, Cabinet.REGION_KOREA),
-            Cabinet.REGION_AUSTRALIA: dirman.game_name(filename, Cabinet.REGION_AUSTRALIA),
+            CabinetRegionEnum.REGION_JAPAN.value: dirman.game_name(filename, CabinetRegionEnum.REGION_JAPAN),
+            CabinetRegionEnum.REGION_USA.value: dirman.game_name(filename, CabinetRegionEnum.REGION_USA),
+            CabinetRegionEnum.REGION_EXPORT.value: dirman.game_name(filename, CabinetRegionEnum.REGION_EXPORT),
+            CabinetRegionEnum.REGION_KOREA.value: dirman.game_name(filename, CabinetRegionEnum.REGION_KOREA),
+            CabinetRegionEnum.REGION_AUSTRALIA.value: dirman.game_name(filename, CabinetRegionEnum.REGION_AUSTRALIA),
         }
     else:
         raise Exception("Expected JSON data in request!")
@@ -318,12 +318,12 @@ def createcabinet(ip: str) -> Dict[str, Any]:
         roms.extend(os.path.join(directory, filename) for filename in dirman.games(directory))
     new_cabinet = Cabinet(
         ip=ip,
-        region=request.json['region'],
+        region=CabinetRegionEnum(request.json['region']),
         description=request.json['description'],
         filename=None,
         patches={rom: [] for rom in roms},
-        target=request.json['target'],
-        version=request.json['version'],
+        target=TargetEnum(request.json['target']),
+        version=TargetVersionEnum(request.json['version']),
     )
     cabman.add_cabinet(new_cabinet)
     serialize_app(app)
@@ -340,12 +340,12 @@ def updatecabinet(ip: str) -> Dict[str, Any]:
     old_cabinet = cabman.cabinet(ip)
     new_cabinet = Cabinet(
         ip=ip,
-        region=request.json['region'],
+        region=CabinetRegionEnum(request.json['region']),
         description=request.json['description'],
         filename=old_cabinet.filename,
         patches=old_cabinet.patches,
-        target=request.json['target'],
-        version=request.json['version'],
+        target=TargetEnum(request.json['target']),
+        version=TargetVersionEnum(request.json['version']),
     )
     cabman.update_cabinet(new_cabinet)
     serialize_app(app)

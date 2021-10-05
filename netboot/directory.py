@@ -4,6 +4,7 @@ import threading
 import zlib
 
 from typing import Dict, List, Mapping, Sequence
+from netboot.cabinet import CabinetRegionEnum
 from naomi import NaomiRom
 
 
@@ -34,9 +35,9 @@ class DirectoryManager:
                 raise Exception(f"Directory {directory} is not managed by us!")
             return sorted([f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))])
 
-    def game_name(self, filename: str, region: str) -> str:
+    def game_name(self, filename: str, region: CabinetRegionEnum) -> str:
         with self.__lock:
-            local_key = f"{region}-{filename}"
+            local_key = f"{region.value}-{filename}"
             if local_key in self.__names:
                 return self.__names[local_key]
 
@@ -47,7 +48,7 @@ class DirectoryManager:
 
             # Now, check and see if we have a checksum match
             crc = zlib.crc32(data, 0)
-            checksum = f"{region}-{crc}-{length}"
+            checksum = f"{region.value}-{crc}-{length}"
             if checksum in self.__checksums:
                 self.__names[local_key] = self.__checksums[checksum]
                 return self.__names[local_key]
@@ -57,12 +58,12 @@ class DirectoryManager:
             if rom.valid:
                 # Arbitrarily choose USA region as default
                 naomi_region = {
-                    'japan': NaomiRom.REGION_JAPAN,
-                    'usa': NaomiRom.REGION_USA,
-                    'export': NaomiRom.REGION_EXPORT,
-                    'korea': NaomiRom.REGION_KOREA,
-                    'australia': NaomiRom.REGION_AUSTRALIA,
-                }.get(region.lower(), NaomiRom.REGION_USA)
+                    CabinetRegionEnum.REGION_JAPAN: NaomiRom.REGION_JAPAN,
+                    CabinetRegionEnum.REGION_USA: NaomiRom.REGION_USA,
+                    CabinetRegionEnum.REGION_EXPORT: NaomiRom.REGION_EXPORT,
+                    CabinetRegionEnum.REGION_KOREA: NaomiRom.REGION_KOREA,
+                    CabinetRegionEnum.REGION_AUSTRALIA: NaomiRom.REGION_AUSTRALIA,
+                }.get(region, NaomiRom.REGION_USA)
                 self.__names[local_key] = rom.names[naomi_region]
                 self.__checksums[checksum] = self.__names[local_key]
                 return self.__names[local_key]
@@ -72,10 +73,10 @@ class DirectoryManager:
             self.__checksums[checksum] = self.__names[local_key]
             return self.__names[local_key]
 
-    def rename_game(self, filename: str, region: str, name: str) -> None:
+    def rename_game(self, filename: str, region: CabinetRegionEnum, name: str) -> None:
         with self.__lock:
             # Make the local key
-            local_key = f"{region}-{filename}"
+            local_key = f"{region.value}-{filename}"
 
             # Grab enough of the header for a match
             with open(filename, "rb") as fp:
@@ -84,7 +85,7 @@ class DirectoryManager:
 
             # Now, check and see if we have a checksum match
             crc = zlib.crc32(data, 0)
-            checksum = f"{region}-{crc}-{length}"
+            checksum = f"{region.value}-{crc}-{length}"
 
             # Update the value
             self.__names[local_key] = name

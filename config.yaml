@@ -1,5 +1,11 @@
 cabinet_config: cabinets.yaml
-rom_directory:
- - roms
+filenames:
+  australia-3642062668-86: READMEf
+  export-3642062668-86: c
+  japan-3642062668-86: READMEa
+  korea-3642062668-86: d
+  usa-3642062668-86: b
 patch_directory:
- - patches
+- /home/dragonminded/netboot/patches
+rom_directory:
+- /home/dragonminded/netboot/roms

@@ -4,7 +4,7 @@ import os
 import sys
 from typing import List
 
-from netboot import BinaryDiff
+from arcadeutils.binary import BinaryDiff
 
 
 def main() -> int:

@@ -7,18 +7,27 @@ import subprocess
 import sys
 import threading
 import time
+from enum import Enum
 from typing import Optional, Sequence, Tuple, TYPE_CHECKING
 
 from arcadeutils.binary import BinaryDiff
 from netboot.log import log
-from netboot.netboot import NetDimm, NetDimmException
+from netboot.netboot import NetDimm, NetDimmException, TargetEnum, TargetVersionEnum
 
 
 if TYPE_CHECKING:
     from typing import Any  # noqa
 
 
-def _send_file_to_host(host: str, filename: str, patches: Sequence[str], target: str, version: str, parent_pid: int, progress_queue: "multiprocessing.Queue[Tuple[str, Any]]") -> None:
+def _send_file_to_host(
+    host: str,
+    filename: str,
+    patches: Sequence[str],
+    target: TargetEnum,
+    version: TargetVersionEnum,
+    parent_pid: int,
+    progress_queue: "multiprocessing.Queue[Tuple[str, Any]]",
+) -> None:
     def capture_progress(sent: int, total: int) -> None:
         # See if we need to bail out since our parent disappeared
         if not psutil.pid_exists(parent_pid):
@@ -51,21 +60,19 @@ class HostException(Exception):
     pass
 
 
-class Host:
+class HostStatusEnum(Enum):
     STATUS_INACTIVE = "inactive"
     STATUS_TRANSFERRING = "transferring"
     STATUS_COMPLETED = "completed"
     STATUS_FAILED = "failed"
 
+
+class Host:
     DEBOUNCE_SECONDS = 3
 
-    def __init__(self, ip: str, target: Optional[str] = None, version: Optional[str] = None, quiet: bool = False) -> None:
-        if target is not None and target not in [NetDimm.TARGET_CHIHIRO, NetDimm.TARGET_NAOMI, NetDimm.TARGET_TRIFORCE]:
-            raise NetDimmException(f"Invalid target platform {target}")
-        self.target: str = target or NetDimm.TARGET_NAOMI
-        if version is not None and version not in [NetDimm.TARGET_VERSION_1_07, NetDimm.TARGET_VERSION_2_03, NetDimm.TARGET_VERSION_2_15, NetDimm.TARGET_VERSION_3_01]:
-            raise NetDimmException(f"Invalid NetDimm version {version}")
-        self.version: str = version or NetDimm.TARGET_VERSION_3_01
+    def __init__(self, ip: str, target: Optional[TargetEnum] = None, version: Optional[TargetVersionEnum] = None, quiet: bool = False) -> None:
+        self.target: TargetEnum = target or TargetEnum.TARGET_NAOMI
+        self.version: TargetVersionEnum = version or TargetVersionEnum.TARGET_VERSION_3_01
         self.ip: str = ip
         self.alive: bool = False
         self.quiet: bool = quiet
@@ -73,7 +80,7 @@ class Host:
         self.__lock: multiprocessing.synchronize.Lock = multiprocessing.Lock()
         self.__proc: Optional[multiprocessing.Process] = None
         self.__lastprogress: Tuple[int, int] = (-1, -1)
-        self.__laststatus: Optional[str] = None
+        self.__laststatus: Optional[HostStatusEnum] = None
         self.__thread: threading.Thread = threading.Thread(target=self.__poll_thread)
         self.__thread.setDaemon(True)
         self.__thread.start()
@@ -91,7 +98,7 @@ class Host:
 
         while True:
             # Dont bother if we're actively sending
-            if self.status != self.STATUS_TRANSFERRING:
+            if self.status != HostStatusEnum.STATUS_TRANSFERRING:
                 with open(os.devnull, 'w') as DEVNULL:
                     try:
                         subprocess.check_call(["ping", "-c1", "-W1", self.ip], stdout=DEVNULL, stderr=DEVNULL)
@@ -144,7 +151,7 @@ class Host:
             self.__update_progress()
 
     @property
-    def status(self) -> str:
+    def status(self) -> HostStatusEnum:
         """
         Given a host, returns the status of any active transfer.
         """
@@ -154,9 +161,9 @@ class Host:
                 return self.__laststatus
             if self.__proc is None:
                 # No proc means no current transfer
-                return self.STATUS_INACTIVE
+                return HostStatusEnum.STATUS_INACTIVE
             # If we got here, we have a proc and no status, so we're transferring
-            return self.STATUS_TRANSFERRING
+            return HostStatusEnum.STATUS_TRANSFERRING
 
     @property
     def progress(self) -> Tuple[int, int]:
@@ -197,10 +204,10 @@ class Host:
             # Transfer finished, so we should update our final status and wait on the process
             if update[0] == "success":
                 self.__print(f"Host {self.ip} succeeded in sending image.")
-                self.__laststatus = self.STATUS_COMPLETED
+                self.__laststatus = HostStatusEnum.STATUS_COMPLETED
             elif update[0] == "failure":
                 self.__print(f"Host {self.ip} failed to send image: {update[1]}.")
-                self.__laststatus = self.STATUS_FAILED
+                self.__laststatus = HostStatusEnum.STATUS_FAILED
             self.__lastprogress = (-1, -1)
 
             self.__proc.join()

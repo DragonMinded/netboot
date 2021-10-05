@@ -4,7 +4,36 @@
 import argparse
 import sys
 import time
-from netboot import Cabinet
+import enum
+from netboot import Cabinet, CabinetStateEnum, CabinetRegionEnum, TargetEnum, TargetVersionEnum
+from typing import Any
+
+
+class EnumAction(argparse.Action):
+    """
+    Argparse action for handling Enums
+    """
+    def __init__(self, **kwargs: Any):
+        # Pop off the type value
+        enum_type = kwargs.pop("type", None)
+
+        # Ensure an Enum subclass is provided
+        if enum_type is None:
+            raise ValueError("type must be assigned an Enum when using EnumAction")
+        if not issubclass(enum_type, enum.Enum):
+            raise TypeError("type must be an Enum when using EnumAction")
+
+        # Generate choices from the Enum
+        kwargs.setdefault("choices", tuple(e.value for e in enum_type))
+
+        super(EnumAction, self).__init__(**kwargs)
+
+        self._enum = enum_type
+
+    def __call__(self, parser: Any, namespace: Any, values: Any, option_string: Any = None) -> None:
+        # Convert value back into an Enum
+        value = self._enum(values)
+        setattr(namespace, self.dest, value)
 
 
 def main() -> int:
@@ -24,14 +53,18 @@ def main() -> int:
     parser.add_argument(
         "--target",
         metavar="TARGET",
-        type=str,
-        help="Target platform this image is going to. Defaults to 'naomi', but 'chihiro' and 'triforce' are also valid",
+        type=TargetEnum,
+        action=EnumAction,
+        default=TargetEnum.TARGET_NAOMI,
+        help="Target platform this image is going to. Defaults to 'naomi'. Choose from 'naomi', 'chihiro' or 'triforce'.",
     )
     parser.add_argument(
         "--version",
         metavar="VERSION",
-        type=str,
-        help="NetDimm firmware version this image is going to. Defaults to '3.01', but '1.07', '2.03' and '2.15' are also valid",
+        type=TargetVersionEnum,
+        action=EnumAction,
+        default=TargetVersionEnum.TARGET_VERSION_3_01,
+        help="NetDimm firmware version this image is going to. Defaults to '3.01'. Choose from '1.07', '2.03', '2.15' or '3.01'.",
     )
     parser.add_argument(
         '--patch-file',
@@ -49,19 +82,19 @@ def main() -> int:
     args = parser.parse_args()
 
     print(f"managing {args.ip} to ensure {args.image} is always loaded")
-    cabinet = Cabinet(args.ip, Cabinet.REGION_UNKNOWN, "No description.", args.image, {args.image: args.patch_file or []}, target=args.target, version=args.version, quiet=True)
+    cabinet = Cabinet(args.ip, CabinetRegionEnum.REGION_UNKNOWN, "No description.", args.image, {args.image: args.patch_file or []}, target=args.target, version=args.version, quiet=True)
     while True:
         # Tick the state machine, display progress
         cabinet.tick()
         status, progress = cabinet.state
 
-        if status == Cabinet.STATE_STARTUP:
+        if status == CabinetStateEnum.STATE_STARTUP:
             print("starting up...        \r", end="")
-        elif status == Cabinet.STATE_WAIT_FOR_CABINET_POWER_ON:
+        elif status == CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON:
             print("waiting for cabinet...\r", end="")
-        elif status == Cabinet.STATE_WAIT_FOR_CABINET_POWER_OFF:
+        elif status == CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_OFF:
             print("waiting for cabinet...\r", end="")
-        elif status == Cabinet.STATE_SEND_CURRENT_GAME:
+        elif status == CabinetStateEnum.STATE_SEND_CURRENT_GAME:
             print(f"sending ({progress}%)...       \r", end="")
         else:
             raise Exception(f"Unknown status {status}")

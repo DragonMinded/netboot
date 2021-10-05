@@ -4,11 +4,10 @@
 import socket
 import struct
 import zlib
-
 from Crypto.Cipher import DES
 from contextlib import contextmanager
+from enum import Enum
 from typing import Callable, Generator, List, Optional
-
 
 from netboot.log import log
 
@@ -17,26 +16,26 @@ class NetDimmException(Exception):
     pass
 
 
-class NetDimm:
+class TargetEnum(Enum):
     TARGET_CHIHIRO = "chihiro"
     TARGET_NAOMI = "naomi"
     TARGET_TRIFORCE = "triforce"
 
+
+class TargetVersionEnum(Enum):
     TARGET_VERSION_1_07 = "1.07"
     TARGET_VERSION_2_03 = "2.03"
     TARGET_VERSION_2_15 = "2.15"
     TARGET_VERSION_3_01 = "3.01"
 
-    def __init__(self, ip: str, target: Optional[str] = None, version: Optional[str] = None, quiet: bool = False) -> None:
+
+class NetDimm:
+    def __init__(self, ip: str, target: Optional[TargetEnum] = None, version: Optional[TargetVersionEnum] = None, quiet: bool = False) -> None:
         self.ip: str = ip
         self.sock: Optional[socket.socket] = None
         self.quiet: bool = quiet
-        if target is not None and target not in [self.TARGET_CHIHIRO, self.TARGET_NAOMI, self.TARGET_TRIFORCE]:
-            raise NetDimmException(f"Invalid target platform {target}")
-        self.target: str = target or self.TARGET_NAOMI
-        if version is not None and version not in [self.TARGET_VERSION_1_07, self.TARGET_VERSION_2_03, self.TARGET_VERSION_2_15, self.TARGET_VERSION_3_01]:
-            raise NetDimmException(f"Invalid NetDimm version {version}")
-        self.version: str = version or self.TARGET_VERSION_3_01
+        self.target: TargetEnum = target or TargetEnum.TARGET_NAOMI
+        self.version: TargetVersionEnum = version or TargetVersionEnum.TARGET_VERSION_3_01
 
     def __repr__(self) -> str:
         return f"NetDimm(ip={repr(self.ip)}, target={repr(self.target)}, version={repr(self.version)})"
@@ -68,7 +67,7 @@ class NetDimm:
             # set time limit to 10h. According to some reports, this does not work.
             self.__set_time_limit(10 * 60 * 1000)
 
-            if self.target == self.TARGET_TRIFORCE:
+            if self.target == TargetEnum.TARGET_TRIFORCE:
                 self.__patch_boot_id_check()
 
     def __print(self, string: str, newline: bool = True) -> None:
@@ -181,13 +180,13 @@ class NetDimm:
         # - look for string: "CLogo::CheckBootId: skipped."
         # - binary-search for lower 16bit of address
         addr = {
-            self.TARGET_VERSION_1_07: 0x8000d8a0,
-            self.TARGET_VERSION_2_03: 0x8000CC6C,
-            self.TARGET_VERSION_2_15: 0x8000CC6C,
-            self.TARGET_VERSION_3_01: 0x8000dc5c,
+            TargetVersionEnum.TARGET_VERSION_1_07: 0x8000d8a0,
+            TargetVersionEnum.TARGET_VERSION_2_03: 0x8000CC6C,
+            TargetVersionEnum.TARGET_VERSION_2_15: 0x8000CC6C,
+            TargetVersionEnum.TARGET_VERSION_3_01: 0x8000dc5c,
         }[self.version]
 
-        if self.version == self.TARGET_VERSION_3_01:
+        if self.version == TargetVersionEnum.TARGET_VERSION_3_01:
             self.__poke4(addr + 0, 0x4800001C)
         else:
             self.__poke4(addr + 0, 0x4e800020)

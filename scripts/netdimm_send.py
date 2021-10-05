@@ -2,9 +2,38 @@
 # Triforce Netfirm Toolbox, put into the public domain.
 # Please attribute properly, but only if you want.
 import argparse
+import enum
 import sys
-from netboot import BinaryDiff, NetDimm
-from typing import Optional
+from arcadeutils.binary import BinaryDiff
+from netboot import NetDimm, TargetEnum, TargetVersionEnum
+from typing import Any, Optional
+
+
+class EnumAction(argparse.Action):
+    """
+    Argparse action for handling Enums
+    """
+    def __init__(self, **kwargs: Any):
+        # Pop off the type value
+        enum_type = kwargs.pop("type", None)
+
+        # Ensure an Enum subclass is provided
+        if enum_type is None:
+            raise ValueError("type must be assigned an Enum when using EnumAction")
+        if not issubclass(enum_type, enum.Enum):
+            raise TypeError("type must be an Enum when using EnumAction")
+
+        # Generate choices from the Enum
+        kwargs.setdefault("choices", tuple(e.value for e in enum_type))
+
+        super(EnumAction, self).__init__(**kwargs)
+
+        self._enum = enum_type
+
+    def __call__(self, parser: Any, namespace: Any, values: Any, option_string: Any = None) -> None:
+        # Convert value back into an Enum
+        value = self._enum(values)
+        setattr(namespace, self.dest, value)
 
 
 def main() -> int:
@@ -30,14 +59,18 @@ def main() -> int:
     parser.add_argument(
         "--target",
         metavar="TARGET",
-        type=str,
-        help="Target platform this image is going to. Defaults to 'naomi', but 'chihiro' and 'triforce' are also valid",
+        type=TargetEnum,
+        action=EnumAction,
+        default=TargetEnum.TARGET_NAOMI,
+        help="Target platform this image is going to. Defaults to 'naomi'. Choose from 'naomi', 'chihiro' or 'triforce'.",
     )
     parser.add_argument(
         "--version",
         metavar="VERSION",
-        type=str,
-        help="NetDimm firmware version this image is going to. Defaults to '3.01', but '1.07', '2.03' and '2.15' are also valid",
+        type=TargetVersionEnum,
+        action=EnumAction,
+        default=TargetVersionEnum.TARGET_VERSION_3_01,
+        help="NetDimm firmware version this image is going to. Defaults to '3.01'. Choose from '1.07', '2.03', '2.15' or '3.01'.",
     )
     parser.add_argument(
         '--patch-file',

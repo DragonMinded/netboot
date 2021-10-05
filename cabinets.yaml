@@ -1,0 +1,8 @@
+10.0.0.123:
+  description: test1
+  filename: null
+  region: japan
+  roms:
+    /home/dragonminded/netboot/roms/README.txt: []
+  target: chihiro
+  version: '2.03'

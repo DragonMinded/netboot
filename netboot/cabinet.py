@@ -3,9 +3,11 @@ import os.path
 import threading
 import time
 import yaml
+from enum import Enum
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
-from netboot.hostutils import Host
+from netboot.netboot import TargetEnum, TargetVersionEnum
+from netboot.hostutils import Host, HostStatusEnum
 from netboot.log import log
 
 
@@ -13,46 +15,48 @@ class CabinetException(Exception):
     pass
 
 
-class Cabinet:
+class CabinetStateEnum(Enum):
     STATE_STARTUP = "startup"
     STATE_WAIT_FOR_CABINET_POWER_ON = "wait_power_on"
     STATE_SEND_CURRENT_GAME = "send_game"
     STATE_WAIT_FOR_CABINET_POWER_OFF = "wait_power_off"
 
-    REGION_UNKNOWN = "japan"
+
+class CabinetRegionEnum(Enum):
+    REGION_UNKNOWN = "unknown"
     REGION_JAPAN = "japan"
     REGION_USA = "usa"
     REGION_EXPORT = "export"
     REGION_KOREA = "korea"
     REGION_AUSTRALIA = "australia"
 
+
+class Cabinet:
     def __init__(
         self,
         ip: str,
-        region: str,
+        region: CabinetRegionEnum,
         description: str,
         filename: Optional[str],
         patches: Dict[str, Sequence[str]],
-        target: Optional[str] = None,
-        version: Optional[str] = None,
+        target: Optional[TargetEnum] = None,
+        version: Optional[TargetVersionEnum] = None,
         quiet: bool = False,
     ) -> None:
-        if region not in [self.REGION_JAPAN, self.REGION_USA, self.REGION_EXPORT, self.REGION_KOREA, self.REGION_AUSTRALIA]:
-            raise CabinetException(f"Unrecognized region {region}!")
         self.description: str = description
-        self.region: str = region
+        self.region: CabinetRegionEnum = region
         self.patches: Dict[str, List[str]] = {rom: [p for p in patches[rom]] for rom in patches}
         self.quiet = quiet
         self.__host: Host = Host(ip, target=target, version=version, quiet=self.quiet)
         self.__lock: threading.Lock = threading.Lock()
         self.__current_filename: Optional[str] = filename
         self.__new_filename: Optional[str] = filename
-        self.__state: Tuple[str, int] = (self.STATE_STARTUP, 0)
+        self.__state: Tuple[CabinetStateEnum, int] = (CabinetStateEnum.STATE_STARTUP, 0)
 
     def _clone_state(self, other_cabinet: "Cabinet") -> None:
-        state: Optional[Tuple[str, int]] = None
+        state: Optional[Tuple[CabinetStateEnum, int]] = None
         with other_cabinet.__lock:
-            if other_cabinet.__state[0] != self.STATE_SEND_CURRENT_GAME:
+            if other_cabinet.__state[0] != CabinetStateEnum.STATE_SEND_CURRENT_GAME:
                 state = other_cabinet.__state
         if state is not None:
             with self.__lock:
@@ -66,11 +70,11 @@ class Cabinet:
         return self.__host.ip
 
     @property
-    def target(self) -> str:
+    def target(self) -> TargetEnum:
         return self.__host.target
 
     @property
-    def version(self) -> str:
+    def version(self) -> TargetVersionEnum:
         return self.__host.version
 
     @property
@@ -97,62 +101,62 @@ class Cabinet:
             current_state = self.__state[0]
 
             # Startup state, only one transition to waiting for cabinet
-            if current_state == self.STATE_STARTUP:
+            if current_state == CabinetStateEnum.STATE_STARTUP:
                 self.__print(f"Cabinet {self.ip} waiting for power on.")
-                self.__state = (self.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
+                self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
                 return
 
             # Wait for cabinet to power on state, transition to sending game
             # if the cabinet is active, transition to self if cabinet is not.
-            if current_state == self.STATE_WAIT_FOR_CABINET_POWER_ON:
+            if current_state == CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON:
                 if self.__host.alive:
                     if self.__new_filename is None:
                         # Skip sending game, there's nothing to send
                         self.__print(f"Cabinet {self.ip} has no associated game, waiting for power off.")
-                        self.__state = (self.STATE_WAIT_FOR_CABINET_POWER_OFF, 0)
+                        self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_OFF, 0)
                     else:
                         self.__print(f"Cabinet {self.ip} sending game {self.__new_filename}.")
                         self.__current_filename = self.__new_filename
                         self.__host.send(self.__new_filename, self.patches.get(self.__new_filename, []))
-                        self.__state = (self.STATE_SEND_CURRENT_GAME, 0)
+                        self.__state = (CabinetStateEnum.STATE_SEND_CURRENT_GAME, 0)
                 return
 
             # Wait for send to complete state. Transition to waiting for
             # cabinet power on if transfer failed. Stay in state if transfer
             # continuing. Transition to waint for power off if transfer success.
-            if current_state == self.STATE_SEND_CURRENT_GAME:
-                if self.__host.status == Host.STATUS_INACTIVE:
+            if current_state == CabinetStateEnum.STATE_SEND_CURRENT_GAME:
+                if self.__host.status == HostStatusEnum.STATUS_INACTIVE:
                     raise Exception("State error, shouldn't be possible!")
-                elif self.__host.status == Host.STATUS_TRANSFERRING:
+                elif self.__host.status == HostStatusEnum.STATUS_TRANSFERRING:
                     current, total = self.__host.progress
-                    self.__state = (self.STATE_SEND_CURRENT_GAME, int(float(current * 100) / float(total)))
-                elif self.__host.status == Host.STATUS_FAILED:
+                    self.__state = (CabinetStateEnum.STATE_SEND_CURRENT_GAME, int(float(current * 100) / float(total)))
+                elif self.__host.status == HostStatusEnum.STATUS_FAILED:
                     self.__print(f"Cabinet {self.ip} failed to send game, waiting for power on.")
-                    self.__state = (self.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
-                elif self.__host.status == Host.STATUS_COMPLETED:
+                    self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
+                elif self.__host.status == HostStatusEnum.STATUS_COMPLETED:
                     self.__print(f"Cabinet {self.ip} succeeded sending game, rebooting and waiting for power off.")
                     self.__host.reboot()
-                    self.__state = (self.STATE_WAIT_FOR_CABINET_POWER_OFF, 0)
+                    self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_OFF, 0)
                 return
 
             # Wait for cabinet to turn off again. Transition to waiting for
             # power to come on if the cabinet is inactive. Transition to
             # waiting for power to come on if game changes. Stay in state
             # if cabinet stays on.
-            if current_state == self.STATE_WAIT_FOR_CABINET_POWER_OFF:
+            if current_state == CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_OFF:
                 if not self.__host.alive:
                     self.__print(f"Cabinet {self.ip} turned off, waiting for power on.")
-                    self.__state = (self.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
+                    self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
                 elif self.__current_filename != self.__new_filename:
                     self.__print(f"Cabinet {self.ip} changed games to {self.__new_filename}, waiting for power on.")
                     self.__current_filename = self.__new_filename
-                    self.__state = (self.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
+                    self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
                 return
 
             raise Exception("State error, impossible state!")
 
     @property
-    def state(self) -> Tuple[str, int]:
+    def state(self) -> Tuple[CabinetStateEnum, int]:
         """
         Returns the current state as a string, and the progress through that state
         as an integer, bounded between 0-100.
@@ -209,11 +213,11 @@ class CabinetManager:
                 Cabinet(
                     ip=ip,
                     description=str(cab['description']),
-                    region=str(cab['region']).lower(),
+                    region=CabinetRegionEnum(str(cab['region']).lower()),
                     filename=str(cab['filename']) if cab['filename'] is not None else None,
                     patches={str(rom): [str(p) for p in cab['roms'][rom]] for rom in cab['roms']},
-                    target=str(cab['target']) if 'target' in cab else None,
-                    version=str(cab['version']) if 'version' in cab else None,
+                    target=TargetEnum(str(cab['target'])) if 'target' in cab else None,
+                    version=TargetVersionEnum(str(cab['version'])) if 'version' in cab else None,
                 )
             )
 
@@ -228,9 +232,9 @@ class CabinetManager:
         for cab in cabinets:
             data[cab.ip] = {
                 'description': cab.description,
-                'region': cab.region,
-                'target': cab.target,
-                'version': cab.version,
+                'region': cab.region.value,
+                'target': cab.target.value,
+                'version': cab.version.value,
                 'filename': cab.filename,
                 'roms': cab.patches,
             }

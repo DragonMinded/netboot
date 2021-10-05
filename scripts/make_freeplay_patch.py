@@ -5,7 +5,7 @@ import os.path
 import sys
 from typing import List, Optional
 
-from netboot import BinaryDiff
+from arcadeutils.binary import BinaryDiff
 from naomi import force_freeplay
 
 
