@@ -1,0 +1,56 @@
+Setting00: byte, read-only, default is dd
+Setting01: byte, read-only, default is be
+Setting02: byte, read-only, default is 04
+Setting03: byte, read-only, default is 00
+Setting04: byte, read-only, default is 18
+Setting05: byte, read-only, default is 08
+Setting06: byte, read-only, default is 99
+Setting07: byte, read-only, default is 19
+
+# Game Assignments
+Start Time: byte, default is 02
+  00 - Very Easy
+  01 - Easy
+  02 - Normal
+  03 - Hard
+  04 - Very Hard
+Continue Time: byte, default is 02
+  00 - Very Easy
+  01 - Easy
+  02 - Normal
+  03 - Hard
+  04 - Very Hard
+Get Time: byte, default is 02
+  00 - Very Easy
+  01 - Easy
+  02 - Normal
+  03 - Hard
+  04 - Very Hard
+Motor Drive: byte, default is 02, read-only if Cabinet Type is 01
+  00 - Off
+  01 - Light
+  02 - Normal
+  03 - Heavy
+
+# Volume Settings
+Accel Setting Min: byte, default is 20, values are 00 to fe in hex
+Accel Setting Max: byte, default is d0, values are 00 to fe in hex
+Brake Setting Min: byte, default is 20, values are 00 to fe in hex
+Brake Setting Max: byte, default is d0, values are 00 to fe in hex
+Steer Setting Center: byte, default is 80, values are 00 to fe in hex
+Steer Setting Left Max: byte, default is 20, values are 00 to fe in hex
+Steer Setting Right Max: byte, default is e0, values are 00 to fe in hex
+
+# I have no idea what this is for, but its probably unused to pad the
+# steering section to a multiple of 4.
+Unused: byte, read-only, default is 00
+
+Cabinet Type: byte, default is 00
+  00 - DX
+  01 - STD
+
+# I have no idea what these are for, but they're probably unused to pad
+# this little addendum section to 4 bytes.
+Setting15: byte, read-only, default is 00
+Setting16: byte, read-only, default is 00
+Setting17: byte, read-only, default is 00
