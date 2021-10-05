@@ -53,7 +53,7 @@ Sample Setting: byte, values are 1 to 10
 ```
 
 This defines a setting named "Sample Setting" which is a single byte and can
-have the hex values 01, 02, 03, 04, 05, 06, 07, 08, 09 and 10. Editors that
+have the hex values 01, 02, 03, 04, 05, 06, 07, 08, 09 and 0a. Editors that
 display this setting will display a drop-down or selection box that includes
 the decimal values "1", "2", "3", "4", "5", "6", "7", "8", "9", and "10".
 The decimal values for each valid setting is automatically inferred based on
@@ -81,10 +81,30 @@ Sample Setting: byte, 0 - Off, 1 to 9, 10 - MAX
 ```
 
 This defines a setting named "Sample Setting" which is a single byte and
-can have the hex values 00, 01, 02, 03, 04, 05, 06, 07, 08, 09 and 10. Editors
+can have the hex values 00, 01, 02, 03, 04, 05, 06, 07, 08, 09 and 0a. Editors
 that display this setting will display a drop-down or selection box that includes
 the options "Off", "1", "2", "3", "4", "5", "6", "7", "8", "9", "MAX". The
 correct one will be selected based on the value in the EEPROM when it is parsed.
+
+## Changing Setting Display
+
+Normally, if you have some number of values that a setting can be and you
+want to control what an editor displays when selecting each value, you would
+list each value out individually along with the text it should be displayed as.
+However, if you have a large range of values and you want to display them in
+hex instead of decimal, you can instead do the following:
+
+```
+Sample Setting: byte, values are 1 to 10 in hex
+```
+
+This defines a setting named "Sample Setting" which is a single byte and can
+have the hex values 01, 02, 03, 04, 05, 06, 07, 08, 09 and 0a. This is identical
+to the simple setting in the previous section. However, editors that display this
+setting will display a drop-down or selection box that includes the options
+"01", "02", "03", "04", "05", "06", "07", "08", "09" and "0a". You could have
+written the settings out individually, but for large ranges that you want to
+display in hex this is faster.
 
 ## Changing the Setting Size
 
@@ -230,3 +250,44 @@ When the "Event" setting is set to "Off", the "Continue" setting is user-changea
 we will save whatever value the user selected! When we create a new EEPROM from scratch,
 we set "Event" to 00 which tells the "Continue" setting to default to 01. It all works
 perfectly!
+
+### Specifying Entirely-Dependent Defaults
+
+Sometimes you might run into a setting that seems to be identical to another setting,
+or a setting that seems to be the same as another setting plus or minus some adjustment
+value. If you encounter such a relationship, you can represent it by doing something
+like the following:
+
+```
+Setting: byte, default is 0, values are 1 to 10
+Dependent Setting: byte, read-only, default is value of Setting
+```
+
+This defines a setting named "Setting" which is a single byte that can have hex values
+01, 02, 03, 04, 05, 06, 07, 08, 09 and 0a. It defines a second setting named "Dependent
+Setting" which defaults to whatever "Setting" is set to. Since it is read-only, the
+default will take precidence over the current value, so when somebody edits "Setting"
+in an editor, both "Setting" and "Dependent Setting" will be saved with the same value!
+
+In some cases, a setting will be dependent on another setting, but won't have the
+exact same value. If you wanted to, you could list out a whole bunch of default conditionals
+to represent all of the possibilities, like so:
+
+```
+Setting: byte, default is 0, values are 1 to 3
+Dependent Setting: byte, read-only
+  default is 0 if Setting is 1
+  default is 1 if Setting is 2
+  default is 2 if Setting is 3
+```
+
+This would work, and sets up "Dependent Setting" to be 00 when Setting is 01, 01 when
+Setting is 02, and 02 when Setting is 03. However, if there are a lot of possible values
+for "Setting", this can get tedious. Instead, you can represent the relationship like so:
+
+```
+Setting: byte, default is 0, values are 1 to 3
+Dependent Setting: byte, read-only, default is value of Setting - 1
+```
+
+This defines the exact same pair of settings, with the exact same defaults!

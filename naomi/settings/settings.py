@@ -510,12 +510,29 @@ class SettingsConfig:
         return SettingsConfig(NO_FILE, [])
 
     @staticmethod
-    def __get_kv(filename: str, name: str, setting: str) -> Dict[int, str]:
+    def __get_kv(filename: str, name: str, setting: str, length: int) -> Dict[int, str]:
         realsetting = setting.strip()
         if realsetting.startswith("values are "):
             realsetting = realsetting[11:]
         if realsetting.startswith("value is "):
             realsetting = realsetting[9:]
+
+        hex_display = False
+        if realsetting.endswith(" in hex"):
+            realsetting = realsetting[:-7]
+            hex_display = True
+
+        def format_val(val: int) -> str:
+            nonlocal hex_display
+            nonlocal length
+
+            if not hex_display:
+                return str(val)
+
+            strval = hex(val)[2:]
+            while len(strval) < length:
+                strval = "0" + strval
+            return strval
 
         try:
             if "-" in realsetting:
@@ -541,11 +558,11 @@ class SettingsConfig:
 
                     retdict: Dict[int, str] = {}
                     for x in range(int(low, 16), int(high, 16) + 1):
-                        retdict[x] = f"{x}"
+                        retdict[x] = format_val(x)
                     return retdict
                 else:
                     key = int(realsetting.strip(), 16)
-                    value = f"{key}"
+                    value = format_val(key)
 
                     return {key: value}
         except ValueError:
@@ -674,49 +691,121 @@ class SettingsConfig:
                             # Its unconditionally a default.
                             pass
 
-                        rest = rest.strip().replace(" ", "").replace("\t", "")
-                        defbytes = bytes([int(rest[i:(i + 2)], 16) for i in range(0, len(rest), 2)])
-                        if size != SettingSizeEnum.UNKNOWN and len(defbytes) == 1:
-                            defaultint = defbytes[0]
-                        else:
-                            if size == SettingSizeEnum.NIBBLE:
-                                defaultint = struct.unpack("<B", defbytes[0:1])[0]
-                            elif size == SettingSizeEnum.BYTE:
-                                if length == 1:
-                                    defaultint = struct.unpack("<B", defbytes[0:1])[0]
-                                elif length == 2:
-                                    defaultint = struct.unpack("<H", defbytes[0:2])[0]
-                                elif length == 4:
-                                    defaultint = struct.unpack("<I", defbytes[0:4])[0]
-                                else:
-                                    raise SettingsParseException(
-                                        f"Cannot convert default \"{bit}\" for setting \"{name}\" because we don't know how to handle length \"{length}\"!",
-                                        filename,
-                                    )
-                            else:
-                                raise SettingsParseException(f"Must place default \"{bit}\" after size specifier in setting \"{name}\"!", filename)
+                        # Now, see if the value is computed from another setting.
+                        rest = rest.strip()
+                        if "value of " in rest:
+                            valname = rest[9:].strip()
+                            adjust = 0
 
-                        if condstr is None:
-                            if default is not None:
-                                if isinstance(default, DefaultConditionGroup):
-                                    raise SettingsParseException(f"Cannot specify an unconditional default alongside conditional defaults for setting \"{name}\"!", filename)
-                                else:
-                                    raise SettingsParseException(f"Cannot specify more than one default for setting \"{name}\"!", filename)
-                            default = defaultint
-                        else:
+                            if "+" in valname:
+                                newname, add = valname.rsplit('+', 1)
+                                newname = newname.strip()
+                                add = add.strip()
+
+                                try:
+                                    adjust = int(add, 16)
+                                    valname = newname
+                                except ValueError:
+                                    # Wasn't a correct adjustment, assume its the name.
+                                    pass
+
+                            if "-" in valname:
+                                newname, add = valname.rsplit('-', 1)
+                                newname = newname.strip()
+                                add = add.strip()
+
+                                try:
+                                    adjust = -int(add, 16)
+                                    valname = newname
+                                except ValueError:
+                                    # Wasn't a correct adjustment, assume its the name.
+                                    pass
+
                             if default is None:
                                 default = DefaultConditionGroup(filename, name, [])
                             if not isinstance(default, DefaultConditionGroup):
                                 raise SettingsParseException(f"Cannot specify an unconditional default alongside conditional defaults for setting \"{name}\"!", filename)
 
-                            condname, condvalues = SettingsConfig.__get_vals(filename, name, condstr)
-                            default.conditions.append(DefaultCondition(condname, condvalues, negate, defaultint))
+                            def getmax(size: SettingSizeEnum, length: int) -> int:
+                                if size == SettingSizeEnum.NIBBLE:
+                                    return 0x10
+                                elif size == SettingSizeEnum.BYTE:
+                                    if length == 1:
+                                        return 0x100
+                                    elif length == 2:
+                                        return 0x10000
+                                    elif length == 4:
+                                        return 0x100000000
+
+                                raise SettingsParseException(
+                                    f"Cannot determine default \"{bit}\" values for setting \"{name}\"!",
+                                    filename,
+                                )
+
+                            if condstr is None:
+                                # This is just a series of "default is <X + adjust> if <valname> is <X>" internally.
+                                maxval = getmax(size, length)
+                                for x in range(maxval):
+                                    default.conditions.append(DefaultCondition(valname, [x], False, (x + adjust) % maxval))
+                            else:
+                                condname, condvalues = SettingsConfig.__get_vals(filename, name, condstr)
+
+                                if condname != valname:
+                                    # This is a crazy complicated predicate where we would need to check if one setting is a certain
+                                    # value and if so scoop up the value of another setting. Hopefully we don't need to support this.
+                                    raise SettingsParseException(
+                                        f"Cannot handle extracting value from \"{valname}\" while being dependent on \"{condname}\" for setting \"{name}\"!",
+                                        filename,
+                                    )
+
+                                # This is just the same series as above, but with a specific set of X instead of a full range.
+                                maxval = getmax(size, length)
+                                for x in condvalues:
+                                    default.conditions.append(DefaultCondition(valname, [x], False, (x + adjust) % maxval))
+                        else:
+                            rest = rest.strip().replace(" ", "").replace("\t", "")
+                            defbytes = bytes([int(rest[i:(i + 2)], 16) for i in range(0, len(rest), 2)])
+                            if size != SettingSizeEnum.UNKNOWN and len(defbytes) == 1:
+                                defaultint = defbytes[0]
+                            else:
+                                if size == SettingSizeEnum.NIBBLE:
+                                    defaultint = struct.unpack("<B", defbytes[0:1])[0]
+                                elif size == SettingSizeEnum.BYTE:
+                                    if length == 1:
+                                        defaultint = struct.unpack("<B", defbytes[0:1])[0]
+                                    elif length == 2:
+                                        defaultint = struct.unpack("<H", defbytes[0:2])[0]
+                                    elif length == 4:
+                                        defaultint = struct.unpack("<I", defbytes[0:4])[0]
+                                    else:
+                                        raise SettingsParseException(
+                                            f"Cannot convert default \"{bit}\" for setting \"{name}\" because we don't know how to handle length \"{length}\"!",
+                                            filename,
+                                        )
+                                else:
+                                    raise SettingsParseException(f"Must place default \"{bit}\" after size specifier in setting \"{name}\"!", filename)
+
+                            if condstr is None:
+                                if default is not None:
+                                    if isinstance(default, DefaultConditionGroup):
+                                        raise SettingsParseException(f"Cannot specify an unconditional default alongside conditional defaults for setting \"{name}\"!", filename)
+                                    else:
+                                        raise SettingsParseException(f"Cannot specify more than one default for setting \"{name}\"!", filename)
+                                default = defaultint
+                            else:
+                                if default is None:
+                                    default = DefaultConditionGroup(filename, name, [])
+                                if not isinstance(default, DefaultConditionGroup):
+                                    raise SettingsParseException(f"Cannot specify an unconditional default alongside conditional defaults for setting \"{name}\"!", filename)
+
+                                condname, condvalues = SettingsConfig.__get_vals(filename, name, condstr)
+                                default.conditions.append(DefaultCondition(condname, condvalues, negate, defaultint))
                     else:
                         raise SettingsParseException(f"Cannot parse default for setting \"{name}\"! Specify defaults like \"default is 0\".", filename)
 
                 else:
                     # Assume this is a setting value.
-                    values.update(SettingsConfig.__get_kv(filename, name, bit))
+                    values.update(SettingsConfig.__get_kv(filename, name, bit, 1 if size == SettingSizeEnum.NIBBLE else (length * 2)))
 
             if size == SettingSizeEnum.UNKNOWN:
                 raise SettingsParseException(f"Setting \"{name}\" is missing a size specifier!", filename)
