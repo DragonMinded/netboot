@@ -1,0 +1,35 @@
+Game Diffculty: byte, default is 00, 0 - Normal, 1 - Hard
+Number of Monkeys: byte, default is 03, values are 2 to 5
+Ball Velocity Boost: byte, default is 00, 0 - Off, 1 - On
+Setting03: byte, read-only, default is 00
+Setting04: byte, read-only, default is 00
+Setting05: byte, read-only, default is 00
+Setting06: byte, read-only, default is 00
+Setting07: byte, read-only, default is 00
+
+LeftUnknown: byte, read-only, default is value of Joystick Calibration Left
+Joystick Calibration Left: byte, default is 60, values are 00 to ff in hex
+Setting10: byte, read-only, default is 00
+Setting11: byte, read-only, default is 00
+RightUnknown: byte, read-only, default is value of Joystick Calibration Right + 1
+Joystick Calibration Right: byte, default is a0, values are 00 to ff in hex
+Setting14: byte, read-only, default is 00
+Setting15: byte, read-only, default is 00
+
+HCenterUnknown: byte, read-only, default is value of Horizontal Center (Now H) + 1
+Horizontal Center (Now H): byte, default is 7f, values are 00 to ff in hex
+Setting18: byte, read-only, default is 00
+Setting19: byte, read-only, default is 00
+PushUnknown: byte, read-only, default is value of Joystick Calibration Push
+Joystick Calibration Push: byte, default is 60, values are 00 to ff in hex
+Setting22: byte, read-only, default is 00
+Setting23: byte, read-only, default is 00
+
+PullUnknown: byte, read-only, default is value of Joystick Calibration Pull + 1
+Joystick Calibration Pull: byte, default is a0, values are 00 to ff in hex
+Setting26: byte, read-only, default is 00
+Setting27: byte, read-only, default is 00
+VCenterUnknown: byte, read-only, default is value of Vertical Center (Now V) + 1
+Vertical Center (Now V): byte, default is 7f, values are 00 to ff in hex
+Setting30: byte, read-only, default is 00
+Setting10: byte, read-only, default is 00
