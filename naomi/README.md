@@ -157,14 +157,15 @@ of the ROM image. When written, updates the publisher to the new string provided
 
 ### names property
 
-A list of names indexed by region. Given the current system region, the names that
-show up here will also be the names that show up in the test menu for a given game.
-Note that there are the following constants that can be used to index into the names
-list: `NaomiRom.REGION_JAPAN`, `NaomiRom.REGION_USA`, `NaomiRom.REGION_EXPORT`,
-`NaomiRom.REGION_KOREA`, `NaomiRom.REGION_AUSTRALIA`. Note that the last region,
-Australia, exists in many ROM files but is not accessible as there is no Australia
-BIOS for the Naomi platform. When read, grabs a list of names of the ROM given the
-region. When written, updates the list of names by region using the list provided.
+A dictionary of names indexed by region. Given the current system region, the names
+that show up here will also be the names that show up in the test menu for a given
+game. Note that there are the following constants that can be used to index into the
+names list: `NaomiRomRegionEnum.REGION_JAPAN`, `NaomiRomRegionEnum.REGION_USA`,
+`NaomiRomRegionEnum.REGION_EXPORT`, `NaomiRomRegionEnum.REGION_KOREA`, and finally
+`NaomiRomRegionEnum.REGION_AUSTRALIA`. Note that the last region, Australia, exists
+in many ROM files but is not accessible as there is no Australia BIOS for the Naomi
+platform. When read, grabs a dictionary of names of the ROM given the region. When
+written, updates the ROM names by region using the dictionary provided.
 
 ### sequencetexts property
 
@@ -175,10 +176,11 @@ list of strings provided.
 
 ### defaults property
 
-A NaomiEEPROMDefaults instance representing what defaults the BIOS will set in the
-system EEPROM section when initializing the EEPROM on first boot. When read, grabs
+A dictionary of NaomiEEPROMDefaults instance representing what defaults the BIOS will
+set in the system EEPROM section when initializing the EEPROM on first boot. Note
+that this is indexed by the same enumeration as the "names" property. When read, grabs
 the defaults and returns them. When written, extracts values from the provided
-NaomiEEPROMDefaults instance and updates the defaults in the ROM accordingly.
+NaomiEEPROMDefaults instances and updates the per-region defaults in the ROM accordingly.
 
 ### date property
 
@@ -195,9 +197,9 @@ serial in the ROM header.
 
 ### regions property
 
-A list of integers representing valid regions this ROM will run under. Uses the
-same region constants as the `names` property. When read, returns a list of the
-valid regions this ROM executes under. When written, updates the list of regions
+A list of NaomiRomRegionEnum values representing valid regions this ROM will run under.
+Uses the same region constants as the `names` property. When read, returns a list of
+the valid regions this ROM executes under. When written, updates the list of regions
 the ROM is allowed to execute under. When booting, the Naomi BIOS will check the
 current region against this list and show an error if the current region is not
 included in the list.

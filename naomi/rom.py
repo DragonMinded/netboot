@@ -1,6 +1,7 @@
 import datetime
 import struct
-from typing import List, cast
+from enum import Enum
+from typing import Dict, List, cast
 
 
 class NaomiRomException(Exception):
@@ -26,10 +27,18 @@ class NaomiExecutable:
         return f"NaomiExecutable(entrypoint={hex(self.entrypoint)}, sections={repr(self.sections)})"
 
 
+class NaomiRomRegionEnum(Enum):
+    REGION_JAPAN = 0
+    REGION_USA = 1
+    REGION_EXPORT = 2
+    REGION_KOREA = 3
+    REGION_AUSTRALIA = 4
+
+
 class NaomiEEPROMDefaults:
     def __init__(
         self,
-        region: int,
+        region: NaomiRomRegionEnum,
         apply_settings: bool,
         force_vertical: bool,
         force_silent: bool,
@@ -72,12 +81,6 @@ class NaomiEEPROMDefaults:
 
 
 class NaomiRom:
-
-    REGION_JAPAN = 0
-    REGION_USA = 1
-    REGION_EXPORT = 2
-    REGION_KOREA = 3
-    REGION_AUSTRALIA = 4
 
     HEADER_LENGTH = 0x500
 
@@ -140,37 +143,37 @@ class NaomiRom:
         self._inject_str(0x010, val, 0x030 - 0x010)
 
     @property
-    def names(self) -> List[str]:
+    def names(self) -> Dict[NaomiRomRegionEnum, str]:
         self._raise_on_invalid()
 
-        return [
-            self._sanitize_str(self.data[0x030:0x050]),
-            self._sanitize_str(self.data[0x050:0x070]),
-            self._sanitize_str(self.data[0x070:0x090]),
-            self._sanitize_str(self.data[0x090:0x0B0]),
-            self._sanitize_str(self.data[0x0B0:0x0D0]),
-        ]
+        return {
+            NaomiRomRegionEnum.REGION_JAPAN: self._sanitize_str(self.data[0x030:0x050]),
+            NaomiRomRegionEnum.REGION_USA: self._sanitize_str(self.data[0x050:0x070]),
+            NaomiRomRegionEnum.REGION_EXPORT: self._sanitize_str(self.data[0x070:0x090]),
+            NaomiRomRegionEnum.REGION_KOREA: self._sanitize_str(self.data[0x090:0x0B0]),
+            NaomiRomRegionEnum.REGION_AUSTRALIA: self._sanitize_str(self.data[0x0B0:0x0D0]),
+        }
 
     @names.setter
-    def names(self, val: List[str]) -> None:
+    def names(self, val: Dict[NaomiRomRegionEnum, str]) -> None:
         self._raise_on_invalid()
-        if len(val) != 5:
-            raise NaomiRomException("Expected list of five strings for names!")
-        val.extend(["", "", ""])
 
-        for i, (start, end) in enumerate([
-            (0x030, 0x050),
-            (0x050, 0x070),
-            (0x070, 0x090),
-            (0x090, 0x0B0),
-            (0x0B0, 0x0D0),
+        for (region, start, end) in [
+            (NaomiRomRegionEnum.REGION_JAPAN, 0x030, 0x050),
+            (NaomiRomRegionEnum.REGION_USA, 0x050, 0x070),
+            (NaomiRomRegionEnum.REGION_EXPORT, 0x070, 0x090),
+            (NaomiRomRegionEnum.REGION_KOREA, 0x090, 0x0B0),
+            (NaomiRomRegionEnum.REGION_AUSTRALIA, 0x0B0, 0x0D0),
             # The following are regions that we don't care to write since they
             # are not used in practice.
-            # (0x0D0, 0x0F0),
-            # (0x0F0, 0x110),
-            # (0x110, 0x130),
-        ]):
-            self._inject_str(start, val[i], end - start)
+            (None, 0x0D0, 0x0F0),
+            (None, 0x0F0, 0x110),
+            (None, 0x110, 0x130),
+        ]:
+            if region is None:
+                self._inject_str(start, "", end - start)
+            else:
+                self._inject_str(start, val[region], end - start)
 
     @property
     def sequencetexts(self) -> List[str]:
@@ -208,18 +211,20 @@ class NaomiRom:
             self._inject_str(start, val[i], end - start)
 
     @property
-    def defaults(self) -> List[NaomiEEPROMDefaults]:
+    def defaults(self) -> Dict[NaomiRomRegionEnum, NaomiEEPROMDefaults]:
         self._raise_on_invalid()
 
-        sections: List[NaomiEEPROMDefaults] = []
+        sections: Dict[NaomiRomRegionEnum, NaomiEEPROMDefaults] = {}
         texts: List[str] = self.sequencetexts
 
         # The following list must remain sorted in order to output correctly.
-        for offset in [self.REGION_JAPAN, self.REGION_USA, self.REGION_EXPORT, self.REGION_KOREA, self.REGION_AUSTRALIA]:
-            location = 0x1E0 + (0x10 * offset)
+        for region in [
+            NaomiRomRegionEnum.REGION_JAPAN, NaomiRomRegionEnum.REGION_USA, NaomiRomRegionEnum.REGION_EXPORT, NaomiRomRegionEnum.REGION_KOREA, NaomiRomRegionEnum.REGION_AUSTRALIA
+        ]:
+            location = 0x1E0 + (0x10 * region.value)
 
-            sections.append(NaomiEEPROMDefaults(
-                region=offset,
+            sections[region] = NaomiEEPROMDefaults(
+                region=region,
                 apply_settings=self._sanitize_uint8(location + 0) == 1,
                 force_vertical=(self._sanitize_uint8(location + 1) & 0x1) != 0,
                 force_silent=(self._sanitize_uint8(location + 1) & 0x2) != 0,
@@ -230,20 +235,19 @@ class NaomiRom:
                 credit_rate=self._sanitize_uint8(location + 6),
                 bonus=self._sanitize_uint8(location + 7),
                 sequences=[texts[self._sanitize_uint8(location + 8 + x)] for x in range(8)],
-            ))
+            )
         return sections
 
     @defaults.setter
-    def defaults(self, val: List[NaomiEEPROMDefaults]) -> None:
+    def defaults(self, val: Dict[NaomiRomRegionEnum, NaomiEEPROMDefaults]) -> None:
         self._raise_on_invalid()
 
         # Go through the list, back-converting each structure
-        for defaults in val:
-            if defaults.region not in {
-                self.REGION_JAPAN, self.REGION_USA, self.REGION_EXPORT, self.REGION_KOREA, self.REGION_AUSTRALIA
-            }:
-                raise NaomiRomException(f"Invalid region {defaults.region} in defaults!")
-            offset = 0x1E0 + (0x10 * defaults.region)
+        for region, defaults in val.items():
+            if region != defaults.region:
+                raise Exception(f"Logic error, region key {region} does not match defaults region value {defaults}!")
+
+            offset = 0x1E0 + (0x10 * region.value)
 
             self._inject_uint8(offset + 0, 1 if defaults.apply_settings else 0)
 
@@ -336,24 +340,22 @@ class NaomiRom:
         self._inject(0x134, serial)
 
     @property
-    def regions(self) -> List[int]:
+    def regions(self) -> List[NaomiRomRegionEnum]:
         self._raise_on_invalid()
         mask = self._sanitize_uint8(0x428)
-        regions: List[int] = []
-        for offset in [self.REGION_JAPAN, self.REGION_USA, self.REGION_EXPORT, self.REGION_KOREA, self.REGION_AUSTRALIA]:
-            if ((mask >> offset) & 0x1) != 0:
-                regions.append(offset)
+        regions: List[NaomiRomRegionEnum] = []
+        for region in [NaomiRomRegionEnum.REGION_JAPAN, NaomiRomRegionEnum.REGION_USA, NaomiRomRegionEnum.REGION_EXPORT, NaomiRomRegionEnum.REGION_KOREA, NaomiRomRegionEnum.REGION_AUSTRALIA]:
+            if ((mask >> region.value) & 0x1) != 0:
+                regions.append(region)
         return regions
 
     @regions.setter
-    def regions(self, regions: List[int]) -> None:
+    def regions(self, regions: List[NaomiRomRegionEnum]) -> None:
         self._raise_on_invalid()
 
         mask: int = 0
         for region in regions:
-            if region not in {self.REGION_JAPAN, self.REGION_USA, self.REGION_EXPORT, self.REGION_KOREA, self.REGION_AUSTRALIA}:
-                raise NaomiRomException(f"Region {region} not recognized!")
-            mask |= 1 << region
+            mask |= 1 << region.value
         self._inject_uint8(0x428, mask)
 
     @property

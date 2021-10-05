@@ -5,7 +5,7 @@ import os
 import sys
 from typing import List
 
-from naomi import NaomiRom, NaomiExecutable, NaomiRomSection
+from naomi import NaomiRom, NaomiRomRegionEnum, NaomiExecutable, NaomiRomSection
 
 
 def main() -> int:
@@ -152,23 +152,23 @@ def main() -> int:
 
     # Start by attaching basic info
     header.publisher = args.publisher or "NOBODY"
-    title = [
-        args.title or "NO TITLE",
-        args.title or "NO TITLE",
-        args.title or "NO TITLE",
-        args.title or "NO TITLE",
-        args.title or "NO TITLE",
-    ]
+    title = {
+        NaomiRomRegionEnum.REGION_JAPAN: args.title or "NO TITLE",
+        NaomiRomRegionEnum.REGION_USA: args.title or "NO TITLE",
+        NaomiRomRegionEnum.REGION_EXPORT: args.title or "NO TITLE",
+        NaomiRomRegionEnum.REGION_KOREA: args.title or "NO TITLE",
+        NaomiRomRegionEnum.REGION_AUSTRALIA: args.title or "NO TITLE",
+    }
     if args.title_japan:
-        title[header.REGION_JAPAN] = args.title_japan
+        title[NaomiRomRegionEnum.REGION_JAPAN] = args.title_japan
     if args.title_usa:
-        title[header.REGION_JAPAN] = args.title_usa
+        title[NaomiRomRegionEnum.REGION_USA] = args.title_usa
     if args.title_export:
-        title[header.REGION_JAPAN] = args.title_export
+        title[NaomiRomRegionEnum.REGION_EXPORT] = args.title_export
     if args.title_korea:
-        title[header.REGION_JAPAN] = args.title_korea
+        title[NaomiRomRegionEnum.REGION_KOREA] = args.title_korea
     if args.title_australia:
-        title[header.REGION_JAPAN] = args.title_australia
+        title[NaomiRomRegionEnum.REGION_AUSTRALIA] = args.title_australia
     header.names = title
 
     # I am not sure whether anyone will want to overwrite these
@@ -177,11 +177,11 @@ def main() -> int:
         "CREDIT TO CONTINUE",
     ]
     header.regions = [
-        header.REGION_JAPAN,
-        header.REGION_USA,
-        header.REGION_EXPORT,
-        header.REGION_KOREA,
-        header.REGION_AUSTRALIA,
+        NaomiRomRegionEnum.REGION_JAPAN,
+        NaomiRomRegionEnum.REGION_USA,
+        NaomiRomRegionEnum.REGION_EXPORT,
+        NaomiRomRegionEnum.REGION_KOREA,
+        NaomiRomRegionEnum.REGION_AUSTRALIA,
     ]
 
     if args.date is not None:

@@ -3,7 +3,7 @@ import argparse
 import sys
 from typing import Dict
 
-from naomi import NaomiRom
+from naomi import NaomiRom, NaomiRomRegionEnum
 
 
 def main() -> int:
@@ -26,12 +26,12 @@ def main() -> int:
         data = fp.read()
 
     # Create a text LUT
-    region_lut: Dict[int, str] = {
-        NaomiRom.REGION_JAPAN: "Japan",
-        NaomiRom.REGION_USA: "USA",
-        NaomiRom.REGION_EXPORT: "Export",
-        NaomiRom.REGION_KOREA: "Korea",
-        NaomiRom.REGION_AUSTRALIA: "Australia",
+    region_lut: Dict[NaomiRomRegionEnum, str] = {
+        NaomiRomRegionEnum.REGION_JAPAN: "Japan",
+        NaomiRomRegionEnum.REGION_USA: "USA",
+        NaomiRomRegionEnum.REGION_EXPORT: "Export",
+        NaomiRomRegionEnum.REGION_KOREA: "Korea",
+        NaomiRomRegionEnum.REGION_AUSTRALIA: "Australia",
     }
 
     # First, assume its a Naomi ROM
@@ -40,11 +40,11 @@ def main() -> int:
         print("NAOMI ROM")
         print("=========")
         print(f"Publisher:       {naomi.publisher}")
-        print(f"Japan Title:     {naomi.names[NaomiRom.REGION_JAPAN]}")
-        print(f"USA Title:       {naomi.names[NaomiRom.REGION_USA]}")
-        print(f"Export Title:    {naomi.names[NaomiRom.REGION_EXPORT]}")
-        print(f"Korea Title:     {naomi.names[NaomiRom.REGION_KOREA]}")
-        print(f"Australia Title: {naomi.names[NaomiRom.REGION_AUSTRALIA]}")
+        print(f"Japan Title:     {naomi.names[NaomiRomRegionEnum.REGION_JAPAN]}")
+        print(f"USA Title:       {naomi.names[NaomiRomRegionEnum.REGION_USA]}")
+        print(f"Export Title:    {naomi.names[NaomiRomRegionEnum.REGION_EXPORT]}")
+        print(f"Korea Title:     {naomi.names[NaomiRomRegionEnum.REGION_KOREA]}")
+        print(f"Australia Title: {naomi.names[NaomiRomRegionEnum.REGION_AUSTRALIA]}")
         print(f"Publish Date:    {naomi.date}")
         print(f"Serial Number:   {naomi.serial.decode('ascii')}")
         print(f"ROM Size:        {len(data)} bytes")
@@ -81,8 +81,8 @@ def main() -> int:
 
         print("Per-Region EEPROM Defaults")
         print("--------------------------")
-        for default in naomi.defaults:
-            print(f"{region_lut[default.region]}")
+        for region, default in naomi.defaults.items():
+            print(f"{region_lut[region]}")
             if not default.apply_settings:
                 print("Override:        disabled")
             else:

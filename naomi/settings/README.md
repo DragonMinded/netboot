@@ -232,10 +232,10 @@ default settings.
 
 ### from_rom() method
 
-Takes a NaomiRom instance argument "rom" and an integer argument "region"
-and retrieves any requested system defaults from the Naomi ROM header.
-It uses that as well as the game's settings definition file to create a
-default EEPROM that is then used to construct a `SettingsWrapper` class
+Takes a NaomiRom instance argument "rom" and a NaomiRomReginEnum argument
+"region" and retrieves any requested system defaults from the Naomi ROM
+header. It uses that as well as the game's settings definition file to create
+a default EEPROM that is then used to construct a `SettingsWrapper` class
 repressenting the default settings as a Naomi would create them on first
 boot. This can then be edited or passed to the `to_eeprom()` function to
 return a valid 128-byte EEPROM representing the edited settings.

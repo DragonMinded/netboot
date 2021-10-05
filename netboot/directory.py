@@ -5,7 +5,7 @@ import zlib
 
 from typing import Dict, List, Mapping, Sequence
 from netboot.cabinet import CabinetRegionEnum
-from naomi import NaomiRom
+from naomi import NaomiRom, NaomiRomRegionEnum
 
 
 class DirectoryException(Exception):
@@ -58,12 +58,12 @@ class DirectoryManager:
             if rom.valid:
                 # Arbitrarily choose USA region as default
                 naomi_region = {
-                    CabinetRegionEnum.REGION_JAPAN: NaomiRom.REGION_JAPAN,
-                    CabinetRegionEnum.REGION_USA: NaomiRom.REGION_USA,
-                    CabinetRegionEnum.REGION_EXPORT: NaomiRom.REGION_EXPORT,
-                    CabinetRegionEnum.REGION_KOREA: NaomiRom.REGION_KOREA,
-                    CabinetRegionEnum.REGION_AUSTRALIA: NaomiRom.REGION_AUSTRALIA,
-                }.get(region, NaomiRom.REGION_USA)
+                    CabinetRegionEnum.REGION_JAPAN: NaomiRomRegionEnum.REGION_JAPAN,
+                    CabinetRegionEnum.REGION_USA: NaomiRomRegionEnum.REGION_USA,
+                    CabinetRegionEnum.REGION_EXPORT: NaomiRomRegionEnum.REGION_EXPORT,
+                    CabinetRegionEnum.REGION_KOREA: NaomiRomRegionEnum.REGION_KOREA,
+                    CabinetRegionEnum.REGION_AUSTRALIA: NaomiRomRegionEnum.REGION_AUSTRALIA,
+                }.get(region, NaomiRomRegionEnum.REGION_JAPAN)
                 self.__names[local_key] = rom.names[naomi_region]
                 self.__checksums[checksum] = self.__names[local_key]
                 return self.__names[local_key]

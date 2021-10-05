@@ -3,7 +3,7 @@ import argparse
 import os
 import sys
 
-from naomi import NaomiRom, NaomiSettingsPatcher
+from naomi import NaomiRomRegionEnum, NaomiSettingsPatcher
 from naomi.settings import SettingsEditor, SettingsManager, ReadOnlyCondition, SettingsParseException, SettingsSaveException
 
 
@@ -278,12 +278,12 @@ def main() -> int:
         if eepromdata is None:
             # We need to make them up from scratch.
             region = {
-                "japan": NaomiRom.REGION_JAPAN,
-                "usa": NaomiRom.REGION_USA,
-                "export": NaomiRom.REGION_EXPORT,
-                "korea": NaomiRom.REGION_KOREA,
-                "australia": NaomiRom.REGION_AUSTRALIA,
-            }.get(args.region, NaomiRom.REGION_JAPAN)
+                "japan": NaomiRomRegionEnum.REGION_JAPAN,
+                "usa": NaomiRomRegionEnum.REGION_USA,
+                "export": NaomiRomRegionEnum.REGION_EXPORT,
+                "korea": NaomiRomRegionEnum.REGION_KOREA,
+                "australia": NaomiRomRegionEnum.REGION_AUSTRALIA,
+            }.get(args.region, NaomiRomRegionEnum.REGION_JAPAN)
             parsedsettings = manager.from_rom(patcher.get_rom(), region=region)
         else:
             # We have an eeprom to edit.
