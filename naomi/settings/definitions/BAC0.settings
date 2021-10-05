@@ -1,0 +1,61 @@
+# I have no idea what these are but they seem to never change.
+Setting00: byte, read-only, default is 90
+Setting01: byte, read-only, default is 04
+Setting02: byte, read-only, default is 10
+Setting03: byte, read-only, default is a3
+
+# This whole chunk is just the ascii value "CRAZYTAXI AM3"
+Setting04: byte, read-only, default is 43
+Setting05: byte, read-only, default is 52
+Setting06: byte, read-only, default is 41
+Setting07: byte, read-only, default is 5a
+Setting08: byte, read-only, default is 59
+Setting09: byte, read-only, default is 54
+Setting0a: byte, read-only, default is 41
+Setting0b: byte, read-only, default is 58
+Setting0c: byte, read-only, default is 49
+Setting0d: byte, read-only, default is 20
+Setting0e: byte, read-only, default is 41
+Setting0f: byte, read-only, default is 4d
+Setting10: byte, read-only, default is 33
+
+# Game Assignments
+Game Difficulty: byte, default is 03
+  00 - 1
+  01 - 2
+  02 - 3
+  03 - 4
+  04 - 5
+  05 - 6
+  06 - 7
+  07 - 8
+Time Difficulty: byte, default is 03
+  00 - 1
+  01 - 2
+  02 - 3
+  03 - 4
+  04 - 5
+  05 - 6
+  06 - 7
+  07 - 8
+Start Time: byte, default is 04
+  00 - 70
+  01 - 65
+  02 - 60
+  03 - 55
+  04 - 50
+  05 - 45
+  06 - 40
+  07 - 35
+
+# Volume Settings.
+Accel Setting Min: byte, default is 2c, values are 00 to fe in hex
+Accel Setting Max: byte, default is c3, values are 00 to fe in hex
+Brake Setting Min: byte, default is 37, values are 00 to fe in hex
+Brake Setting Max: byte, default is ce, values are 00 to fe in hex
+Steer Setting Center: byte, default is 81, values are 00 to fe in hex
+Steer Setting Left Max: byte, default is 28, values are 00 to fe in hex
+Steer Setting Right Max: byte, default is e1, values are 00 to fe in hex
+
+# Pretty sure this is an unused byte.
+Unused: byte, read-only, default is 00
