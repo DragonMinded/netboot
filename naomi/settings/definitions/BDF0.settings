@@ -1,4 +1,4 @@
-Game Diffculty: byte, default is 00, 0 - Normal, 1 - Hard
+Game Difficulty: byte, default is 00, 0 - Normal, 1 - Hard
 Number of Monkeys: byte, default is 03, values are 2 to 5
 Ball Velocity Boost: byte, default is 00, 0 - Off, 1 - On
 Setting03: byte, read-only, default is 00
