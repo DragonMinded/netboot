@@ -30,7 +30,7 @@ You can invoke it identically to the original triforcetools.py as well. Assuming
 ./netdimm_send 192.168.1.1 my_favorite_game.bin
 ```
 
-As well as sending a single game to a Net Dimm, this script can optionally handle applying patches. See `--help` for more details.
+As well as sending a single game to a Net Dimm, this script can optionally handle applying patches. See `--help` for more details. It can also handle sending settings along with a game for the Naomi target. Again, see `--help` for more details. See `edit_settings` for how to generate settings files that can be sent along with a game.
 
 ### netdimm_ensure
 
@@ -40,7 +40,8 @@ This script will monitor a cabinet, and send a single binary to that cabinet whe
 ./netdimm_ensure --help
 ```
 
-It works identically to netdimm_send, except for it only supports a zero PIC, and it tries its best to always ensure the cabinet has the right game. Run it just like you would netdimm_send. Just like `netdimm_send`, this script can optionally handle applying patches. See `--help` for more details.
+It works identically to netdimm_send, except for it only supports a zero PIC, and it tries its best to always ensure the cabinet has the right game. Run it just like you would netdimm_send. Just like `netdimm_send`, this script can optionally handle applying patches. See `--help` for more details. It can also handle sending settings along with a game for
+the Naomi target. Again, see `--help` for more details. See `edit_settings` for how to generate settings files that can be sent along with a game.
 
 ### binary_patch
 
