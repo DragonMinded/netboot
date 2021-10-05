@@ -135,7 +135,7 @@ To edit the settings you just attached, run like so:
 
 ### edit_settings
 
-This script spawns a command-line EEPROM file editor. Use this to create a new EEPROM file from scratch or edit an EEPROM file that you've previously made using an emulator. Note that editing settings for an arbitrary game requires that the game have a settings definition file in `settings/definitions/`. Settings definitions are looked up using the game's serial number which is found both in the rom header for a game (use `scripts.rominfo` to view this) and in a previously-created EEPROM file (use `scripts.eeprominfo` to view this). The resulting edited EEPROM can be attached to a Naomi ROM using `scripts.attach_settings` so that the game will load those settings when it boots up. Invoke the script like so to see options:
+This script spawns a command-line EEPROM file editor. Use this to create a new EEPROM file from scratch or edit an EEPROM file that you've previously made using an emulator. Note that editing settings for an arbitrary game requires that the game have a settings definition file in `settings/definitions/`. Settings definitions are looked up using the game's serial number which is found both in the rom header for a game (use `rominfo` to view this) and in a previously-created EEPROM file (use `eeprominfo` to view this). The resulting edited EEPROM can be attached to a Naomi ROM using `attach_settings` so that the game will load those settings when it boots up. It can also be patched on-the-fly when sending a Naomi ROM using either `netdimm_send` or `netdimm_ensure`. Invoke the script like so to see options:
 
 
 ```
@@ -144,7 +144,7 @@ This script spawns a command-line EEPROM file editor. Use this to create a new E
 
 ### Free-Play/No Attract Patch Generators
 
-Both `scripts.make_freeplay_patch` and `scripts.make_no_attract_patch` can be invoked in the same manner, and will produce a patch that applies either forced free-play or forced silent attract mode. Note that these patches are considered obsolete, as you can customize all system settings using `scripts.attach_settings` as documented above. You can run them like so:
+Both `make_freeplay_patch` and `make_no_attract_patch` can be invoked in the same manner, and will produce a patch that applies either forced free-play or forced silent attract mode. Note that these patches are considered obsolete, as you can customize all system settings using `attach_settings` as documented above. You can run them like so:
 
 ```
 ./make_no_attract_patch game.bin --patch-file game_no_attract.binpatch
