@@ -60,12 +60,12 @@ def main() -> int:
                 print(f"Settings file {filename} already exists!", file=sys.stderr)
                 return 1
 
-            with open(pathname, "w") as fp:
+            with open(pathname, "w") as sfp:
                 for i, chunk in enumerate(gamechunks):
                     loc = hex(i)[2:]
                     if len(loc) < 2:
                         loc = "0" + loc
-                    fp.write(f"Setting{loc}: byte, read-only, default is {chunk}{os.linesep}")
+                    sfp.write(f"Setting{loc}: byte, read-only, default is {chunk}{os.linesep}")
             print(f"Settings file {filename} created with defaults from EEPROM!", file=sys.stderr)
 
         elif args.display_parsed_settings:
