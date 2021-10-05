@@ -146,31 +146,38 @@ class SettingsComponent(Component):
         self.__settings = [s for s in settings.settings if s.read_only is not True]
         self.__container: Component
         if settings.settings:
-            self.__labels = [
-                LabelComponent(setting.name)
-                for setting in self.__settings
-            ]
-            self.__inputs = [
-                ClickableSelectInputComponent(
-                    setting.values[setting.current or list(setting.values.keys())[0]],
-                    [v for _, v in setting.values.items()],
-                    focused=False
-                ).on_click(self.__click_select)
-                for setting in self.__settings
-            ]
-            self.__inputs[0].focus = True
-            self.__calculate_visible()
-            self.__container = ListComponent(
-                [
-                    ListComponent(
-                        list(pair),
-                        direction=ListComponent.DIRECTION_LEFT_TO_RIGHT,
-                    )
-                    for pair in zip(self.__labels, self.__inputs)
-                ],
-                direction=ListComponent.DIRECTION_TOP_TO_BOTTOM,
-                size=2,
-            )
+            if self.__settings:
+                self.__labels = [
+                    LabelComponent(setting.name)
+                    for setting in self.__settings
+                ]
+                self.__inputs = [
+                    ClickableSelectInputComponent(
+                        setting.values[setting.current or list(setting.values.keys())[0]],
+                        [v for _, v in setting.values.items()],
+                        focused=False
+                    ).on_click(self.__click_select)
+                    for setting in self.__settings
+                ]
+                self.__inputs[0].focus = True
+                self.__calculate_visible()
+                self.__container = ListComponent(
+                    [
+                        ListComponent(
+                            list(pair),
+                            direction=ListComponent.DIRECTION_LEFT_TO_RIGHT,
+                        )
+                        for pair in zip(self.__labels, self.__inputs)
+                    ],
+                    direction=ListComponent.DIRECTION_TOP_TO_BOTTOM,
+                    size=2,
+                )
+            else:
+                self.__container = LabelComponent(
+                    f"Settings definition file \"{serial}.settings\" specifies no editable settings.\n"
+                    "As a result, we cannot display or edit game settings for this game!",
+                    formatted=True,
+                )
         else:
             self.__container = LabelComponent(
                 f"Settings definition file \"{serial}.settings\" is missing.\n"
