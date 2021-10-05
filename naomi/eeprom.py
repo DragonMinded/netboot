@@ -1,6 +1,8 @@
 import struct
 from typing import Callable, Optional, Union, cast, overload
 
+from naomi.rom import NaomiEEPROMDefaults
+
 
 class NaomiEEPRomException(Exception):
     pass
@@ -123,10 +125,11 @@ class ArrayBridge:
 class NaomiEEPRom:
 
     @staticmethod
-    def default(serial: bytes, game_defaults: Optional[bytes] = None) -> "NaomiEEPRom":
+    def default(serial: bytes, system_defaults: Optional[NaomiEEPROMDefaults] = None, game_defaults: Optional[bytes] = None) -> "NaomiEEPRom":
         if len(serial) != 4:
             raise NaomiEEPRomException("Invalid game serial!")
 
+        # First, set up game defaults section.
         if game_defaults is None:
             game_settings = b'\xFF' * (128 - (18 * 2))
         else:
@@ -137,7 +140,34 @@ class NaomiEEPRom:
             if padding_len > 0:
                 game_settings += b'\xFF' * padding_len
 
-        system = bytes([0x10]) + serial + bytes([0x09, 0x10, 0x00, 0x01, 0x01, 0x01, 0x00, 0x11, 0x11, 0x11, 0x11])
+        # Now, set up the system defaults section.
+        system_array = [0x10, *[s for s in serial], 0x09, 0x10, 0x00, 0x01, 0x01, 0x01, 0x00, 0x11, 0x11, 0x11, 0x11]
+        if system_defaults is not None:
+            # Only want to apply the defaults if the default section we were given requests it.
+            if system_defaults.apply_settings:
+                if system_defaults.force_vertical:
+                    # Bottom half of byte.
+                    system_array[0] = (system_array[0] & 0xF0) | 0x01
+                if system_defaults.force_silent:
+                    # Top half of byte.
+                    system_array[0] = (system_array[0] & 0x0F) | 0x00
+                if system_defaults.chute == "individual":
+                    # Bottom half of byte.
+                    system_array[6] = (system_array[6] & 0xF0) | 0x01
+                if system_defaults.coin_setting > 0 and system_defaults.coin_setting <= 28:
+                    # Whole byte, off by one.
+                    system_array[7] = system_defaults.coin_setting - 1
+                if system_defaults.coin_setting == 28:
+                    # Gotta set individual assignments.
+                    system_array[8] = system_defaults.credit_rate
+                    system_array[9] = system_defaults.coin_1_rate
+                    system_array[10] = system_defaults.coin_2_rate
+                    system_array[11] = system_defaults.bonus
+
+                # TODO: Skipping out looking up sequence texts for now.
+
+        # Finally, construct the full EEPROM.
+        system = bytes(system_array)
         system_crc = NaomiEEPRom.crc(system)
         return NaomiEEPRom(system_crc + system + system_crc + system + game_settings)
 

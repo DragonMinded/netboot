@@ -5,6 +5,7 @@ from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from naomi.eeprom import NaomiEEPRom, NaomiEEPRomException
+from naomi.rom import NaomiRom
 
 
 class SettingSizeEnum(Enum):
@@ -915,6 +916,24 @@ class SettingsManager:
             defaults = config.defaults()
 
         return self.from_eeprom(NaomiEEPRom.default(serial, game_defaults=defaults).data)
+
+    def from_rom(self, rom: NaomiRom, region: int) -> SettingsWrapper:
+        # TODO: Region should be an enum
+        if region not in {NaomiRom.REGION_JAPAN, NaomiRom.REGION_USA, NaomiRom.REGION_EXPORT, NaomiRom.REGION_KOREA, NaomiRom.REGION_AUSTRALIA}:
+            raise Exception(f"Invalid region {region}!")
+
+        # Grab system defaults from ROM header.
+        serial = rom.serial
+        system_defaults = rom.defaults[region]
+
+        # Grab game defaults from settings file.
+        config = self._serial_to_config(self.files, serial)
+        game_defaults = None
+        if config is not None:
+            game_defaults = config.defaults()
+
+        # Create a default EEPROM based on both of the above.
+        return self.from_eeprom(NaomiEEPRom.default(serial, system_defaults=system_defaults, game_defaults=game_defaults).data)
 
     def from_eeprom(self, data: bytes) -> SettingsWrapper:
         # First grab the parsed EEPRom so we can get the serial.

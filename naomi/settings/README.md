@@ -83,7 +83,7 @@ the correct string to display.
 The default value for this setting. Note that under some circumstances, this may
 not be available and will return None. You can safely ignore this property if you are
 developing an editor. If you wish to provide a "defaults" button in your editor, it
-is recommended to instead use the `from_serial()` method on an instance of
+is recommended to instead use the `from_serial()` or `from_rom()` method on an instance of
 `SettingsManager` which will return you a new `SettingsWrapper` with default values.
 This will correctly handle system and game defaults as well as dependendent default
 settings.
@@ -229,6 +229,16 @@ EEPROM already created. This will read the definitions files and create
 a `SettingsWrapper` with default settings. This can be then passed to the
 `to_eeprom()` function to return a valid 128-byte EEPROM representing the
 default settings.
+
+### from_rom() method
+
+Takes a NaomiRom instance argument "rom" and an integer argument "region"
+and retrieves any requested system defaults from the Naomi ROM header.
+It uses that as well as the game's settings definition file to create a
+default EEPROM that is then used to construct a `SettingsWrapper` class
+repressenting the default settings as a Naomi would create them on first
+boot. This can then be edited or passed to the `to_eeprom()` function to
+return a valid 128-byte EEPROM representing the edited settings.
 
 ### from_eeprom() method
 

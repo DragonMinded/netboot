@@ -289,6 +289,11 @@ An instance of NaomiSettingsPatcher has the `get_serial()` method. When called, 
 will examine the serial of the Naomi ROM passed into the constructor and return the
 4 byte serial number, suitable for matching against an EEPROM's system serial.
 
+### get_rom() method
+
+Returns a `NaomiRom` instance that encapsulates the ROM passed into the patcher. This
+instance should not be edited, as it will not be read again when performing the patches.
+
 ### get_info() method
 
 Returns an optional instance of NaomiSettingsInfo if the ROM has a configured settings

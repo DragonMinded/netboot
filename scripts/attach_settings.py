@@ -3,7 +3,7 @@ import argparse
 import os
 import sys
 
-from naomi import NaomiSettingsPatcher
+from naomi import NaomiRom, NaomiSettingsPatcher
 from naomi.settings import SettingsEditor, SettingsManager, ReadOnlyCondition, SettingsParseException, SettingsSaveException
 
 
@@ -126,6 +126,12 @@ def main() -> int:
         metavar='BIN',
         type=str,
         help='A different file to output to instead of updating the binary specified directly.',
+    )
+    edit_parser.add_argument(
+        '--region',
+        metavar="REGION",
+        type=str,
+        help='The region the Naomi which will boot this ROM is set to. Defaults to "japan".',
     )
     edit_parser.add_argument(
         '--enable-sentinel',
@@ -271,7 +277,14 @@ def main() -> int:
         manager = SettingsManager(args.settings_directory)
         if eepromdata is None:
             # We need to make them up from scratch.
-            parsedsettings = manager.from_serial(patcher.get_serial())
+            region = {
+                "japan": NaomiRom.REGION_JAPAN,
+                "usa": NaomiRom.REGION_USA,
+                "export": NaomiRom.REGION_EXPORT,
+                "korea": NaomiRom.REGION_KOREA,
+                "australia": NaomiRom.REGION_AUSTRALIA,
+            }.get(args.region, NaomiRom.REGION_JAPAN)
+            parsedsettings = manager.from_rom(patcher.get_rom(), region=region)
         else:
             # We have an eeprom to edit.
             parsedsettings = manager.from_eeprom(eepromdata)

@@ -85,6 +85,10 @@ class NaomiSettingsPatcher:
         naomi = NaomiRom(self.data)
         return naomi.serial
 
+    def get_rom(self) -> NaomiRom:
+        # Grab the entire rom as a parsed structure.
+        return NaomiRom(self.data)
+
     def get_info(self) -> Optional[NaomiSettingsInfo]:
         # Parse the ROM header so we can narrow our search.
         naomi = NaomiRom(self.data)
