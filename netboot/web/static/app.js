@@ -508,7 +508,7 @@ Vue.component('patches', {
 Vue.component('systemconfig', {
     data: function() {
         return {
-            admin: getCookie('admin') == 'true',
+            admin: window.cabinets.length == 0 || getCookie('admin') == 'true',
         };
     },
     methods: {
@@ -529,7 +529,15 @@ Vue.component('systemconfig', {
             <div>
                 <a class="button" href="/addcabinet">Add New Cabinet</a>
                 <a class="button" href="/config">Configure System</a>
-                <button v-on:click="hide">Hide Config Buttons</button>
+                <button v-if="window.cabinets.length > 0" v-on:click="hide">Hide Config Buttons</button>
+            </div>
+            <div v-if="window.cabinets.length == 0" class="adminmessage">
+                Once you add your first cabinet, you will have the option
+                to hide this config section.
+            </div>
+            <div v-if="window.cabinets.length > 0" class="adminmessage">
+                Once you click "Hide Config Buttons", you can get them back again
+                by typing "config" into your browser window on any screen.
             </div>
         </div>
     `,

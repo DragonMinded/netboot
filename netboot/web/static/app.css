@@ -47,6 +47,10 @@ div.romconfig input {
     width: 100%;
 }
 
+div.adminmessage {
+    padding-top: 10px;
+}
+
 a.button, button {
     display: inline-block;
     text-align: center;
