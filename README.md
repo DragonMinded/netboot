@@ -1,6 +1,6 @@
-# Tools for working with a NetDimm
+# Tools for working with a net dimm
 
-This repository started when I looked at triforcetools.py and realized that it was ancient (Python2) and contained a lot of dead code. So, as one of the first projects I did when setting up my NNC to netboot was to port triforcetools.py to Python3, clean up dead code and add type hints. I also added percentage display for transfer and `--help` to the command-line. This has been tested on a Naomi with a NetDimm, but has not been verified on Triforce/Chihiro. There is no reason why it should not work, however.
+This repository started when I looked at triforcetools.py and realized that it was ancient (Python2) and contained a lot of dead code. So, as one of the first projects I did when setting up my NNC to netboot was to port triforcetools.py to Python3, clean up dead code and add type hints. I also added percentage display for transfer and `--help` to the command-line. This has been tested on a Naomi with a net dimm, but has not been verified on Triforce/Chihiro. There is no reason why it should not work, however.
 
 ## Setup Requirements
 
@@ -16,6 +16,20 @@ Remember to append a `--upgrade` to the above command if you are refreshing pack
 
 For all of these scripts, they should run out of the box on Linux and Mac once you've run the above installation command. However, on Windows you will have to prefix all commands with `python3`. For example, instead of running `./netdimm_send --help` you would instead run `python3 ./netdimm_send --help`.
 
+### netdimm_info
+
+This script requests firmware information from a single cabinet, displaying it on the screen. Invoke the script like so to see options:
+
+```
+./netdimm_info --help
+```
+
+Assuming your net dimm is at 192.168.1.1, the following will print information about the firmware running on the cabinet:
+
+```
+./netdimm_info 192.168.1.1
+```
+
 ### netdimm_send
 
 This script handles sending a single binary to a single cabinet, assuming it is on and ready for connection. Invoke the script like so to see options:
@@ -24,7 +38,7 @@ This script handles sending a single binary to a single cabinet, assuming it is 
 ./netdimm_send --help
 ```
 
-You can invoke it identically to the original triforcetools.py as well. Assuming your NetDimm is at 192.168.1.1, the following will load the ROM named `my_favorite_game.bin` from the current directory:
+You can invoke it identically to the original triforcetools.py as well. Assuming your net dimm is at 192.168.1.1, the following will load the ROM named `my_favorite_game.bin` from the current directory:
 
 ```
 ./netdimm_send 192.168.1.1 my_favorite_game.bin
