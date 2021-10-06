@@ -23,6 +23,12 @@ an instance of `Settings`.
 The name of this setting, as a string. This is what you should display to a user
 if you are developing a settings editor.
 
+### order property
+
+The order that this setting showed up in the definition file that created it.
+Note that if you are implementing an editor, you can safely ignore this as the
+settings will already be placed in the correct display order.
+
 ### size property
 
 The size of this setting, as an instance of SettingSizeEnum. The valid values

@@ -115,6 +115,7 @@ class Setting:
     def __init__(
         self,
         name: str,
+        order: int,
         size: SettingSizeEnum,
         length: int,
         read_only: Union[bool, ReadOnlyCondition],
@@ -123,6 +124,7 @@ class Setting:
         default: Optional[Union[int, DefaultConditionGroup]] = None,
     ) -> None:
         self.name = name
+        self.order = order
         self.size = size
         self.length = length
         self.read_only = read_only
@@ -133,6 +135,8 @@ class Setting:
         if size == SettingSizeEnum.UNKNOWN:
             raise Exception("Logic error!")
         if length > 1 and size != SettingSizeEnum.BYTE:
+            raise Exception("Logic error!")
+        if order < 0:
             raise Exception("Logic error!")
 
     @staticmethod
@@ -155,6 +159,10 @@ class Setting:
         length = jsondict.get('length')
         if not isinstance(length, int):
             raise JSONParseException(f"\"length\" key in JSON has invalid data \"{length}\"!", context)
+
+        order = jsondict.get('order')
+        if not isinstance(order, int):
+            raise JSONParseException(f"\"order\" key in JSON has invalid data \"{order}\"!", context)
 
         current = jsondict.get('current')
         if current is not None and not isinstance(current, int):
@@ -242,6 +250,7 @@ class Setting:
 
         return Setting(
             name,
+            order,
             size,
             length,
             readonly,
@@ -253,6 +262,7 @@ class Setting:
     def to_json(self) -> Dict[str, Any]:
         jdict = {
             'name': self.name,
+            'order': self.order,
             'size': self.size.name,
             'length': self.length,
             'values': self.values,
@@ -303,7 +313,7 @@ class Settings:
 
     @staticmethod
     def from_config(type: SettingType, config: "SettingsConfig", eeprom: NaomiEEPRom) -> "Settings":
-        settings = config.settings
+        # Keep track of how many bytes into the EEPROM we are.
         location = 0
         halves = 0
 
@@ -314,7 +324,9 @@ class Settings:
         else:
             raise Exception(f"Cannot load settings with a config of type {type.name}!")
 
-        for setting in settings:
+        # We need to make sure this is in load order, so that we can parse out the
+        # correct settings in order of them showing up in the file.
+        for setting in sorted(config.settings, key=lambda setting: setting.order):
             if setting.size == SettingSizeEnum.NIBBLE:
                 try:
                     if halves == 0:
@@ -349,7 +361,8 @@ class Settings:
 
                 location += setting.length
 
-        final_settings = Settings(config.filename, settings, type=type)
+        # Return this in the original order presented to us.
+        final_settings = Settings(config.filename, config.settings, type=type)
         if type == SettingType.SYSTEM:
             expected = 16
             sectype = "system"
@@ -370,7 +383,7 @@ class Settings:
     def length(self) -> int:
         halves = 0
         length = 0
-        for setting in self.settings:
+        for setting in sorted(self.settings, key=lambda setting: setting.order):
             if setting.size == SettingSizeEnum.NIBBLE:
                 # Update our length.
                 if halves == 0:
@@ -409,8 +422,7 @@ class Settings:
         parsedsettings = [Setting.from_json(config.filename, s, [*context, f"settings[{i}]"]) for (i, s) in enumerate(settings)]
 
         # Finally, go through our config and match up settings to their values.
-        loadedsettings = config.settings
-        for setting in loadedsettings:
+        for setting in config.settings:
             for parsedsetting in parsedsettings:
                 if parsedsetting.name.lower() == setting.name.lower():
                     # It's a match
@@ -419,7 +431,7 @@ class Settings:
             else:
                 raise JSONParseException(f"Setting \"{setting.name}\" could not be found in JSON!", context)
 
-        return Settings(config.filename, loadedsettings, type=type)
+        return Settings(config.filename, config.settings, type=type)
 
     def to_json(self) -> Dict[str, Any]:
         return {
@@ -620,6 +632,11 @@ class SettingsConfig:
                 # Assume that this is a full setting.
                 lines.append(line)
 
+        # Keep track of the order settings were loaded, as this is the order they get parsed in.
+        order = 0
+
+        pending_insertions: List[Tuple[Tuple[str, str], Setting]] = []
+
         for line in lines:
             # First, get the name as well as the size and any restrictions.
             name, rest = line.split(":", 1)
@@ -632,6 +649,7 @@ class SettingsConfig:
             read_only: Union[bool, ReadOnlyCondition] = False
             values: Dict[int, str] = {}
             default: Optional[Union[int, DefaultConditionGroup]] = None
+            ordering: Optional[Tuple[str, str]] = None
 
             if "," in rest:
                 restbits = [r.strip() for r in rest.split(",")]
@@ -804,6 +822,26 @@ class SettingsConfig:
                     else:
                         raise SettingsParseException(f"Cannot parse default for setting \"{name}\"! Specify defaults like \"default is 0\".", filename)
 
+                elif "display" in bit:
+                    # This is a directive for controlling where the setting is displayed.
+                    if " before " in bit:
+                        display, settingname = bit.split(" before ", 1)
+                        display = display.strip()
+                        settingname = settingname.strip()
+                        directive = "before"
+                    elif " after " in bit:
+                        display, settingname = bit.split(" after ", 1)
+                        display = display.strip()
+                        settingname = settingname.strip()
+                        directive = "after"
+                    else:
+                        raise SettingsParseException(f"Couldn't understand position \"{bit}\" for setting \"{name}\". Perhaps you misspelled \"before\" or \"after\"?", filename)
+
+                    if display != "display":
+                        raise SettingsParseException(f"Couldn't understand position \"{bit}\" for setting \"{name}\".", filename)
+
+                    ordering = (directive, settingname)
+
                 else:
                     # Assume this is a setting value.
                     values.update(SettingsConfig.__get_kv(filename, name, bit, 1 if size == SettingSizeEnum.NIBBLE else (length * 2)))
@@ -813,16 +851,23 @@ class SettingsConfig:
             if read_only is not True and not values:
                 raise SettingsParseException(f"Setting \"{name}\" is missing any valid values!", filename)
 
-            settings.append(
-                Setting(
-                    name,
-                    size,
-                    length,
-                    read_only,
-                    values,
-                    default=default,
-                )
+            # Add it to either the current list of settings, or the queue of settings to insert when we're done.
+            new_setting = Setting(
+                name,
+                order,
+                size,
+                length,
+                read_only,
+                values,
+                default=default,
             )
+            if ordering is None:
+                settings.append(new_setting)
+            else:
+                pending_insertions.append((ordering, new_setting))
+
+            # Keep track of order
+            order += 1
 
         # Verify that nibbles come in pairs.
         halves = 0
@@ -833,6 +878,38 @@ class SettingsConfig:
                 if halves != 0:
                     raise SettingsParseException(f"The setting \"{setting.name}\" follows a lonesome half-byte. Half-byte settings must always be in pairs!", filename)
 
+        # Now, insert pending settings where they belong.
+        while pending_insertions:
+            # Search all pending insertions to see if we can add one of them.
+            # Its okay for pending insertions to depend on the placement of other
+            # pending insertions as long as one of them is placeable each time.
+            for i in range(len(pending_insertions)):
+                (directive, settingname), needs_placement = pending_insertions[i]
+                location: Optional[int] = None
+
+                # Look for a potential insertion spot.
+                for j, setting in enumerate(settings):
+                    if setting.name == settingname:
+                        if directive == "before":
+                            location = j
+                        elif directive == "after":
+                            location = j + 1
+                        else:
+                            raise Exception("Logic error!")
+                        break
+
+                if location is not None:
+                    # Get rid of the pending setting, we're about to add it to the master list.
+                    del pending_insertions[i]
+                    settings = [*settings[:location], needs_placement, *settings[location:]]
+                    break
+            else:
+                allsettings = ", ".join([f'"{s.name}"' for _, s in pending_insertions])
+                raise SettingsParseException(
+                    f"We couldn't figure out where to place the following settings: {allsettings}. Did you accidentially create a display order loop?",
+                    filename,
+                )
+
         return SettingsConfig(filename, settings)
 
     def defaults(self) -> bytes:
@@ -840,7 +917,7 @@ class SettingsConfig:
         halves = 0
         defaults: List[bytes] = []
 
-        for setting in self.settings:
+        for setting in sorted(self.settings, key=lambda setting: setting.order):
             if setting.default is None:
                 default = 0
             elif isinstance(setting.default, int):
@@ -971,7 +1048,7 @@ class SettingsManager:
                 # If we couldn't make this section correct, completely skip out on it.
                 continue
 
-            for setting in settingsgroup.settings:
+            for setting in sorted(settingsgroup.settings, key=lambda setting: setting.order):
                 # First, calculate what the default should be in case we need to use it.
                 if setting.default is None:
                     default = None

@@ -86,7 +86,7 @@ that display this setting will display a drop-down or selection box that include
 the options "Off", "1", "2", "3", "4", "5", "6", "7", "8", "9", "MAX". The
 correct one will be selected based on the value in the EEPROM when it is parsed.
 
-## Changing Setting Display
+## Changing the Setting Display
 
 Normally, if you have some number of values that a setting can be and you
 want to control what an editor displays when selecting each value, you would
@@ -291,3 +291,32 @@ Dependent Setting: byte, read-only, default is value of Setting - 1
 ```
 
 This defines the exact same pair of settings, with the exact same defaults!
+
+## Specifying an Alternate Display Order
+
+Normally settings are displayed in exactly the order the show up in the
+file. Sometimes settings show up in a different order in a game's test
+menu than they appear in the EEPROM file itself. You can't just rearrange
+the order that the settings appear in the definition file since that
+dictates the order that the settings themselves are processed. So, instead
+you can specify that a setting should be displayed before or after another
+setting. Here is an example:
+
+```
+Simple Setting: byte, values are 1 to 10
+Other Setting: byte, values are 2 to 5, display before Simple Setting
+```
+
+This defines two settings named "Simple Setting" and "Other Setting". While
+"Simple Setting" comes first when parsing the EEPROM itself, when it comes
+time to display the settings in an editor, "Other Setting" will be displayed
+first and then "Simple Setting".
+
+Similarly, you can specify that a setting come after another setting like so:
+
+```
+Simple Setting: byte, values are 1 to 10, display after Other Setting
+Other Setting: byte, values are 2 to 5
+```
+
+Both the above examples produce the exact same list of settings in an editor.
