@@ -509,6 +509,10 @@ Vue.component('patches', {
 
 Vue.component('systemconfig', {
     data: function() {
+        if (window.cabinets.length == 0) {
+            // Force admin mode even after adding the first cabinet if we're currently empty.
+            setCookie('admin', 'true', 7);
+        }
         return {
             admin: window.cabinets.length == 0 || getCookie('admin') == 'true',
         };
