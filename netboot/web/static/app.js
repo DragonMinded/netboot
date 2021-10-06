@@ -91,14 +91,16 @@ Vue.component('cabinet', {
                         </select>
                     </span>
                     <span class="right">
-                        <button v-if="!selecting" class="small" v-on:click="change">Choose New Game</button>
+                        <button v-if="(cabinet.options.length > 1 || (cabinet.options.length == 1 && cabinet.options[0].name != cabinet.game)) && !selecting" class="small" v-on:click="change">Choose New Game</button>
                         <button v-if="selecting" class="small" v-on:click="choose">Run This Game</button>
                         <button v-if="selecting" class="small" v-on:click="cancel">Nevermind</button>
                     </span>
                 </dd>
                 <dt>Status</dt><dd><state v-bind:status="cabinet.status" v-bind:progress="cabinet.progress"></state></dd>
             </dl>
-            <a class="button" v-if="admin" v-bind:href="'config/cabinet/' + cabinet.ip">Configure Cabinet</a>
+            <div class="configure">
+                <a class="button" v-if="admin" v-bind:href="'config/cabinet/' + cabinet.ip">Configure Cabinet</a>
+            </div>
         </div>
     `,
 });
