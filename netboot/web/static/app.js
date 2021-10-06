@@ -325,6 +325,11 @@ Vue.component('romconfig', {
             </dl>
             <button v-on:click="save">Update Names</button>
             <span class="successindicator" v-if="saved">&check; saved</span>
+            <div class="information">
+                Game names are pulled out of the ROM header if possible, and if not they are taken
+                from the ROM filename. If you want to change them so they look better on the main
+                page drop-downs you can do so here.
+            </div>
         </div>
     `,
 });
