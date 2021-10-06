@@ -33,10 +33,10 @@ Motor Drive: byte, default is 02, read-only if Cabinet Type is 01
   03 - Heavy
 
 # Volume Settings
-Accel Setting Min: byte, default is 20, values are 00 to fe in hex
-Accel Setting Max: byte, default is d0, values are 00 to fe in hex
-Brake Setting Min: byte, default is 20, values are 00 to fe in hex
-Brake Setting Max: byte, default is d0, values are 00 to fe in hex
+Accel Setting Min: byte, default is 20, values are 00 to fe in hex, display after Steer Setting Right Max
+Accel Setting Max: byte, default is d0, values are 00 to fe in hex, display after Accel Setting Min
+Brake Setting Min: byte, default is 20, values are 00 to fe in hex, display after Accel Setting Max
+Brake Setting Max: byte, default is d0, values are 00 to fe in hex, display after Brake Setting Min
 Steer Setting Center: byte, default is 80, values are 00 to fe in hex
 Steer Setting Left Max: byte, default is 20, values are 00 to fe in hex
 Steer Setting Right Max: byte, default is e0, values are 00 to fe in hex
@@ -45,7 +45,7 @@ Steer Setting Right Max: byte, default is e0, values are 00 to fe in hex
 # steering section to a multiple of 4.
 Unused: byte, read-only, default is 00
 
-Cabinet Type: byte, default is 00
+Cabinet Type: byte, default is 00, display before Motor Drive
   00 - DX
   01 - STD
 

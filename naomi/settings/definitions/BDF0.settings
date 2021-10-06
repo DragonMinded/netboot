@@ -17,7 +17,7 @@ Setting14: byte, read-only, default is 00
 Setting15: byte, read-only, default is 00
 
 HCenterUnknown: byte, read-only, default is value of Horizontal Center (Now H) + 1
-Horizontal Center (Now H): byte, default is 7f, values are 00 to ff in hex
+Horizontal Center (Now H): byte, default is 7f, values are 00 to ff in hex, display before Vertical Center (Now V)
 Setting18: byte, read-only, default is 00
 Setting19: byte, read-only, default is 00
 PushUnknown: byte, read-only, default is value of Joystick Calibration Push
@@ -30,6 +30,6 @@ Joystick Calibration Pull: byte, default is a0, values are 00 to ff in hex
 Setting26: byte, read-only, default is 00
 Setting27: byte, read-only, default is 00
 VCenterUnknown: byte, read-only, default is value of Vertical Center (Now V) + 1
-Vertical Center (Now V): byte, default is 7f, values are 00 to ff in hex
+Vertical Center (Now V): byte, default is 7f, values are 00 to ff in hex, display before Joystick Calibration Left
 Setting30: byte, read-only, default is 00
 Setting31: byte, read-only, default is 00
