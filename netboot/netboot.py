@@ -95,7 +95,7 @@ class NetDimm:
             if progress_callback:
                 progress_callback(0, len(data))
 
-            # Display "now loading..." on the cabinet screen
+            # Reboot and display "now loading..." on the cabinet screen
             self.__set_mode(0, 1)
 
             if key:
@@ -181,8 +181,10 @@ class NetDimm:
             raise NetDimmException("Key code must by 8 bytes in length")
         self.__write(struct.pack("<I", 0x7F000008) + data)
 
-    def __upload(self, addr: int, data: bytes, mark: int) -> None:
-        self.__write(struct.pack("<IIIH", 0x04800000 | (len(data) + 0xA) | (mark << 16), 0, addr, 0) + data)
+    def __upload(self, sequence: int, addr: int, data: bytes, last_chunk: bool) -> None:
+        # The extra 0xA bytes added to the length of data is for the 10 additional
+        # bytes after the header word that we send.
+        self.__write(struct.pack("<IIIH", (0x04810000 if last_chunk else 0x04800000) | (len(data) + 0xA), sequence, addr, 0) + data)
 
     def __get_information(self) -> None:
         self.__write(struct.pack("<I", 0x18000000))
@@ -204,25 +206,24 @@ class NetDimm:
                 return chunk
             return des.encrypt(chunk[::-1])[::-1]
 
-        while True:
+        sequence = 1
+        while addr < total:
             self.__print("%08x %d%%\r" % (addr, int(float(addr * 100) / float(total))), newline=False)
             if progress_callback:
                 progress_callback(addr, total)
 
             current = data[addr:(addr + 0x8000)]
-            if not current:
-                break
+            curlen = len(current)
+            last_packet = addr + curlen == total
 
             current = __encrypt(current)
-            self.__upload(addr, current, 0)
+            self.__upload(sequence, addr, current, last_packet)
             crc = zlib.crc32(current, crc)
-            addr += len(current)
+            addr += curlen
+            sequence += 1
 
-        if addr != total:
-            raise Exception("Logic error!")
+        crc = (~crc) & 0xFFFFFFFF
         self.__print("length: %08x" % addr)
-        crc = ~crc
-        self.__upload(addr, b"12345678", 1)
         self.__set_information(crc, addr)
 
     def __restart(self) -> None:
