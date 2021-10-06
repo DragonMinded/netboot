@@ -12,7 +12,7 @@ from typing import Optional, Sequence, Tuple, TYPE_CHECKING
 
 from arcadeutils.binary import BinaryDiff
 from netboot.log import log
-from netboot.netboot import NetDimm, NetDimmException, TargetEnum, TargetVersionEnum
+from netboot.netboot import NetDimm, NetDimmInfo, NetDimmException, TargetEnum, TargetVersionEnum
 from naomi import NaomiSettingsPatcher, get_default_trojan as get_default_naomi_trojan
 
 
@@ -238,3 +238,15 @@ class Host:
             # Don't yield control back until we have got the first response from the process
             while self.__lastprogress == (-1, -1) and self.__proc is not None:
                 self.__update_progress()
+
+    def info(self) -> Optional[NetDimmInfo]:
+        with self.__lock:
+            if self.__proc is not None:
+                # Host is actively transferring, don't bother requesting info.
+                return None
+
+            try:
+                netdimm = NetDimm(self.ip, target=self.target, version=self.version, quiet=True)
+                return netdimm.info()
+            except NetDimmException:
+                return None

@@ -164,7 +164,7 @@ Vue.component('game', {
             </h4>
             <div class="patches">
                 <patch v-for="patch in game.patches" v-bind:game="game" v-bind:patch="patch" v-bind:key="patch"></patch>
-                <span v-if="game.patches.length == 0">no patches available for game</span>
+                <span v-if="game.patches.length == 0" class="italics">no patches available for game</span>
             </div>
         </div>
     `,
@@ -174,6 +174,12 @@ Vue.component('cabinetconfig', {
     data: function() {
         return {
             cabinet: window.cabinet,
+            info: {
+                game: window.cabinet.game,
+                status: window.cabinet.status,
+                progress: window.cabinet.progress,
+            },
+            querying: false,
             saved: false,
         };
     },
@@ -189,6 +195,22 @@ Vue.component('cabinetconfig', {
                 }
             });
         },
+        query: function() {
+            this.querying = true;
+            axios.get('/cabinets/' + this.cabinet.ip + '/info').then(result => {
+                if (!result.data.error) {
+                    this.info.version = result.data.version;
+                    this.info.memsize = result.data.memsize;
+                    this.info.memavail = result.data.memavail;
+                    this.info.available = result.data.available;
+                    console.log(this.info);
+                    if (this.info.version) {
+                        this.cabinet.version = this.info.version;
+                    }
+                    this.querying = false;
+                }
+            });
+        },
         remove: function() {
             if (confirm("Are you sure you want to remove this cabinet?")) {
                 axios.delete('/cabinets/' + this.cabinet.ip).then(result => {
@@ -199,31 +221,74 @@ Vue.component('cabinetconfig', {
                 });
             }
         },
+        refresh: function() {
+            axios.get('/cabinets/' + this.cabinet.ip).then(result => {
+                if (!result.data.error) {
+                    console.log(result.data);
+                    this.info.status = result.data.status;
+                    this.info.progress = result.data.progress;
+                }
+            });
+        },
+    },
+    mounted: function() {
+        setInterval(function () {
+            this.refresh();
+        }.bind(this), 1000);
     },
     template: `
-        <div class='cabinet'>
-            <dl>
-                <dt>IP Address</dt><dd>{{ cabinet.ip }}</dd>
-                <dt>Description</dt><dd><input v-model="cabinet.description" @input="changed"/></dd>
-                <dt>Region</dt><dd>
-                    <select v-model="cabinet.region" @input="changed">
-                        <option v-for="region in regions" v-bind:value="region">{{ region }}</option>
-                    </select>
-                </dd>
-                <dt>Target</dt><dd>
-                    <select v-model="cabinet.target" @input="changed">
-                        <option v-for="target in targets" v-bind:value="target">{{ target }}</option>
-                    </select>
-                </dd>
-                <dt>NetDimm Version</dt><dd>
-                    <select v-model="cabinet.version" @input="changed">
-                        <option v-for="version in versions" v-bind:value="version">{{ version }}</option>
-                    </select>
-                </dd>
-            </dl>
-            <button v-on:click="save">Update Properties</button>
-            <button v-on:click="remove">Remove Cabinet</button>
-            <span class="successindicator" v-if="saved">&check; saved</span>
+        <div>
+            <div class='cabinet'>
+                <dl>
+                    <dt>IP Address</dt><dd>{{ cabinet.ip }}</dd>
+                    <dt>Description</dt><dd><input v-model="cabinet.description" @input="changed"/></dd>
+                    <dt>Target System</dt><dd>
+                        <select v-model="cabinet.target" @input="changed">
+                            <option v-for="target in targets" v-bind:value="target">{{ target }}</option>
+                        </select>
+                    </dd>
+                    <dt>BIOS Region</dt><dd>
+                        <select v-model="cabinet.region" @input="changed">
+                            <option v-for="region in regions" v-bind:value="region">{{ region }}</option>
+                        </select>
+                    </dd>
+                    <dt>NetDimm Version</dt><dd>
+                        <select v-model="cabinet.version" @input="changed">
+                            <option v-for="version in versions" v-bind:value="version">{{ version }}</option>
+                        </select>
+                    </dd>
+                </dl>
+                <div class="update">
+                    <button v-on:click="save">Update Properties</button>
+                    <button v-on:click="remove">Remove Cabinet</button>
+                    <span class="successindicator" v-if="saved">&check; saved</span>
+                </div>
+                <div class="information">
+                    Target System and NetDimm Version are used to check availability for certain features.
+                    They are optional, but it's a good idea to set them correctly.
+                </div>
+            </div>
+            <div class='cabinet'>
+                <h3>Information about Cabinet</h3>
+                <dl>
+                    <dt>Game</dt>
+                    <dd>{{ info.game }}</dd>
+                    <dt>Status</dt><dd><state v-bind:status="info.status" v-bind:progress="info.progress"></state></dd>
+                    <dt v-if="info.available">NetDimm Memory Size</dt>
+                    <dd v-if="info.available">{{ info.memsize }} MB</dd>
+                    <dt v-if="info.available">NetDimm Available Game Memory</dt>
+                    <dd v-if="info.available">{{ info.memavail }} MB</dd>
+                </dl>
+                <div class="query">
+                    <button v-on:click="query" :disabled="info.status == 'send_game'">Query Firmware Information</button>
+                    <span class="queryindicator" v-if="querying">querying...</span>
+                </div>
+                <div class="information">
+                    Querying the NetDimm will attempt to load some firmware properties. If the version
+                    can be identified, it will be selected for you in the NetDimm Version in the above
+                    section.
+                </div>
+            </div>
         </div>
     `,
 });
@@ -292,6 +357,13 @@ Vue.component('availablegames', {
     template: `
         <div class='gamelist'>
             <h3>Available Games For This Cabinet</h3>
+            <div class="information top">
+                Games that can be sent to this cabinet, as well as the applicable patches and settings
+                that can be enabled for those games. Check off every game you want available for this
+                cabinet and they will show up on the game selection dropdown on the main screen for this
+                cabinet. If you select patches or settings for a particular game, they will be applied
+                to the game when it is sent to the cabinet.
+            </div>
             <game v-if="!loading" v-for="game in games" v-bind:game="game" v-bind:key="game"></game>
             <div v-if="loading">loading...</div>
             <div v-if="!loading && Object.keys(games).length === 0">no applicable games</div>
@@ -391,14 +463,14 @@ Vue.component('newcabinet', {
                     <input v-model="cabinet.description" />
                     <span class="errorindicator" v-if="invalid_description">invalid description</span>
                 </dd>
-                <dt>Region</dt><dd>
-                    <select v-model="cabinet.region">
-                        <option v-for="region in regions" v-bind:value="region">{{ region }}</option>
-                    </select>
-                </dd>
-                <dt>Target</dt><dd>
+                <dt>Target System</dt><dd>
                     <select v-model="cabinet.target">
                         <option v-for="target in targets" v-bind:value="target">{{ target }}</option>
+                    </select>
+                </dd>
+                <dt>BIOS Region</dt><dd>
+                    <select v-model="cabinet.region">
+                        <option v-for="region in regions" v-bind:value="region">{{ region }}</option>
                     </select>
                 </dd>
                 <dt>NetDimm Version</dt><dd>
@@ -407,7 +479,11 @@ Vue.component('newcabinet', {
                     </select>
                 </dd>
             </dl>
-            <button v-on:click="save">Save Properties</button>
+            <button v-on:click="save">Add Cabinet</button>
+            <div class="information">
+                Target System and NetDimm Version are used to check availability for certain features.
+                They are optional, but it's a good idea to set them correctly.
+            </div>
         </div>
     `,
 });
@@ -537,11 +613,11 @@ Vue.component('systemconfig', {
                 <a class="button" href="/config">Configure System</a>
                 <button v-if="window.cabinets.length > 0" v-on:click="hide">Hide Config Buttons</button>
             </div>
-            <div v-if="window.cabinets.length == 0" class="adminmessage">
+            <div v-if="window.cabinets.length == 0" class="information">
                 Once you add your first cabinet, you will have the option
                 to hide this config section.
             </div>
-            <div v-if="window.cabinets.length > 0" class="adminmessage">
+            <div v-if="window.cabinets.length > 0" class="information">
                 Once you click "Hide Config Buttons", you can get them back again
                 by typing "config" into your browser window on any screen.
             </div>

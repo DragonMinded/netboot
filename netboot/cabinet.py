@@ -6,7 +6,7 @@ import yaml
 from enum import Enum
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
-from netboot.netboot import TargetEnum, TargetVersionEnum
+from netboot.netboot import NetDimmInfo, TargetEnum, TargetVersionEnum
 from netboot.hostutils import Host, HostStatusEnum
 from netboot.log import log
 
@@ -165,6 +165,10 @@ class Cabinet:
         """
         with self.__lock:
             return self.__state
+
+    def info(self) -> Optional[NetDimmInfo]:
+        with self.__lock:
+            return self.__host.info()
 
 
 class CabinetManager:

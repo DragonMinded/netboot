@@ -333,6 +333,25 @@ def removecabinet(ip: str) -> Dict[str, Any]:
     return {}
 
 
+@app.route('/cabinets/<ip>/info')
+@jsonify
+def cabinetinfo(ip: str) -> Dict[str, Any]:
+    cabman = app.config['CabinetManager']
+    dirman = app.config['DirectoryManager']
+    cabinet = cabman.cabinet(ip)
+    info = cabinet.info()
+
+    if info is None:
+        return {}
+    else:
+        return {
+            'version': info.firmware_version.value,
+            'memsize': info.memory_size,
+            'memavail': int(info.available_game_memory / 1024 / 1024),
+            'available': True,
+        }
+
+
 @app.route('/cabinets/<ip>/games')
 @jsonify
 def romsforcabinet(ip: str) -> Dict[str, Any]:
