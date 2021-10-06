@@ -616,11 +616,11 @@ Vue.component('systemconfig', {
             <div>
                 <a class="button" href="/addcabinet">Add New Cabinet</a>
                 <a class="button" href="/config">Configure System</a>
-                <button v-if="window.cabinets.length > 0" v-on:click="hide">Hide Config Buttons</button>
+                <button :disabled="window.cabinets.length < 1" v-on:click="hide">Hide Config Buttons</button>
             </div>
             <div v-if="window.cabinets.length == 0" class="information">
                 Once you add your first cabinet, you will have the option
-                to hide this config section.
+                to hide this config section so the page will be prettier.
             </div>
             <div v-if="window.cabinets.length > 0" class="information">
                 Once you click "Hide Config Buttons", you can get them back again
