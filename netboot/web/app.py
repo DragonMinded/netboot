@@ -134,24 +134,9 @@ def cabinetconfig(ip: str) -> Response:
         render_template(
             'gameconfig.html',
             cabinet=cabinet_to_dict(cabinet, dirman),
-            regions=[
-                CabinetRegionEnum.REGION_JAPAN.value,
-                CabinetRegionEnum.REGION_USA.value,
-                CabinetRegionEnum.REGION_EXPORT.value,
-                CabinetRegionEnum.REGION_KOREA.value,
-                CabinetRegionEnum.REGION_AUSTRALIA.value,
-            ],
-            targets=[
-                TargetEnum.TARGET_NAOMI.value,
-                TargetEnum.TARGET_CHIHIRO.value,
-                TargetEnum.TARGET_TRIFORCE.value,
-            ],
-            versions=[
-                TargetVersionEnum.TARGET_VERSION_3_01.value,
-                TargetVersionEnum.TARGET_VERSION_2_15.value,
-                TargetVersionEnum.TARGET_VERSION_2_03.value,
-                TargetVersionEnum.TARGET_VERSION_1_07.value,
-            ],
+            regions=[cr.value for cr in CabinetRegionEnum if cr != CabinetRegionEnum.REGION_UNKNOWN],
+            targets=[t.value for t in TargetEnum],
+            versions=[tv.value for tv in TargetVersionEnum],
         ),
         200
     )
@@ -162,24 +147,9 @@ def addcabinet() -> Response:
     return make_response(
         render_template(
             'addcabinet.html',
-            regions=[
-                CabinetRegionEnum.REGION_JAPAN.value,
-                CabinetRegionEnum.REGION_USA.value,
-                CabinetRegionEnum.REGION_EXPORT.value,
-                CabinetRegionEnum.REGION_KOREA.value,
-                CabinetRegionEnum.REGION_AUSTRALIA.value,
-            ],
-            targets=[
-                TargetEnum.TARGET_NAOMI.value,
-                TargetEnum.TARGET_CHIHIRO.value,
-                TargetEnum.TARGET_TRIFORCE.value,
-            ],
-            versions=[
-                TargetVersionEnum.TARGET_VERSION_3_01.value,
-                TargetVersionEnum.TARGET_VERSION_2_15.value,
-                TargetVersionEnum.TARGET_VERSION_2_03.value,
-                TargetVersionEnum.TARGET_VERSION_1_07.value,
-            ],
+            regions=[cr.value for cr in CabinetRegionEnum if cr != CabinetRegionEnum.REGION_UNKNOWN],
+            targets=[t.value for t in TargetEnum],
+            versions=[tv.value for tv in TargetVersionEnum],
         ),
         200
     )
