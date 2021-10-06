@@ -219,7 +219,7 @@ class CabinetManager:
                     filename=str(cab['filename']) if cab['filename'] is not None else None,
                     patches={str(rom): [str(p) for p in cab['roms'][rom]] for rom in cab['roms']},
                     # This is accessed differently since we have older YAML files that might need upgrading.
-                    settings={str(rom): (bytes(data) or None) for (rom, data) in cab.get('settings', {})},
+                    settings={str(rom): (bytes(data) or None) for (rom, data) in cab.get('settings', {}).items()},
                     target=TargetEnum(str(cab['target'])) if 'target' in cab else None,
                     version=TargetVersionEnum(str(cab['version'])) if 'version' in cab else None,
                 )
