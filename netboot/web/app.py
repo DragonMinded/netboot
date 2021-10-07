@@ -388,7 +388,7 @@ def romsforcabinet(ip: str) -> Dict[str, Any]:
                 # TODO: This is Naomi-specific and really should be moved into
                 # "Cabinet". However, if we do that we need to generalize the
                 # settings so it isn't naomi-specific.
-                manager = SettingsManager(get_default_settings_directory())
+                manager = SettingsManager(app.config['settings_directory'])
                 if settingsdata is not None:
                     if len(settingsdata) != NaomiSettingsPatcher.EEPROM_SIZE:
                         raise Exception("We don't support non-EEPROM settings!")
@@ -455,7 +455,7 @@ def updateromsforcabinet(ip: str) -> Response:
                 # above. It should be moved into cabman and generalized.
                 if settings['enabled']:
                     # Gotta convert this from JSON and set the settings.
-                    manager = SettingsManager(get_default_settings_directory())
+                    manager = SettingsManager(app.config['settings_directory'])
                     parsedsettings = manager.from_json(settings['settings'])
                     eepromdata = manager.to_eeprom(parsedsettings)
                     cabinet.settings[game['file']] = eepromdata
@@ -527,6 +527,12 @@ def spawn_app(config_file: str, debug: bool = False) -> Flask:
     else:
         raise AppException(f"Invalid YAML file format for {config_file}, expected directory or list of directories for patch directory setting!")
 
+    if 'settings_directory' not in data:
+        raise AppException(f"Invalid YAML file format for {config_file}, missing settings directory setting!")
+    settings = data['settings_directory']
+    if not isinstance(settings, str):
+        raise AppException(f"Invalid YAML file format for {config_file}, expected directory for settings directory setting!")
+
     # Allow use of relative paths (relative to config file).
     patches = [os.path.abspath(os.path.join(config_dir, d)) for d in patches]
     for patch in patches:
@@ -541,6 +547,7 @@ def spawn_app(config_file: str, debug: bool = False) -> Flask:
     app.config['CabinetManager'] = CabinetManager.from_yaml(cabinet_file)
     app.config['DirectoryManager'] = DirectoryManager(directories, checksums)
     app.config['PatchManager'] = PatchManager(patches)
+    app.config['settings_directory'] = os.path.abspath(settings)
     app.config['config_file'] = os.path.abspath(config_file)
     app.config['cabinet_file'] = cabinet_file
 
@@ -552,6 +559,7 @@ def serialize_app(app: Flask) -> None:
         'cabinet_config': app.config['cabinet_file'],
         'rom_directory': app.config['DirectoryManager'].directories,
         'patch_directory': app.config['PatchManager'].directories,
+        'settings_directory': app.config['settings_directory'],
         'filenames': app.config['DirectoryManager'].checksums,
     }
     with open(app.config['config_file'], "w") as fp:
