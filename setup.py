@@ -5,10 +5,6 @@ from setuptools import setup
 if 'FULL_INSTALLATION' in os.environ:
     # We want to install this entire repo as an installation, so that we can
     # use it to run a netboot server.
-    with open("MANIFEST.in", "w") as wfp:
-        with open("MANIFEST.install", "r") as rfp:
-            wfp.write(rfp.read())
-
     def requires(req: str) -> str:
         if "git+" not in req:
             return req
@@ -30,15 +26,23 @@ if 'FULL_INSTALLATION' in os.environ:
             # Core packages.
             'naomi',
             'naomi.settings',
+            # Include default trojan.
+            'homebrew.settingstrojan',
             # Web server package.
             'netboot',
             'netboot.web',
+            'netboot.web.static',
+            'netboot.web.templates',
         ],
         install_requires=[
             requires(req) for req in open('requirements.txt').read().split('\n') if len(req) > 0
         ],
-        include_package_data=True,
-        zip_safe=False,
+        package_data={
+            # Make sure to actually include the trojan data.
+            "homebrew.settingstrojan": ["settingstrojan.bin"],
+            "netboot.web.static": ["*.js", "*.css"],
+            "netboot.web.templates": ["*.html"],
+        },
     )
 else:
     # We want to install only the parts of this repo useful as a third-party

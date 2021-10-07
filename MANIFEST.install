@@ -1,3 +1,0 @@
-include netboot/web/templates/*.html
-include netboot/web/static/*.js
-include netboot/web/static/*.css
