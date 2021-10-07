@@ -31,9 +31,6 @@ def _handle_patches(data: bytes, target: TargetEnum, patches: Sequence[str], set
     # Attach any settings file requested.
     if target == TargetEnum.TARGET_NAOMI:
         if settings is not None:
-            # TODO: We should check the size of the settings and either patch
-            # the EEPROM or the SRAM depending, so that this can also be used
-            # for atomiswave conversion settings saving.
             patcher = NaomiSettingsPatcher(data, get_default_naomi_trojan())
             patcher.put_settings(settings)
             data = patcher.data

@@ -116,7 +116,7 @@ This script will take an SRAM file from an emulator such as demul and attach it 
 To attach a SRAM file from demul to a ROM named demo.bin, run like so:
 
 ```
-./attach_sram demo.bin dummy.sram
+./attach_sram attach demo.bin dummy.sram
 ```
 
 ### attach_settings

@@ -3,7 +3,7 @@ import argparse
 import os
 import sys
 
-from naomi import NaomiRomRegionEnum, NaomiSettingsPatcher
+from naomi import NaomiRomRegionEnum, NaomiSettingsPatcher, NaomiSettingsTypeEnum
 from naomi.settings import SettingsEditor, SettingsManager, ReadOnlyCondition, SettingsParseException, SettingsSaveException
 
 
@@ -14,7 +14,7 @@ root = os.path.realpath(os.path.join(os.path.dirname(os.path.realpath(__file__))
 def main() -> int:
     # Create the argument parser
     parser = argparse.ArgumentParser(
-        description="Utility for attaching, extracting and editing pre-selected settings to a commercial Naomi ROM.",
+        description="Utility for attaching, extracting and editing pre-selected EEPROM settings to a commercial Naomi ROM.",
     )
     subparsers = parser.add_subparsers(help='Action to take', dest='action')
 
@@ -27,7 +27,7 @@ def main() -> int:
         'rom',
         metavar='ROM',
         type=str,
-        help='The Naomi ROM file we should attach the settings to.',
+        help='The Naomi ROM file we should attach the EEPROM settings to.',
     )
     attach_parser.add_argument(
         'eeprom',
@@ -68,7 +68,7 @@ def main() -> int:
         'rom',
         metavar='ROM',
         type=str,
-        help='The Naomi ROM file we should extract the settings from.',
+        help='The Naomi ROM file we should extract the EEPROM settings from.',
     )
     extract_parser.add_argument(
         'eeprom',
@@ -86,7 +86,7 @@ def main() -> int:
         'rom',
         metavar='ROM',
         type=str,
-        help='The Naomi ROM file we should print settings information from.',
+        help='The Naomi ROM file we should print EEPROM settings information from.',
     )
     info_parser.add_argument(
         '--settings-directory',
@@ -105,7 +105,7 @@ def main() -> int:
         'rom',
         metavar='ROM',
         type=str,
-        help='The Naomi ROM file we should edit the settings for.',
+        help='The Naomi ROM file we should edit the EEPROM settings for.',
     )
     edit_parser.add_argument(
         '--exe',
@@ -162,16 +162,24 @@ def main() -> int:
         with open(args.eeprom, "rb") as fp:
             eeprom = fp.read()
 
+        # Check some bounds.
+        if len(eeprom) != NaomiSettingsPatcher.EEPROM_SIZE:
+            print("EEPROM is the wrong size! Perhaps you meant to use \"attach_sram\"?", file=sys.stderr)
+            return 1
+
         # Now, patch it onto the data.
         patcher = NaomiSettingsPatcher(data, exe)
+        if patcher.type != NaomiSettingsTypeEnum.TYPE_NONE and patcher.type != NaomiSettingsTypeEnum.TYPE_EEPROM:
+            print("Attached settings are not an EEPROM settings file! Perhaps you meant to use \"attach_sram\"?", file=sys.stderr)
+            return 1
         patcher.put_settings(eeprom, enable_sentinel=args.enable_sentinel, enable_debugging=args.enable_debugging, verbose=True)
 
         if args.output_file:
-            print(f"Added settings to {args.output_file}.")
+            print(f"Added EEPROM settings to {args.output_file}.")
             with open(args.output_file, "wb") as fp:
                 fp.write(patcher.data)
         else:
-            print(f"Added settings to {args.rom}.")
+            print(f"Added EEPROM settings to {args.rom}.")
             with open(args.rom, "wb") as fp:
                 fp.write(patcher.data)
 
@@ -181,14 +189,18 @@ def main() -> int:
             data = fp.read()
 
         # Now, search for the settings.
-        patcher = NaomiSettingsPatcher(data, b"")
+        patcher = NaomiSettingsPatcher(data, None)
         settings = patcher.get_settings()
 
         if settings is None:
-            print("ROM does not have any settings attached!", file=sys.stderr)
+            print("ROM does not have any EEPROM settings attached!", file=sys.stderr)
             return 1
 
-        print(f"Wrote settings to {args.eeprom}.")
+        if len(settings) != NaomiSettingsPatcher.EEPROM_SIZE:
+            print("EEPROM is the wrong size! Perhaps you meant to use \"attach_sram\"?", file=sys.stderr)
+            return 1
+
+        print(f"Wrote EEPROM settings to {args.eeprom}.")
         with open(args.eeprom, "wb") as fp:
             fp.write(settings)
 
@@ -198,13 +210,16 @@ def main() -> int:
             data = fp.read()
 
         # Now, search for the settings.
-        patcher = NaomiSettingsPatcher(data, b"")
-        info = patcher.get_info()
+        patcher = NaomiSettingsPatcher(data, None)
+        if patcher.type != NaomiSettingsTypeEnum.TYPE_NONE and patcher.type != NaomiSettingsTypeEnum.TYPE_EEPROM:
+            print("Attached settings are not an EEPROM settings file! Perhaps you meant to use \"attach_sram\"?", file=sys.stderr)
+            return 1
+        info = patcher.info
 
         if info is None:
-            print("ROM does not have any settings attached!")
+            print("ROM does not have any EEPROM settings attached!")
         else:
-            print(f"ROM has settings attached, with trojan version {info.date.year:04}-{info.date.month:02}-{info.date.day:02}!")
+            print(f"ROM has EEPROM settings attached, with trojan version {info.date.year:04}-{info.date.month:02}-{info.date.day:02}!")
             print(f"Settings change sentinel is {'enabled' if info.enable_sentinel else 'disabled'}.")
             print(f"Debug printing is {'enabled' if info.enable_debugging else 'disabled'}.")
 
@@ -272,6 +287,9 @@ def main() -> int:
 
         # First, try to extract existing eeprom for editing.
         patcher = NaomiSettingsPatcher(data, exe)
+        if patcher.type != NaomiSettingsTypeEnum.TYPE_NONE and patcher.type != NaomiSettingsTypeEnum.TYPE_EEPROM:
+            print("Attached settings are not an EEPROM settings file! Perhaps you meant to use \"attach_sram\"?", file=sys.stderr)
+            return 1
         eepromdata = patcher.get_settings()
 
         manager = SettingsManager(args.settings_directory)
@@ -284,7 +302,7 @@ def main() -> int:
                 "korea": NaomiRomRegionEnum.REGION_KOREA,
                 "australia": NaomiRomRegionEnum.REGION_AUSTRALIA,
             }.get(args.region, NaomiRomRegionEnum.REGION_JAPAN)
-            parsedsettings = manager.from_rom(patcher.get_rom(), region=region)
+            parsedsettings = manager.from_rom(patcher.rom, region=region)
         else:
             # We have an eeprom to edit.
             parsedsettings = manager.from_eeprom(eepromdata)
@@ -303,11 +321,11 @@ def main() -> int:
             )
 
             if args.output_file:
-                print(f"Added settings to {args.output_file}.")
+                print(f"Added EEPROM settings to {args.output_file}.")
                 with open(args.output_file, "wb") as fp:
                     fp.write(patcher.data)
             else:
-                print(f"Added settings to {args.rom}.")
+                print(f"Added EEPROM settings to {args.rom}.")
                 with open(args.rom, "wb") as fp:
                     fp.write(patcher.data)
 

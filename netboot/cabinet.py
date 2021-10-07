@@ -6,6 +6,7 @@ import yaml
 from enum import Enum
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
+from naomi.settings_patch import NaomiSettingsPatcher
 from netboot.netboot import NetDimmInfo, TargetEnum, TargetVersionEnum
 from netboot.hostutils import Host, HostStatusEnum
 from netboot.log import log
@@ -228,19 +229,27 @@ class CabinetManager:
                     if not os.path.isfile(str(patch)):
                         raise CabinetException(f"Invalid YAML file format for {yaml_file}, file {patch} for {ip} is not a file!")
 
-            cabinets.append(
-                Cabinet(
-                    ip=ip,
-                    description=str(cab['description']),
-                    region=CabinetRegionEnum(str(cab['region']).lower()),
-                    filename=str(cab['filename']) if cab['filename'] is not None else None,
-                    patches={str(rom): [str(p) for p in cab['roms'][rom]] for rom in cab['roms']},
-                    # This is accessed differently since we have older YAML files that might need upgrading.
-                    settings={str(rom): (bytes(data) or None) for (rom, data) in cab.get('settings', {}).items()},
-                    target=TargetEnum(str(cab['target'])) if 'target' in cab else None,
-                    version=TargetVersionEnum(str(cab['version'])) if 'version' in cab else None,
-                )
+            cabinet = Cabinet(
+                ip=ip,
+                description=str(cab['description']),
+                region=CabinetRegionEnum(str(cab['region']).lower()),
+                filename=str(cab['filename']) if cab['filename'] is not None else None,
+                patches={str(rom): [str(p) for p in cab['roms'][rom]] for rom in cab['roms']},
+                # This is accessed differently since we have older YAML files that might need upgrading.
+                settings={str(rom): (bytes(data) or None) for (rom, data) in cab.get('settings', {}).items()},
+                target=TargetEnum(str(cab['target'])) if 'target' in cab else None,
+                version=TargetVersionEnum(str(cab['version'])) if 'version' in cab else None,
             )
+            if cabinet.target == TargetEnum.TARGET_NAOMI:
+                # Make sure that the settings are correct for one of the possible patch types
+                cabinet.settings = {
+                    name: None if (settings is not None and len(settings) not in {NaomiSettingsPatcher.SRAM_SIZE, NaomiSettingsPatcher.EEPROM_SIZE}) else settings
+                    for name, settings in cabinet.settings.items()
+                }
+            else:
+                # Nothing can have settings outside of Naomi until we support it.
+                cabinet.settings = {name: None for name in cabinet.settings}
+            cabinets.append(cabinet)
 
         return CabinetManager(cabinets)
 
