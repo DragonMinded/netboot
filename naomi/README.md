@@ -299,14 +299,14 @@ Returns a `NaomiRom` instance that encapsulates the ROM passed into the patcher.
 instance should not be edited, as it will not be read again when performing the patches.
 Note that this property is read-only.
 
-### info method
+### info property
 
 Returns an optional instance of NaomiSettingsInfo if the ROM has a configured settings
 section. If the ROM does not have a configured settings section, this returns None.
 The NaomiSettingsInfo instance represents the configuration passed to `put_settings()`
 on a previous invocation. Note that this property is read-only.
 
-### type method
+### type property
 
 Returns an instance of NaomiSettingsTypeEnum enumeration for what type of settings
 is attached. The only two types of settings supported are EEPROM (128 bytes) and
