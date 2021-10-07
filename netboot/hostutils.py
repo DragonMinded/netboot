@@ -32,7 +32,7 @@ def _handle_patches(data: bytes, target: TargetEnum, patches: Sequence[str], set
     if target == TargetEnum.TARGET_NAOMI:
         if settings is not None:
             patcher = NaomiSettingsPatcher(data, get_default_naomi_trojan())
-            patcher.put_settings(settings)
+            patcher.put_settings(settings, enable_sentinel=True)
             data = patcher.data
 
     return data
