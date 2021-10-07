@@ -337,7 +337,6 @@ def removecabinet(ip: str) -> Dict[str, Any]:
 @jsonify
 def cabinetinfo(ip: str) -> Dict[str, Any]:
     cabman = app.config['CabinetManager']
-    dirman = app.config['DirectoryManager']
     cabinet = cabman.cabinet(ip)
     info = cabinet.info()
 

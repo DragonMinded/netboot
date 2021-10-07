@@ -20,6 +20,27 @@ if TYPE_CHECKING:
     from typing import Any  # noqa
 
 
+def _handle_patches(data: bytes, target: TargetEnum, patches: Sequence[str], settings: Optional[bytes]) -> bytes:
+    # Patch it
+    for patch in patches:
+        with open(patch, "r") as pp:
+            differences = pp.readlines()
+        differences = [d.strip() for d in differences if d.strip()]
+        data = BinaryDiff.patch(data, differences)
+
+    # Attach any settings file requested.
+    if target == TargetEnum.TARGET_NAOMI:
+        if settings is not None:
+            # TODO: We should check the size of the settings and either patch
+            # the EEPROM or the SRAM depending, so that this can also be used
+            # for atomiswave conversion settings saving.
+            patcher = NaomiSettingsPatcher(data, get_default_naomi_trojan())
+            patcher.put_settings(settings)
+            data = patcher.data
+
+    return data
+
+
 def _send_file_to_host(
     host: str,
     filename: str,
@@ -44,18 +65,7 @@ def _send_file_to_host(
             data = fp.read()
 
         # Patch it
-        for patch in patches:
-            with open(patch, "r") as pp:
-                differences = pp.readlines()
-            differences = [d.strip() for d in differences if d.strip()]
-            data = BinaryDiff.patch(data, differences)
-
-        # Attach any settings file requested.
-        if target == TargetEnum.TARGET_NAOMI:
-            if settings is not None:
-                patcher = NaomiSettingsPatcher(data, get_default_naomi_trojan())
-                patcher.put_settings(settings)
-                data = patcher.data
+        data = _handle_patches(data, target, patches, settings)
 
         # Send it
         netdimm.send(data, progress_callback=capture_progress)
@@ -238,6 +248,17 @@ class Host:
             # Don't yield control back until we have got the first response from the process
             while self.__lastprogress == (-1, -1) and self.__proc is not None:
                 self.__update_progress()
+
+    def crc(self, filename: str, patches: Sequence[str], settings: Optional[bytes]) -> int:
+        # Grab the image itself
+        with open(filename, "rb") as fp:
+            data = fp.read()
+
+        # Patch it
+        data = _handle_patches(data, self.target, patches, settings)
+
+        # Now, apply the CRC algorithm over it.
+        return NetDimm.crc(data)
 
     def info(self) -> Optional[NetDimmInfo]:
         with self.__lock:

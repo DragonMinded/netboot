@@ -41,6 +41,12 @@ class NetDimmInfo:
 
 
 class NetDimm:
+    @staticmethod
+    def crc(data: bytes) -> int:
+        crc: int = 0
+        crc = zlib.crc32(data, crc)
+        return (~crc) & 0xFFFFFFFF
+
     def __init__(self, ip: str, target: Optional[TargetEnum] = None, version: Optional[TargetVersionEnum] = None, quiet: bool = False) -> None:
         self.ip: str = ip
         self.sock: Optional[socket.socket] = None

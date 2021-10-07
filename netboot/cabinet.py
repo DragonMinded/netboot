@@ -117,6 +117,19 @@ class Cabinet:
                         self.__print(f"Cabinet {self.ip} has no associated game, waiting for power off.")
                         self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_OFF, 0)
                     else:
+                        try:
+                            info = self.__host.info()
+                        except Exception:
+                            info = None
+                        if info is not None and info.current_game_crc != 0:
+                            # Its worth trying to CRC this game and seeing if it matches.
+                            crc = self.__host.crc(self.__new_filename, self.patches.get(self.__new_filename, []), self.settings.get(self.__new_filename, None))
+                            if crc == info.current_game_crc:
+                                self.__print(f"Cabinet {self.ip} already running game {self.__new_filename}.")
+                                self.__current_filename = self.__new_filename
+                                self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_OFF, 0)
+                                return
+
                         self.__print(f"Cabinet {self.ip} sending game {self.__new_filename}.")
                         self.__current_filename = self.__new_filename
                         self.__host.send(self.__new_filename, self.patches.get(self.__new_filename, []), self.settings.get(self.__new_filename, None))
