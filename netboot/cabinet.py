@@ -56,15 +56,6 @@ class Cabinet:
         self.__new_filename: Optional[str] = filename
         self.__state: Tuple[CabinetStateEnum, int] = (CabinetStateEnum.STATE_STARTUP, 0)
 
-    def _clone_state(self, other_cabinet: "Cabinet") -> None:
-        state: Optional[Tuple[CabinetStateEnum, int]] = None
-        with other_cabinet.__lock:
-            if other_cabinet.__state[0] != CabinetStateEnum.STATE_SEND_CURRENT_GAME:
-                state = other_cabinet.__state
-        if state is not None:
-            with self.__lock:
-                self.__state = state
-
     def __repr__(self) -> str:
         return f"Cabinet(ip={repr(self.ip)}, description={repr(self.description)}, filename={repr(self.filename)}, patches={repr(self.patches)} settings={repr(self.settings)}, target={repr(self.target)}, version={repr(self.version)})"
 
@@ -76,9 +67,17 @@ class Cabinet:
     def target(self) -> TargetEnum:
         return self.__host.target
 
+    @target.setter
+    def target(self, newval: TargetEnum) -> None:
+        self.__host.target = newval
+
     @property
     def version(self) -> TargetVersionEnum:
         return self.__host.version
+
+    @version.setter
+    def version(self, newval: TargetVersionEnum) -> None:
+        self.__host.version = newval
 
     @property
     def filename(self) -> Optional[str]:
@@ -314,8 +313,14 @@ class CabinetManager:
             if ip not in self.__cabinets:
                 raise CabinetException(f"There is no cabinet with the IP {ip}")
             # Make sure we don't reboot the cabinet if we update settings.
-            cab._clone_state(self.__cabinets[ip])
-            self.__cabinets[ip] = cab
+            existing_cab = self.__cabinets[ip]
+            existing_cab.description = cab.description
+            existing_cab.target = cab.target
+            existing_cab.region = cab.region
+            existing_cab.version = cab.version
+            existing_cab.patches = cab.patches
+            existing_cab.settings = cab.settings
+            existing_cab.filename = cab.filename
 
     def cabinet_exists(self, ip: str) -> bool:
         with self.__lock:
