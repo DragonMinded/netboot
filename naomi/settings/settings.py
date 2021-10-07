@@ -8,6 +8,13 @@ from naomi.eeprom import NaomiEEPRom, NaomiEEPRomException
 from naomi.rom import NaomiRom, NaomiRomRegionEnum
 
 
+# TODO: Lots of this class can be generalized for settings in other games
+# and really doesn't need to live in the naomi editor. Maybe just the
+# SettingsManager and stuff need to live here? I don't know, but it should
+# be generalized so in the future if somebody wants to work on chihiro/triforce
+# or even use this file format for other games its available.
+
+
 class SettingSizeEnum(Enum):
     UNKNOWN = auto()
     NIBBLE = auto()
@@ -158,15 +165,36 @@ class Setting:
 
         length = jsondict.get('length')
         if not isinstance(length, int):
-            raise JSONParseException(f"\"length\" key in JSON has invalid data \"{length}\"!", context)
+            # Try converting from string.
+            try:
+                length = int(length)  # type: ignore
+            except ValueError:
+                pass
+
+            if not isinstance(length, int):
+                raise JSONParseException(f"\"length\" key in JSON has invalid data \"{length}\"!", context)
 
         order = jsondict.get('order')
         if not isinstance(order, int):
-            raise JSONParseException(f"\"order\" key in JSON has invalid data \"{order}\"!", context)
+            # Try converting from string.
+            try:
+                order = int(order)  # type: ignore
+            except ValueError:
+                pass
+
+            if not isinstance(order, int):
+                raise JSONParseException(f"\"order\" key in JSON has invalid data \"{order}\"!", context)
 
         current = jsondict.get('current')
         if current is not None and not isinstance(current, int):
-            raise JSONParseException(f"\"current\" key in JSON has invalid data \"{current}\"!", context)
+            # Try converting from string.
+            try:
+                current = int(current)
+            except ValueError:
+                pass
+
+            if not isinstance(current, int):
+                raise JSONParseException(f"\"current\" key in JSON has invalid data \"{current}\"!", context)
 
         valuedict = jsondict.get('values')
         values: Optional[Dict[int, str]] = None
@@ -215,6 +243,14 @@ class Setting:
         default: Optional[Union[int, DefaultConditionGroup]] = None
         if defaultdict is None or isinstance(defaultdict, int):
             default = defaultdict
+        elif isinstance(defaultdict, str):
+            try:
+                default = int(defaultdict)
+            except ValueError:
+                default = None
+
+            if default is None:
+                raise JSONParseException(f"\"default\" key in JSON has invalid data \"{defaultdict}\"!", context)
         elif isinstance(defaultdict, list):
             # Go through each entry in the list and parse out the conditionals.
             default = DefaultConditionGroup(filename, name, [])
@@ -242,7 +278,14 @@ class Setting:
 
                 defdefault = defaultblob.get('default')
                 if not isinstance(defdefault, int):
-                    raise JSONParseException(f"\"default\" key in JSON has invalid data \"{defdefault}\"!", [*context, f"default[{i}]"])
+                    # Try converting from string.
+                    try:
+                        defdefault = int(defdefault)
+                    except ValueError:
+                        pass
+
+                    if not isinstance(defdefault, int):
+                        raise JSONParseException(f"\"default\" key in JSON has invalid data \"{defdefault}\"!", [*context, f"default[{i}]"])
 
                 default.conditions.append(DefaultCondition(defname, defvalues, defnegate, defdefault))
         else:
