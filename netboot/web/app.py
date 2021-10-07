@@ -3,10 +3,12 @@ import os.path
 import yaml
 import traceback
 from functools import wraps
-from typing import Callable, Dict, List, Any, cast
+from typing import Callable, Dict, List, Any, Optional, cast
 
 from flask import Flask, Response, request, render_template, make_response, jsonify as flask_jsonify
 from werkzeug.routing import PathConverter
+from naomi import NaomiRom, NaomiSettingsPatcher, NaomiRomRegionEnum
+from naomi.settings import SettingsWrapper, SettingsManager, get_default_settings_directory
 from netboot import Cabinet, CabinetRegionEnum, CabinetManager, DirectoryManager, PatchManager, TargetEnum, TargetVersionEnum
 
 
@@ -368,6 +370,7 @@ def romsforcabinet(ip: str) -> Dict[str, Any]:
                 [
                     {
                         'file': patch,
+                        'type': 'patch',
                         'enabled': patch in cabinet.patches.get(full_filename, []),
                         'name': patchman.patch_name(patch),
                     }
@@ -375,6 +378,48 @@ def romsforcabinet(ip: str) -> Dict[str, Any]:
                 ],
                 key=lambda patch: cast(str, patch['name']),
             )
+
+            # Calculate whether we are allowed to modify settings or not, and
+            # if so, is there a setting enabled for this game.
+            if cabinet.target == TargetEnum.TARGET_NAOMI:
+                settingsdata = cabinet.settings.get(full_filename, None)
+                settings: Optional[SettingsWrapper] = None
+
+                # TODO: This is Naomi-specific and really should be moved into
+                # "Cabinet". However, if we do that we need to generalize the
+                # settings so it isn't naomi-specific.
+                manager = SettingsManager(get_default_settings_directory())
+                if settingsdata is not None:
+                    if len(settingsdata) != NaomiSettingsPatcher.EEPROM_SIZE:
+                        raise Exception("We don't support non-EEPROM settings!")
+
+                    settings = manager.from_eeprom(settingsdata)
+                else:
+                    with open(full_filename, "rb") as fp:
+                        data = fp.read(0x1000)
+
+                    rom = NaomiRom(data)
+                    if rom.valid:
+                        naomi_region = {
+                            CabinetRegionEnum.REGION_JAPAN: NaomiRomRegionEnum.REGION_JAPAN,
+                            CabinetRegionEnum.REGION_USA: NaomiRomRegionEnum.REGION_USA,
+                            CabinetRegionEnum.REGION_EXPORT: NaomiRomRegionEnum.REGION_EXPORT,
+                            CabinetRegionEnum.REGION_KOREA: NaomiRomRegionEnum.REGION_KOREA,
+                            CabinetRegionEnum.REGION_AUSTRALIA: NaomiRomRegionEnum.REGION_AUSTRALIA,
+                        }.get(cabinet.region, NaomiRomRegionEnum.REGION_JAPAN)
+                        settings = manager.from_rom(rom, naomi_region)
+
+                if settings is not None:
+                    # TODO: If we ever support editing SRAM from the frontend, this
+                    # needs to change to also support SRAM file types, and the code
+                    # in app.js also would need updating. For now we don't support it.
+                    patches.append({
+                        'file': 'eeprom',
+                        'type': 'settings',
+                        'enabled': settingsdata is not None,
+                        'settings': settings.to_json(),
+                    })
+
             roms.append({
                 'file': full_filename,
                 'name': dirman.game_name(full_filename, cabinet.region),
@@ -397,8 +442,27 @@ def updateromsforcabinet(ip: str) -> Response:
         else:
             cabinet.patches[game['file']] = [
                 p['file'] for p in game['patches']
-                if p['enabled']
+                if p['enabled'] and p['type'] == 'patch'
             ]
+
+            allsettings = [p for p in game['patches'] if p['type'] == 'settings']
+            if len(allsettings) not in {0, 1}:
+                raise Exception("Logic error, expected zero or one patch section!")
+            settings = allsettings[0] if allsettings else None
+
+            if cabinet.target == TargetEnum.TARGET_NAOMI:
+                # TODO: This is also Naomi-specific, much like the get method
+                # above. It should be moved into cabman and generalized.
+                if settings['enabled']:
+                    # Gotta convert this from JSON and set the settings.
+                    manager = SettingsManager(get_default_settings_directory())
+                    parsedsettings = manager.from_json(settings['settings'])
+                    eepromdata = manager.to_eeprom(parsedsettings)
+                    cabinet.settings[game['file']] = eepromdata
+                else:
+                    cabinet.settings[game['file']] = None
+            else:
+                cabinet.settings[game['file']] = None
     serialize_app(app)
     return romsforcabinet(ip)
 

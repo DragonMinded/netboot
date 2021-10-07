@@ -144,12 +144,97 @@ Vue.component('rom', {
     `,
 });
 
+Vue.component('settings', {
+    props: ['serial', 'settings'],
+    methods: {
+        visible: function(setting) {
+            if (setting.readonly == true) {
+                return false;
+            }
+            if (setting.readonly == false) {
+                return true;
+            }
+
+            // Need to calculate dependent settings.
+            pred = setting.readonly;
+            for (key in this.settings.settings) {
+                if (this.settings.settings[key].name.toLowerCase() == pred.name.toLowerCase()) {
+                    for (otherkey in pred.values) {
+                        if (pred.values[otherkey] == this.settings.settings[key].current) {
+                            return !pred.negate;
+                        }
+                    }
+                    return pred.negate;
+                }
+            }
+
+            // This is an error, but we don't have a good way of showing
+            // the user that there was an error, so make it invisible.
+            return false;
+        },
+        key: function(setting) {
+            return setting.name + this.visible(setting);
+        },
+        all_readonly: function() {
+            // If there is a single visible setting, then we are good.
+            for (key in this.settings.settings) {
+                if (this.visible(this.settings.settings[key])) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+    },
+    template: `
+        <div class="settings">
+            <table v-if="!all_readonly()">
+                <tr v-for="setting in settings.settings" v-if="visible(setting)" :key="key(setting)">
+                    <td>{{ setting.name }}</td>
+                    <td>
+                        <select v-model="setting.current">
+                            <option v-for="(value, key) in setting.values" v-bind:value="key">{{ value }}</option>
+                        </select>
+                    </td>
+                </td>
+            </table>
+            <span v-if="settings.settings.length == 0" class="italics">
+                Settings definition file "{{ serial }}.settings" is missing.
+                As a result, we cannot display or edit game settings for this game!
+            </span>
+            <span v-if="all_readonly()" class="italics">
+                Settings definition file "{{ serial }}.settings" specifies no editable settings.
+                As a result, we cannot display or edit game settings for this game!
+            </span>
+        </div>
+    `,
+});
+
+Vue.component('settingscollection', {
+    props: ['settings'],
+    template: `
+        <div class="settingscollection">
+            <h4>System Settings</h4>
+            <settings v-bind:serial="settings.serial" v-bind:settings="settings.system"></settings>
+            <h4>Game Settings</h4>
+            <settings v-bind:serial="settings.serial" v-bind:settings="settings.game"></settings>
+        </div>
+    `,
+});
+
 Vue.component('patch', {
-    props: ['game', 'patch'],
+    props: ['game', 'patch', 'enabled'],
     template: `
         <div>
-            <input type="checkbox" v-bind:id="game.file + patch.file" v-model="patch.enabled" />
-            <label v-bind:for="game.file + patch.file">{{ patch.name }}</label>
+            <div v-if="patch.type == 'patch'">
+                <input type="checkbox" :disabled="!enabled" v-bind:id="game.file + patch.file" v-model="patch.enabled" />
+                <label v-bind:for="game.file + patch.file">{{ patch.name }}</label>
+            </div>
+            <div v-if="patch.type == 'settings'">
+                <input type="checkbox" :disabled="!enabled" v-bind:id="game.file + patch.file" v-model="patch.enabled" />
+                <label v-bind:for="game.file + patch.file">boot with custom settings enabled</label>
+                <settingscollection v-if="patch.enabled" v-bind:settings="patch.settings"></settingscollection>
+            </div>
         </div>
     `,
 });
@@ -163,7 +248,7 @@ Vue.component('game', {
                 <label v-bind:for="game.file">{{ game.name }}</label>
             </h4>
             <div class="patches">
-                <patch v-for="patch in game.patches" v-bind:game="game" v-bind:patch="patch" v-bind:key="patch"></patch>
+                <patch v-for="patch in game.patches" v-bind:game="game" v-bind:patch="patch" v-bind:enabled="game.enabled" v-bind:key="patch"></patch>
                 <span v-if="game.patches.length == 0" class="italics">no patches available for game</span>
             </div>
         </div>
@@ -174,6 +259,7 @@ Vue.component('cabinetconfig', {
     data: function() {
         return {
             cabinet: window.cabinet,
+            target: window.cabinet.target,
             info: {
                 game: window.cabinet.game,
                 status: window.cabinet.status,
@@ -190,7 +276,11 @@ Vue.component('cabinetconfig', {
         save: function() {
             axios.post('/cabinets/' + this.cabinet.ip, this.cabinet).then(result => {
                 if (!result.data.error) {
+                    if (this.target != result.data.target) {
+                        eventBus.$emit('changeCabinetType', true)
+                    }
                     this.cabinet = result.data;
+                    this.target = this.cabinet.target;
                     this.saved = true;
                 }
             });
@@ -203,7 +293,6 @@ Vue.component('cabinetconfig', {
                     this.info.memsize = result.data.memsize;
                     this.info.memavail = result.data.memavail;
                     this.info.available = result.data.available;
-                    console.log(this.info);
                     if (this.info.version) {
                         this.cabinet.version = this.info.version;
                     }
@@ -224,7 +313,6 @@ Vue.component('cabinetconfig', {
         refresh: function() {
             axios.get('/cabinets/' + this.cabinet.ip).then(result => {
                 if (!result.data.error) {
-                    console.log(result.data);
                     this.info.status = result.data.status;
                     this.info.progress = result.data.progress;
                 }
@@ -349,6 +437,15 @@ Vue.component('availablegames', {
         };
     },
     methods: {
+        update: function() {
+            this.loading = true;
+            axios.get('/cabinets/' + cabinet.ip + '/games').then(result => {
+                if (!result.data.error) {
+                    this.games = result.data.games;
+                    this.loading = false;
+                }
+            });
+        },
         save: function() {
             this.saved = false;
             axios.post('/cabinets/' + cabinet.ip + '/games', {games: this.games}).then(result => {
@@ -358,6 +455,9 @@ Vue.component('availablegames', {
                 }
             });
         },
+    },
+    created () {
+        eventBus.$on('changeCabinetType', this.update);
     },
     template: `
         <div class='gamelist'>

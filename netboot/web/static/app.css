@@ -51,8 +51,21 @@ div.patch h4 {
     margin: 0px 0px 5px 0px;
 }
 
+div.settingscollection h4 {
+    margin-top: 5px;
+}
+
 div.rom, div.file, div.patches {
     margin-left: 15px;
+}
+
+div.settings {
+    margin-left: 15px;
+}
+
+div.settings table td:first-child {
+    border-right: 40px solid transparent;
+    background-clip: padding-box;
 }
 
 div.romconfig input {
