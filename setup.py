@@ -22,7 +22,7 @@ if 'FULL_INSTALLATION' in os.environ:
 
     setup(
         name='netboot',
-        version='0.1.4',
+        version='0.2.0',
         description='Code and utilities for netbooting a Naomi/Triforce/Chihiro, including a full web and netboot server.',
         author='DragonMinded',
         license='Public Domain',
@@ -54,7 +54,7 @@ else:
 
     setup(
         name='naomiutils',
-        version='0.1.4',
+        version='0.2.0',
         description='Code libraries for working with Naomi ROMs and EEPROMs.',
         long_description=long_description,
         long_description_content_type="text/markdown",
