@@ -254,8 +254,8 @@ the "Game Test Mode" section of the test menu. It can be similarly read and writ
 
 ## NaomiSettingsPatcher
 
-The NaomiSettingsPatcher class provides logic for attaching an EEPROM configuration
-file to a Naomi ROM so that it can be written to the EEPROM when netbooting that
+The NaomiSettingsPatcher class provides logic for attaching an EEPROM or SRAM configuration
+file to a Naomi ROM so that it can be written to the EEPROM/SRAM when netbooting that
 ROM. Note that this is not a supported feature of the Naomi platform, so it uses
 an executable stub that it attaches to the ROM in order to make this work. If you
 do not care what executable stub is attached and only want to patch settings into
@@ -265,7 +265,7 @@ object suitable for passing into a `NaomiSettingsPatcher` constructor.
 ### Default Constructor
 
 Takes a bytes "rom" argument and a bytes "trojan" argument creates an instance of
-NaomiSettingsPatcher which can attach or retrieve previously-attached EEPROM settings
+NaomiSettingsPatcher which can attach or retrieve previously-attached EEPROM or SRAM settings
 in a Naomi ROM file suitable for netbooting. An example of how to initialize this
 is as follows:
 
@@ -283,45 +283,59 @@ with the settings applied. A recommended workflow is to patch ROMs on-the-fly wh
 netbooting by creating an instance of `NaomiSettingsPatcher` with the ROM data you
 were about to send, calling `put_settings()` with the settings you wish to attach,
 and then getting the data using this property and sending it down the wire to the
-Naomi system.
+Naomi system. Note that you can attach either an EEPROM file (128 bytes) or an SRAM
+file (32kb) but not both.
 
-### get_serial() method
+### serial property
 
-An instance of NaomiSettingsPatcher has the `get_serial()` method. When called, this
+An instance of NaomiSettingsPatcher has the `serial` property. When read, this
 will examine the serial of the Naomi ROM passed into the constructor and return the
-4 byte serial number, suitable for matching against an EEPROM's system serial.
+4 byte serial number, suitable for matching against an EEPROM's system serial. Note
+that this property is read-only.
 
-### get_rom() method
+### rom property
 
 Returns a `NaomiRom` instance that encapsulates the ROM passed into the patcher. This
 instance should not be edited, as it will not be read again when performing the patches.
+Note that this property is read-only.
 
-### get_info() method
+### info method
 
 Returns an optional instance of NaomiSettingsInfo if the ROM has a configured settings
 section. If the ROM does not have a configured settings section, this returns None.
 The NaomiSettingsInfo instance represents the configuration passed to `put_settings()`
-on a previous invocation.
+on a previous invocation. Note that this property is read-only.
+
+### type method
+
+Returns an instance of NaomiSettingsTypeEnum enumeration for what type of settings
+is attached. The only two types of settings supported are EEPROM (128 bytes) and
+SRAM (32kbytes). Note that this poperty is read-only.
 
 ### get_settings() method
 
-Returns a 128-byte EEPROM bytestring that was previously attached to the Naomi ROM,
-or None if this ROM does not include any EEPROM settings.
+Returns a 128-byte EEPROM bytestring or 32k-byte SRAM bytestring that was previously
+attached to the Naomi ROM, or None if this ROM does not include any EEPROM or SRAM
+settings.
 
 ### put_settings() method
 
-given a bytes "settings" argument which is a valid 128-byte EEPROM, ensures that it
-is attached to the Naomi ROM such that the settings are written when netbooting the
-ROM image. If there are already settings attached to the ROM, this overwrites those
-with new settings. If there are not already settings attached, this does the work
-necessary to attach the settings file as well as the writing trojan supplied to the
-`NaomiSettingsPatcher` constructor.
+given a bytes "settings" argument which is a valid 128-byte EEPROM or a valid 32k-byte
+SRAM, ensures that it is attached to the Naomi ROM such that the settings are written
+when netbooting the ROM image. If there are already settings attached to the ROM, this
+overwrites those with new settings. If there are not already settings attached, this
+does the work necessary to attach the settings file as well as the writing trojan
+supplied to the `NaomiSettingsPatcher` constructor.
 
 Valid EEPROM files can be obtained form a number of places. If you use an emulator
 to set up system and game settings, then the EEPROM file that emulator writes can
 usually be supplied here to make your game boot to the same settings. If you use
 the `NaomiEEPRom` class to manipulate an EEPROM, the data it produces can also be
 supplied here to force the Naomi to use the same settings.
+
+Valid SRAM files can be obtained from an emulator that is capable of writing an SRAM
+file. This only makes sense to use in the context of atomiswave conversions and in
+a select few Naomi games that store their settings in SRAM such as Ikaruga.
 
 Optionally, pass in the boolean keyword argument "enable_sentinel" set to True and
 the Naomi ROM will re-initialize the settings when netbooting even if the last game
