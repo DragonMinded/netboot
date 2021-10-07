@@ -8,7 +8,7 @@ from typing import Callable, Dict, List, Any, Optional, cast
 from flask import Flask, Response, request, render_template, make_response, jsonify as flask_jsonify
 from werkzeug.routing import PathConverter
 from naomi import NaomiRom, NaomiSettingsPatcher, NaomiRomRegionEnum
-from naomi.settings import SettingsWrapper, SettingsManager, get_default_settings_directory
+from naomi.settings import SettingsWrapper, SettingsManager
 from netboot import Cabinet, CabinetRegionEnum, CabinetManager, DirectoryManager, PatchManager, TargetEnum, TargetVersionEnum
 
 
