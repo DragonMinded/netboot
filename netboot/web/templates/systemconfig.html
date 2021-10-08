@@ -8,6 +8,7 @@
         <script>
             window.roms = {{ roms|tojson|safe }};
             window.patches = {{ patches|tojson|safe }};
+            window.settings = {{ settings|tojson|safe }};
             window.addEventListener("load", function(event) {
                 new Vue({el: '#app'});
             });
@@ -19,6 +20,7 @@
         <div id="app">
             <roms></roms>
             <patches></patches>
+            <definitions></definitions>
             <div class="config">
                 <div>
                     <a class="button" href="{{ url_for('home') }}">Back To Home</a>

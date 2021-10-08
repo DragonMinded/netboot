@@ -515,6 +515,29 @@ Vue.component('availablepatches', {
     `,
 });
 
+Vue.component('availabledefinitions', {
+    data: function() {
+        axios.get('/settings/' + encodeURI(filename)).then(result => {
+            if (!result.data.error) {
+                this.settings = result.data.settings;
+                this.loading = false;
+            }
+        });
+        return {
+            loading: true,
+            settings: {}
+        };
+    },
+    template: `
+        <div class='patchlist'>
+            <h3>Available Settings Definitions For This Rom</h3>
+            <directory v-if="!loading" v-for="setting in settings" v-bind:dir="setting" v-bind:key="setting"></directory>
+            <div v-if="loading">loading...</div>
+            <div v-if="!loading && Object.keys(settings).length === 0">no applicable settings definitions</div>
+        </div>
+    `,
+});
+
 Vue.component('newcabinet', {
     data: function() {
         return {
@@ -684,6 +707,34 @@ Vue.component('patches', {
         <div class='patchlist'>
             <h3>Available Patches</h3>
             <directory v-for="patch in patches" v-bind:dir="patch" v-bind:key="patch"></directory>
+        </div>
+    `,
+});
+
+Vue.component('definitions', {
+    data: function() {
+        return {
+            settings: window.settings,
+        };
+    },
+    methods: {
+        refresh: function() {
+            axios.get('/settings').then(result => {
+                if (!result.data.error) {
+                    this.settings = result.data.settings;
+                }
+            });
+        },
+    },
+    mounted: function() {
+        setInterval(function () {
+            this.refresh();
+        }.bind(this), 5000);
+    },
+    template: `
+        <div class='patchlist'>
+            <h3>Available Settings Definitions</h3>
+            <directory v-for="setting in settings" v-bind:dir="setting" v-bind:key="setting"></directory>
         </div>
     `,
 });

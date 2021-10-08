@@ -1017,6 +1017,17 @@ class SettingsManager:
             if os.path.isfile(os.path.join(self.__directory, f)) and f.endswith(".settings")
         }
 
+    def files_for_serial(self, serial: bytes) -> Dict[str, str]:
+        fnames = {f"{serial.decode('ascii')}.settings", "system.settings"}
+        return {f: d for (f, d) in self.files.items() if f in fnames}
+
+    def files_for_rom(self, rom: NaomiRom) -> Dict[str, str]:
+        return self.files_for_serial(rom.serial)
+
+    def files_for_eeprom(self, data: bytes) -> Dict[str, str]:
+        eeprom = NaomiEEPRom(data)
+        return self.files_for_serial(eeprom.serial)
+
     @staticmethod
     def _serial_to_config(files: Dict[str, str], serial: bytes) -> Optional[SettingsConfig]:
         fname = f"{serial.decode('ascii')}.settings"

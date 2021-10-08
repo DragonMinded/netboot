@@ -91,11 +91,18 @@ def systemconfig() -> Response:
     patches: List[Dict[str, Any]] = []
     for directory in patchman.directories:
         patches.append({'name': directory, 'files': sorted(patchman.patches(directory))})
+    # TODO: This should be a general manager, not Naomi-specific
+    manager = SettingsManager(app.config['settings_directory'])
+    settings: List[Dict[str, Any]] = [
+        {'name': app.config['settings_directory'], 'files': sorted([f for f, _ in manager.files.items()])}
+    ]
+
     return make_response(
         render_template(
             'systemconfig.html',
             roms=sorted(roms, key=lambda rom: cast(str, rom['name'])),
             patches=sorted(patches, key=lambda patch: cast(str, patch['name'])),
+            settings=sorted(settings, key=lambda setting: cast(str, setting['name'])),
         ),
         200,
     )
@@ -232,6 +239,31 @@ def applicablepatches(filename: str) -> Dict[str, Any]:
     }
 
 
+@app.route('/settings/<filename:filename>')
+@jsonify
+def applicablesettings(filename: str) -> Dict[str, Any]:
+    settings: List[Dict[str, Any]] = []
+    try:
+        with open(filename, "rb") as fp:
+            data = fp.read(0x1000)
+    except FileNotFoundError:
+        if not filename.startswith('/'):
+            filename = "/" + filename
+        with open(filename, "rb") as fp:
+            data = fp.read(0x1000)
+    rom = NaomiRom(data)
+    if rom.valid:
+        # TODO: This should be a general manager, not Naomi-specific
+        manager = SettingsManager(app.config['settings_directory'])
+        settings = [
+            {'name': app.config['settings_directory'], 'files': sorted([f for f, _ in manager.files_for_rom(rom).items()])}
+        ]
+
+    return {
+        'settings': sorted(settings, key=lambda setting: cast(str, setting['name'])),
+    }
+
+
 @app.route('/patches/<filename:filename>', methods=['DELETE'])
 def recalculateapplicablepatches(filename: str) -> Response:
     patchman = app.config['PatchManager']
@@ -251,6 +283,20 @@ def patches() -> Dict[str, Any]:
         patches.append({'name': directory, 'files': sorted(patchman.patches(directory))})
     return {
         'patches': sorted(patches, key=lambda patch: cast(str, patch['name'])),
+    }
+
+
+@app.route('/settings')
+@jsonify
+def settings() -> Dict[str, Any]:
+    # TODO: This should be a general manager, not Naomi-specific
+    manager = SettingsManager(app.config['settings_directory'])
+    settings: List[Dict[str, Any]] = [
+        {'name': app.config['settings_directory'], 'files': sorted([f for f, _ in manager.files.items()])}
+    ]
+
+    return {
+        'settings': sorted(settings, key=lambda setting: cast(str, setting['name'])),
     }
 
 
