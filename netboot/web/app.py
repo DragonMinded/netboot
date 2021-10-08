@@ -7,6 +7,7 @@ from typing import Callable, Dict, List, Any, Optional, cast
 
 from flask import Flask, Response, request, render_template, make_response, jsonify as flask_jsonify
 from werkzeug.routing import PathConverter
+from arcadeutils.binary import BinaryDiff, BinaryDiffException
 from naomi import NaomiRom, NaomiSettingsPatcher, NaomiRomRegionEnum
 from naomi.settings import SettingsWrapper, SettingsManager
 from netboot import Cabinet, CabinetRegionEnum, CabinetManager, DirectoryManager, PatchManager, TargetEnum, TargetVersionEnum
@@ -397,6 +398,19 @@ def romsforcabinet(ip: str) -> Dict[str, Any]:
                 else:
                     with open(full_filename, "rb") as fp:
                         data = fp.read(0x1000)
+
+                    # First, attempt to patch with any patches that fit in the first
+                    # chunk, so the defaults we get below match any force settings
+                    # patches we did to the header.
+                    for patch in cabinet.patches.get(full_filename, []):
+                        with open(patch, "r") as pp:
+                            differences = pp.readlines()
+                        differences = [d.strip() for d in differences if d.strip()]
+                        try:
+                            data = BinaryDiff.patch(data, differences, ignore_size_differences=True)
+                        except BinaryDiffException:
+                            # Patch was for something not in the header.
+                            pass
 
                     rom = NaomiRom(data)
                     if rom.valid:
