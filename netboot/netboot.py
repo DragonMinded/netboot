@@ -197,8 +197,23 @@ class NetDimm:
         # know why transfergame.exe sends this, maybe older versions of net dimm firmware need it?
         self.__send_packet(NetDimmPacket(0x01, 0x00))
 
-    def __host_poke4(self, addr: int, data: int) -> None:
-        self.__send_packet(NetDimmPacket(0x11, 0x00, struct.pack("<III", addr, 0, data)))
+    def __host_peek4(self, addr: int, *, type: int = 0) -> int:
+        # In this instance, type appears to be either main RAM or AICA RAM. If type is 0, it tries
+        # to read from the main RAM. If type is 1, it tries to read from the AICA RAM. I also can't
+        # seem to get this to work properly for main RAM on my setup. It also appears to only read
+        # a byte.
+        self.__send_packet(NetDimmPacket(0x10, 0x00, struct.pack("<II", addr, type)))
+        response = self.__recv_packet()
+        if response.pktid != 0x10:
+            raise NetDimmException("Unexpected data returned from peek4 packet!")
+        if response.length != 8:
+            raise NetDimmException("Unexpected data length returned from peek4 packet!")
+        _unk, val = struct.unpack("<II", response.data)
+        return cast(int, val)
+
+    def __host_poke4(self, addr: int, data: int, *, type: int = 0) -> None:
+        # Same type comment as the above peek4 command.
+        self.__send_packet(NetDimmPacket(0x11, 0x00, struct.pack("<III", addr, type, data)))
 
     def __exchange_host_mode(self, mask_bits: int, set_bits: int) -> int:
         self.__send_packet(NetDimmPacket(0x07, 0x00, struct.pack("<I", ((mask_bits & 0xFF) << 8) | (set_bits & 0xFF))))
