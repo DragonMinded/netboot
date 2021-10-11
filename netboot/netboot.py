@@ -28,6 +28,7 @@ class TargetVersionEnum(Enum):
     TARGET_VERSION_2_03 = "2.03"
     TARGET_VERSION_2_15 = "2.15"
     TARGET_VERSION_3_01 = "3.01"
+    TARGET_VERSION_3_17 = "3.17"
     TARGET_VERSION_4_01 = "4.01"
     TARGET_VERSION_4_02 = "4.02"
 
