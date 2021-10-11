@@ -7,7 +7,7 @@ import zlib
 from Crypto.Cipher import DES
 from contextlib import contextmanager
 from enum import Enum
-from typing import Callable, Generator, List, Optional
+from typing import Callable, Generator, List, Optional, cast
 
 from netboot.log import log
 
@@ -40,6 +40,17 @@ class NetDimmInfo:
         self.available_game_memory = available_game_memory
 
 
+class NetDimmPacket:
+    def __init__(self, pktid: int, flags: int, data: bytes = b'') -> None:
+        self.pktid = pktid
+        self.flags = flags
+        self.data = data
+
+    @property
+    def length(self) -> int:
+        return len(self.data)
+
+
 class NetDimm:
     @staticmethod
     def crc(data: bytes) -> int:
@@ -60,40 +71,7 @@ class NetDimm:
     def info(self) -> NetDimmInfo:
         with self.__connection():
             # Now, ask for DIMM firmware info and such.
-            self.__get_information()
-
-            # Get the info from the DIMM.
-            info = self.__read(16)
-            ints = struct.unpack("<IHIHI", info)
-
-            if (ints[0] & 0xFF000000) != 0x18000000:
-                raise NetDimmException("NetDimm replied with unknown data!")
-
-            # I don't know what the lower 24 bits of the header byte represent.
-            # the bottom byte is "0xC" which corresponds to the length of the
-            # payload so it might be the length of the data response. This seems
-            # to match the rest of the protocol requests and responses.
-            if (ints[0] & 0x0000FFFF) != 0xC:
-                raise NetDimmException("NetDimm replied with unknown data length!")
-
-            # I don't know what the second integer half represents. It is "0xC"
-            # on both NetDimms I've tried this on. There's no use of it in transfergame.
-
-            # Extract version and size string.
-            version = 0xFFFF & ints[2]
-            version_str = f"{(version >> 8) & 0xFF}.{(version & 0xFF):02}"
-            try:
-                firmware_version = TargetVersionEnum(version_str)
-            except ValueError:
-                firmware_version = TargetVersionEnum.TARGET_VERSION_UNKNOWN
-            memory = 0xFFFF & (ints[2] >> 16)
-
-            return NetDimmInfo(
-                current_game_crc=ints[4],
-                memory_size=ints[3],
-                firmware_version=firmware_version,
-                available_game_memory=memory << 20,
-            )
+            return self.__get_information()
 
     def send(self, data: bytes, key: Optional[bytes] = None, progress_callback: Optional[Callable[[int, int], None]] = None) -> None:
         with self.__connection():
@@ -119,8 +97,8 @@ class NetDimm:
             # restart host, this wil boot into game
             self.__restart()
 
-            # set time limit to 10h. According to some reports, this does not work.
-            self.__set_time_limit(10 * 60 * 1000)
+            # set time limit to 10 minutes.
+            self.__set_time_limit(10)
 
             if self.target == TargetEnum.TARGET_TRIFORCE:
                 self.__patch_boot_id_check()
@@ -143,11 +121,6 @@ class NetDimm:
             res.append(ret)
 
         return b"".join(res)
-
-    def __write(self, data: bytes) -> None:
-        if self.sock is None:
-            raise NetDimmException("Not connected to NetDimm")
-        self.sock.send(data)
 
     @contextmanager
     def __connection(self) -> Generator[None, None, None]:
@@ -172,31 +145,121 @@ class NetDimm:
             self.sock.close()
             self.sock = None
 
+    # Both requests and responses follow this header with length data bytes
+    # after. Some have the ability to send/receive variable length (like send/recv
+    # dimm packets) and some require a specific length or they do not return.
+    #
+    # Header words are packed as little-endian bytes and are as such: AABBCCCC
+    # AA -   Packet type. Any of 256 values, but in practice most are unrecognized.
+    # BB -   Seems to be some sort of flags and flow control. Packets have been observed
+    #        with 00, 80 and 81 in practice. The bottom bit signifies, as best as I can
+    #        tell, that the host intends to send more of the same packet type. It set to
+    #        0 for dimm send requests except for the last packet. The top bit I have not
+    #        figured out.
+    # CCCC - Length of the data in bytes that follows this header, not including the 4
+    #        header bytes.
+    def __send_packet(self, packet: NetDimmPacket) -> None:
+        if self.sock is None:
+            raise NetDimmException("Not connected to NetDimm")
+        self.sock.send(
+            struct.pack(
+                "<I",
+                (
+                    ((packet.pktid & 0xFF) << 24) |  # noqa: W504
+                    ((packet.flags & 0xFF) << 16) |  # noqa: W504
+                    (packet.length & 0xFFFF)
+                ),
+            ) + packet.data
+        )
+
+    def __recv_packet(self) -> NetDimmPacket:
+        # First read the header to get the packet length.
+        header = self.__read(4)
+
+        # Construct a structure to represent this packet, minus any optional data.
+        headerbytes = struct.unpack("<I", header)[0]
+        packet = NetDimmPacket(
+            (headerbytes >> 24) & 0xFF,
+            (headerbytes >> 16) & 0xFF,
+        )
+        length = headerbytes & 0xFFFF
+
+        # Read optional data.
+        if length > 0:
+            data = self.__read(length)
+            packet.data = data
+
+        # Return the parsed packet.
+        return packet
+
     def __startup(self) -> None:
-        self.__write(struct.pack("<I", 0x01000000))
+        self.__send_packet(NetDimmPacket(0x01, 0x00))
 
-    def __poke4(self, addr: int, data: int) -> None:
-        self.__write(struct.pack("<IIII", 0x1100000C, addr, 0, data))
+    def __host_poke4(self, addr: int, data: int) -> None:
+        self.__send_packet(NetDimmPacket(0x11, 0x00, struct.pack("<III", addr, 0, data)))
 
-    def __set_mode(self, v_and: int, v_or: int) -> bytes:
-        self.__write(struct.pack("<II", 0x07000004, (v_and << 8) | v_or))
-        return self.__read(0x8)
+    def __set_mode(self, mask_bits: int, set_bits: int) -> int:
+        self.__send_packet(NetDimmPacket(0x07, 0x00, struct.pack("<I", ((mask_bits & 0xFF) << 8) | (set_bits & 0xFF))))
 
-    def __set_key_code(self, data: bytes) -> None:
-        if len(data) != 8:
+        # Set mode returns the resulting mode, after the original mode is or'd with "set_bits"
+        # and and'd with "mask_bits". I guess this allows you to see the final mode with your
+        # additions and subtractions since it might not be what you expect.
+        response = self.__recv_packet()
+        if response.pktid != 0x07:
+            raise NetDimmException("Unexpected data returned from set mode packet!")
+        if response.length != 4:
+            raise NetDimmException("Unexpected data length returned from set mode packet!")
+
+        # The top 3 bytes are not set to anything, only the bottom byte is set to the combined mode.
+        return cast(int, struct.unpack("<I", response.data)[0] & 0xFF)
+
+    def __set_key_code(self, keydata: bytes) -> None:
+        if len(keydata) != 8:
             raise NetDimmException("Key code must by 8 bytes in length")
-        self.__write(struct.pack("<I", 0x7F000008) + data)
+        self.__send_packet(NetDimmPacket(0x7F, 0x00, keydata))
 
     def __upload(self, sequence: int, addr: int, data: bytes, last_chunk: bool) -> None:
-        # The extra 0xA bytes added to the length of data is for the 10 additional
-        # bytes after the header word that we send.
-        self.__write(struct.pack("<IIIH", (0x04810000 if last_chunk else 0x04800000) | (len(data) + 0xA), sequence, addr, 0) + data)
+        # Upload a chunk of data to the DIMM address "addr". The sequence seems to
+        # be just a marking for what number packet this is. The last chunk flag is
+        # an indicator for whether this is the last packet or not and gets used to
+        # set flag bits. If there is no additional data (the length portion is set
+        # to 0xA), the packet will be rejected. The net dimm does not seem to parse
+        # the sequence number in fw 3.17 but transfergame.exe sends it. The last
+        # short does not seem to do anything and does not appear to even be parsed.
+        self.__send_packet(NetDimmPacket(0x04, 0x81 if last_chunk else 0x80, struct.pack("<IIH", sequence, addr, 0) + data))
 
-    def __get_information(self) -> None:
-        self.__write(struct.pack("<I", 0x18000000))
+    def __get_information(self) -> NetDimmInfo:
+        self.__send_packet(NetDimmPacket(0x18, 0x00))
+
+        # Get the info from the DIMM.
+        response = self.__recv_packet()
+        if response.pktid != 0x18:
+            raise NetDimmException("Unexpected data returned from get info packet!")
+        if response.length != 12:
+            raise NetDimmException("Unexpected data length returned from get info packet!")
+
+        # I don't know what the second integer half represents. It is "0xC"
+        # on both NetDimms I've tried this on. There's no use of it in transfergame.
+        # At least on firmware 3.17 this is hardcoded to 0xC so it might be the
+        # protocol version?
+        unknown, version, game_memory, dimm_memory, crc = struct.unpack("<HHHHI", response.data)
+
+        # Extract version and size string.
+        version_str = f"{(version >> 8) & 0xFF}.{(version & 0xFF):02}"
+        try:
+            firmware_version = TargetVersionEnum(version_str)
+        except ValueError:
+            firmware_version = TargetVersionEnum.TARGET_VERSION_UNKNOWN
+
+        return NetDimmInfo(
+            current_game_crc=crc,
+            memory_size=dimm_memory,
+            firmware_version=firmware_version,
+            available_game_memory=game_memory << 20,
+        )
 
     def __set_information(self, crc: int, length: int) -> None:
-        self.__write(struct.pack("<IIII", 0x1900000C, crc & 0xFFFFFFFF, length, 0))
+        self.__send_packet(NetDimmPacket(0x19, 0x00, struct.pack("<III", crc & 0xFFFFFFFF, length, 0)))
 
     def __upload_file(self, data: bytes, key: Optional[bytes], progress_callback: Optional[Callable[[int, int], None]]) -> None:
         # upload a file into DIMM memory, and optionally encrypt for the given key.
@@ -233,11 +296,12 @@ class NetDimm:
         self.__set_information(crc, addr)
 
     def __restart(self) -> None:
-        self.__write(struct.pack("<I", 0x0A000000))
+        self.__send_packet(NetDimmPacket(0x0A, 0x00))
 
-    def __set_time_limit(self, limit: int) -> None:
-        # TODO: Given the way this is called, I don't know if limit is seconds or milliseconds.
-        self.__write(struct.pack("<II", 0x17000004, limit))
+    def __set_time_limit(self, minutes: int) -> None:
+        # According to the 3.17 firmware, this looks to be minutes? The value is checked to be
+        # less than 10, and if so multiplied by 60,000. If not, the default value of 60,000 is used.
+        self.__send_packet(NetDimmPacket(0x17, 0x00, struct.pack("<I", minutes)))
 
     def __patch_boot_id_check(self) -> None:
         # this essentially removes a region check, and is triforce-specific; It's also segaboot-version specific.
@@ -255,9 +319,12 @@ class NetDimm:
             return
 
         if self.version == TargetVersionEnum.TARGET_VERSION_3_01:
-            self.__poke4(addr + 0, 0x4800001C)
+            self.__host_poke4(addr + 0, 0x4800001C)
         else:
-            self.__poke4(addr + 0, 0x4e800020)
-            self.__poke4(addr + 4, 0x38600000)
-            self.__poke4(addr + 8, 0x4e800020)
-            self.__poke4(addr + 0, 0x60000000)  # TODO: This looks suspect, maybe + 12 instead?
+            self.__host_poke4(addr + 0, 0x4e800020)
+            self.__host_poke4(addr + 4, 0x38600000)
+            self.__host_poke4(addr + 8, 0x4e800020)
+            # TODO: This was originally + 0 in the original script but it is suspect
+            # given the address we were poking was already overwritten. I can't check
+            # this but maybe somebody else can?
+            self.__host_poke4(addr + 12, 0x60000000)
