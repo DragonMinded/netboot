@@ -394,6 +394,13 @@ class NetDimm:
         # less than 10, and if so multiplied by 60,000. If not, the default value of 60,000 is used.
         self.__send_packet(NetDimmPacket(0x17, 0x00, struct.pack("<I", minutes)))
 
+    # TODO: We are missing any documentation for packet IDs 0x0B, 0x16, 0x1F, 0xF0 and 0xF1.
+    # At least according to triforcetools.py, 0xF0 is "host_read16" so 0xF1 might be "host_write16"
+    # much like there is a peek4/poke4. The rest of the packet types documented in triforcetools.py
+    # that don't appear here are not in the master switch statement for 3.17 so they might be from
+    # a different version of the net dimm firmware. I have not bothered to document the expected
+    # sizes or returns for any of these packets.
+
     def __patch_boot_id_check(self) -> None:
         # this essentially removes a region check, and is triforce-specific; It's also segaboot-version specific.
         # - look for string: "CLogo::CheckBootId: skipped."
