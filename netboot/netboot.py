@@ -34,8 +34,9 @@ class TargetVersionEnum(Enum):
 
 
 class NetDimmInfo:
-    def __init__(self, current_game_crc: int, memory_size: int, firmware_version: TargetVersionEnum, available_game_memory: int) -> None:
+    def __init__(self, current_game_crc: int, game_crc_valid: Optional[bool], memory_size: int, firmware_version: TargetVersionEnum, available_game_memory: int) -> None:
         self.current_game_crc = current_game_crc
+        self.game_crc_valid = game_crc_valid
         self.memory_size = memory_size
         self.firmware_version = firmware_version
         self.available_game_memory = available_game_memory
@@ -286,6 +287,14 @@ class NetDimm:
         self.__send_packet(NetDimmPacket(0x04, 0x81 if last_chunk else 0x80, struct.pack("<IIH", sequence, addr, 0) + data))
 
     def __download(self, addr: int, size: int) -> bytes:
+        # This appears to have access to not just the dimm bank on the net dimm, but also
+        # some system registers and status, notably address 0xfffeffe0 which will return
+        # the following information:
+        #
+        # 0 - CRC over data has not started.
+        # 1 - CRC over data is currently in progress (screen will display now checking...).
+        # 2 - CRC over data is correct, game should boot or be running.
+        # 3 - CRC over data is incorrect, should be waiting for additional data and CRC stamp.
         self.__send_packet(NetDimmPacket(0x05, 0x00, struct.pack("<II", addr, size)))
 
         # Read the data back. The flags byte will be 0x80 if the requested data size was
@@ -315,6 +324,9 @@ class NetDimm:
                 # We finished!
                 return data
 
+    def __get_crc_information(self) -> int:
+        return cast(int, struct.unpack("<I", self.__download(0xfffeffe0, 4))[0])
+
     def __get_information(self) -> NetDimmInfo:
         self.__send_packet(NetDimmPacket(0x18, 0x00))
 
@@ -338,8 +350,21 @@ class NetDimm:
         except ValueError:
             firmware_version = TargetVersionEnum.TARGET_VERSION_UNKNOWN
 
+        # Now, query if the game CRC is valid.
+        crc_info = self.__get_crc_information()
+        if crc_info in {0, 1}:
+            # CRC is running, unknown.
+            crc_valid = None
+        elif crc_info == 2:
+            crc_valid = True
+        elif crc_info == 3:
+            crc_valid = False
+        else:
+            raise NetDimmException("Unexpected CRC status value returned from download packet!")
+
         return NetDimmInfo(
             current_game_crc=crc,
+            game_crc_valid=crc_valid,
             memory_size=dimm_memory,
             firmware_version=firmware_version,
             available_game_memory=game_memory << 20,

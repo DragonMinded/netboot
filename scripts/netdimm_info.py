@@ -57,10 +57,17 @@ def main() -> int:
     print("Requesting...", file=sys.stderr)
     netdimm = NetDimm(args.ip, target=args.target)
     info = netdimm.info()
+    if info.game_crc_valid is None:
+        validity = "checking..."
+    elif info.game_crc_valid is True:
+        validity = "valid"
+    else:
+        validity = "invalid"
+
     print(f"DIMM Firmware Version: {info.firmware_version.value}")
     print(f"DIMM Memory Size: {info.memory_size} MB")
     print(f"Available Game Memory Size: {int(info.available_game_memory / 1024 / 1024)} MB")
-    print(f"Current Game CRC: {hex(info.current_game_crc)[2:]}")
+    print(f"Current Game CRC: {hex(info.current_game_crc)[2:]} ({validity})")
 
     return 0
 
