@@ -80,7 +80,7 @@ class NetDimm:
                 progress_callback(0, len(data))
 
             # Reboot and display "now loading..." on the cabinet screen
-            self.__set_mode(1)
+            self.__set_host_mode(1)
 
             if key:
                 # Send the key that we're going to use to encrypt
@@ -200,7 +200,7 @@ class NetDimm:
     def __host_poke4(self, addr: int, data: int) -> None:
         self.__send_packet(NetDimmPacket(0x11, 0x00, struct.pack("<III", addr, 0, data)))
 
-    def __exchange_mode(self, mask_bits: int, set_bits: int) -> int:
+    def __exchange_host_mode(self, mask_bits: int, set_bits: int) -> int:
         self.__send_packet(NetDimmPacket(0x07, 0x00, struct.pack("<I", ((mask_bits & 0xFF) << 8) | (set_bits & 0xFF))))
 
         # Set mode returns the resulting mode, after the original mode is or'd with "set_bits"
@@ -209,17 +209,17 @@ class NetDimm:
         # to query the current mode by sending a packet with mask bits 0xff and set bits 0x0.
         response = self.__recv_packet()
         if response.pktid != 0x07:
-            raise NetDimmException("Unexpected data returned from set mode packet!")
+            raise NetDimmException("Unexpected data returned from set host mode packet!")
         if response.length != 4:
-            raise NetDimmException("Unexpected data length returned from set mode packet!")
+            raise NetDimmException("Unexpected data length returned from set host mode packet!")
 
         # The top 3 bytes are not set to anything, only the bottom byte is set to the combined mode.
         return cast(int, struct.unpack("<I", response.data)[0] & 0xFF)
 
-    def __set_mode(self, mode: int) -> None:
-        self.__exchange_mode(0, mode)
+    def __set_host_mode(self, mode: int) -> None:
+        self.__exchange_host_mode(0, mode)
 
-    def __get_mode(self) -> int:
+    def __get_host_mode(self) -> int:
         # The following modes have been observed:
         #
         # 0 - System is in "CHECKING NETWORK"/"CHECKING MEMORY"/running game mode.
@@ -227,7 +227,32 @@ class NetDimm:
         # 2 - System is in "NOW LOADING..." mode but no transfer has been initiated.
         # 10 - System is in "NOW LOADING..." mode and a transfer has been initiated, rebooting naomi before continuing.
         # 20 - System is in "NOW LIADING..." mode and a transfer is continuing.
-        return self.__exchange_mode(0xFF, 0)
+        return self.__exchange_host_mode(0xFF, 0)
+
+    def __exchange_dimm_mode(self, mask_bits: int, set_bits: int) -> int:
+        self.__send_packet(NetDimmPacket(0x08, 0x00, struct.pack("<I", ((mask_bits & 0xFF) << 8) | (set_bits & 0xFF))))
+
+        # Set mode returns the resulting mode, after the original mode is or'd with "set_bits"
+        # and and'd with "mask_bits". I guess this allows you to see the final mode with your
+        # additions and subtractions since it might not be what you expect. It also allows you
+        # to query the current mode by sending a packet with mask bits 0xff and set bits 0x0.
+        response = self.__recv_packet()
+        if response.pktid != 0x08:
+            raise NetDimmException("Unexpected data returned from set dimm mode packet!")
+        if response.length != 4:
+            raise NetDimmException("Unexpected data length returned from set dimm mode packet!")
+
+        # The top 3 bytes are not set to anything, only the bottom byte is set to the combined mode.
+        return cast(int, struct.unpack("<I", response.data)[0] & 0xFF)
+
+    def __set_dimm_mode(self, mode: int) -> None:
+        # Absolutely no idea what this does. You can set any mode and the below __get_dimm_mode
+        # will return the same value, and it survives soft reboots as well as hard power cycles.
+        # It seems to have no effect on the system.
+        self.__exchange_dimm_mode(0, mode)
+
+    def __get_dimm_mode(self) -> int:
+        return self.__exchange_dimm_mode(0xFF, 0)
 
     def __set_key_code(self, keydata: bytes) -> None:
         if len(keydata) != 8:
@@ -340,6 +365,11 @@ class NetDimm:
         crc = (~crc) & 0xFFFFFFFF
         self.__print("length: %08x" % addr)
         self.__set_information(crc, addr)
+
+    def __close(self) -> None:
+        # Request the net dimm to close the connection and stop listening for additional connections.
+        # Unclear why you would want to use this since you have to reboot after doing this.
+        self.__send_packet(NetDimmPacket(0x09, 0x00))
 
     def __restart(self) -> None:
         self.__send_packet(NetDimmPacket(0x0A, 0x00))
