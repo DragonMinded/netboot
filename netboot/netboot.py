@@ -70,7 +70,7 @@ class NetDimm:
 
     def info(self) -> NetDimmInfo:
         with self.__connection():
-            # Now, ask for DIMM firmware info and such.
+            # Ask for DIMM firmware info and such.
             return self.__get_information()
 
     def send(self, data: bytes, key: Optional[bytes] = None, progress_callback: Optional[Callable[[int, int], None]] = None) -> None:
@@ -80,7 +80,7 @@ class NetDimm:
                 progress_callback(0, len(data))
 
             # Reboot and display "now loading..." on the cabinet screen
-            self.__set_mode(0, 1)
+            self.__set_mode(1)
 
             if key:
                 # Send the key that we're going to use to encrypt
@@ -193,17 +193,20 @@ class NetDimm:
         return packet
 
     def __startup(self) -> None:
+        # This is mapped to a NOOP packet. At least in older versions of net dimm. I don't
+        # know why transfergame.exe sends this, maybe older versions of net dimm firmware need it?
         self.__send_packet(NetDimmPacket(0x01, 0x00))
 
     def __host_poke4(self, addr: int, data: int) -> None:
         self.__send_packet(NetDimmPacket(0x11, 0x00, struct.pack("<III", addr, 0, data)))
 
-    def __set_mode(self, mask_bits: int, set_bits: int) -> int:
+    def __exchange_mode(self, mask_bits: int, set_bits: int) -> int:
         self.__send_packet(NetDimmPacket(0x07, 0x00, struct.pack("<I", ((mask_bits & 0xFF) << 8) | (set_bits & 0xFF))))
 
         # Set mode returns the resulting mode, after the original mode is or'd with "set_bits"
         # and and'd with "mask_bits". I guess this allows you to see the final mode with your
-        # additions and subtractions since it might not be what you expect.
+        # additions and subtractions since it might not be what you expect. It also allows you
+        # to query the current mode by sending a packet with mask bits 0xff and set bits 0x0.
         response = self.__recv_packet()
         if response.pktid != 0x07:
             raise NetDimmException("Unexpected data returned from set mode packet!")
@@ -212,6 +215,19 @@ class NetDimm:
 
         # The top 3 bytes are not set to anything, only the bottom byte is set to the combined mode.
         return cast(int, struct.unpack("<I", response.data)[0] & 0xFF)
+
+    def __set_mode(self, mode: int) -> None:
+        self.__exchange_mode(0, mode)
+
+    def __get_mode(self) -> int:
+        # The following modes have been observed:
+        #
+        # 0 - System is in "CHECKING NETWORK"/"CHECKING MEMORY"/running game mode.
+        # 1 - System was requested to display "NOW LOADING..." and is rebooting into that mode.
+        # 2 - System is in "NOW LOADING..." mode but no transfer has been initiated.
+        # 10 - System is in "NOW LOADING..." mode and a transfer has been initiated, rebooting naomi before continuing.
+        # 20 - System is in "NOW LIADING..." mode and a transfer is continuing.
+        return self.__exchange_mode(0xFF, 0)
 
     def __set_key_code(self, keydata: bytes) -> None:
         if len(keydata) != 8:
@@ -227,6 +243,36 @@ class NetDimm:
         # the sequence number in fw 3.17 but transfergame.exe sends it. The last
         # short does not seem to do anything and does not appear to even be parsed.
         self.__send_packet(NetDimmPacket(0x04, 0x81 if last_chunk else 0x80, struct.pack("<IIH", sequence, addr, 0) + data))
+
+    def __download(self, addr: int, size: int) -> bytes:
+        self.__send_packet(NetDimmPacket(0x05, 0x00, struct.pack("<II", addr, size)))
+
+        # Read the data back. The flags byte will be 0x80 if the requested data size was
+        # too big, and 0x81 if all of the data was able to be returned. It looks like at
+        # least for 3.17 this limit is 8192. However, the net dimm will continue sending
+        # packets until all data has been received.
+        data = b""
+
+        while True:
+            chunk = self.__recv_packet()
+
+            if chunk.pktid != 0x04:
+                # For some reason, this is wrong for 3.17?
+                raise NetDimmException("Unexpected data returned from download packet!")
+            if chunk.length <= 10:
+                raise NetDimmException("Unexpected data length returned from download packet!")
+
+            # The sequence is set to 1 for the first packet and then incremented for each
+            # subsequent packet until the end of data flag is received. It can be safely
+            # discarded in practice. I guess there might be some reason to reassemble with
+            # the sequences in the correct order, but as of net dimm 3.17 the firware will
+            # always send things back in order one packet at a time.
+            _chunksequence, chunkaddr, _ = struct.unpack("<IIH", chunk.data[0:10])
+            data += chunk.data[10:]
+
+            if chunk.flags & 0x1 != 0:
+                # We finished!
+                return data
 
     def __get_information(self) -> NetDimmInfo:
         self.__send_packet(NetDimmPacket(0x18, 0x00))
