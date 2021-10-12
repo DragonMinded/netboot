@@ -126,11 +126,10 @@ class NetDimm:
 
     @contextmanager
     def __connection(self) -> Generator[None, None, None]:
-        # connect to the Triforce. Port is tcp/10703.
+        # connect to the net dimm. Port is tcp/10703.
         # note that this port is only open on
-        #       - all Type-3 triforces,
-        #       - pre-type3 triforces jumpered to satellite mode.
-        # - it *should* work on naomi and chihiro, but due to lack of hardware, i didn't try.
+        # - all Type-3 triforces,
+        # - pre-type3 triforces jumpered to satellite mode.
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock.settimeout(1)
@@ -140,6 +139,10 @@ class NetDimm:
             raise NetDimmException("Could not connect to NetDimm") from e
 
         try:
+            # Sending this packet is not strictly necessary, but transfergame.exe
+            # sends it. It maps to a NOP packet at least on 3.17 firmware but
+            # having the net dimm accept it is a good indication that you are talking
+            # to an actual net dimm and not some random thing listening on port 10703.
             self.__startup()
 
             yield
