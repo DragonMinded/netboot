@@ -1,0 +1,51 @@
+Setting00: byte, read-only, default is 13
+Setting01: byte, read-only, default is 12
+Setting02: byte, read-only, default is 00
+Setting03: byte, read-only, default is 00
+
+Game Difficulty: byte, default is 02
+  0 - Very Easy
+  1 - Medium Easy
+  2 - Normal
+  3 - Medium Hard
+  4 - Very Hard
+
+Setting05: byte, read-only, default is 01
+
+Life Setting: byte, default is 09
+  0 - Initial Life 1\, Max Life 3
+  1 - Initial Life 2\, Max Life 3
+  2 - Initial Life 3\, Max Life 3
+
+  3 - Initial Life 1\, Max Life 4
+  4 - Initial Life 2\, Max Life 4
+  5 - Initial Life 3\, Max Life 4
+  6 - Initial Life 4\, Max Life 4
+
+  7 - Initial Life 1\, Max Life 5
+  8 - Initial Life 2\, Max Life 5
+  9 - Initial Life 3\, Max Life 5
+  a - Initial Life 4\, Max Life 5
+  b - Initial Life 5\, Max Life 5
+
+# Blood color defaults to green and is only user-selectable in the USA
+# region. There is no way to determine the region of the settings like
+# there is in MVC2 for example, so this is always available. Unfortunately
+# the game is smart enough to change this back to green on JP/KO/Export
+# BIOS so you can't use this to set red blood on those regions.
+Blood Color: byte, default is 01
+  0 - Red
+  1 - Green
+
+Blood Effect: byte, default is 00
+  0 - alldisp
+  1 - cut1
+  2 - cut2
+
+Ranking: byte, default is 00
+  0 - On
+  1 - Off
+
+Setting0a: byte, read-only, default is 00
+Setting0b: byte, read-only, default is 00
+
