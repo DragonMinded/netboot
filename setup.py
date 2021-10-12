@@ -2,6 +2,9 @@ import os
 from setuptools import setup
 
 
+VERSION = "0.2.3"
+
+
 if 'FULL_INSTALLATION' in os.environ:
     # We want to install this entire repo as an installation, so that we can
     # use it to run a netboot server.
@@ -18,7 +21,7 @@ if 'FULL_INSTALLATION' in os.environ:
 
     setup(
         name='netboot',
-        version='0.2.2',
+        version=VERSION,
         description='Code and utilities for netbooting a Naomi/Triforce/Chihiro, including a full web and netboot server.',
         author='DragonMinded',
         license='Public Domain',
@@ -58,7 +61,7 @@ else:
 
     setup(
         name='naomiutils',
-        version='0.2.2',
+        version=VERSION,
         description='Code libraries for working with Naomi ROMs and EEPROMs.',
         long_description=long_description,
         long_description_content_type="text/markdown",
