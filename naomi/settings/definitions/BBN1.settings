@@ -34,7 +34,7 @@ Life Setting: byte, default is 09
 # the game is smart enough to change this back to green on JP/KO/Export
 # BIOS so you can't use this to set red blood on those regions.
 Blood Color: byte, default is 01
-  0 - Red
+  0 - Red (USA region only)
   1 - Green
 
 Blood Effect: byte, default is 00
