@@ -93,7 +93,8 @@ def main() -> int:
             'Settings to apply to image on-the-fly while sending to the NetDimm. '
             'Currently only supported for the Naomi platform. For Naomi, the '
             'settings file should be a valid 128-byte EEPROM file as obtained '
-            'from an emulator or as created using the "edit_settings" utility.'
+            'from an emulator or as created using the "edit_settings" utility, '
+            'or a 32-kbyte SRAM file as obtained from an emulator.'
         ),
     )
 
