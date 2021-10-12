@@ -5,7 +5,7 @@ import argparse
 import sys
 import time
 import enum
-from netboot import Cabinet, CabinetStateEnum, CabinetRegionEnum, TargetEnum, TargetVersionEnum
+from netboot import Cabinet, CabinetStateEnum, CabinetRegionEnum, TargetEnum, NetDimmVersionEnum
 from typing import Any, Optional
 
 
@@ -61,10 +61,10 @@ def main() -> int:
     parser.add_argument(
         "--version",
         metavar="VERSION",
-        type=TargetVersionEnum,
+        type=NetDimmVersionEnum,
         action=EnumAction,
-        default=TargetVersionEnum.TARGET_VERSION_3_01,
-        help="NetDimm firmware version this image is going to. Defaults to '3.01'. Choose from '1.07', '2.03', '2.15' or '3.01'.",
+        default=NetDimmVersionEnum.VERSION_4_01,
+        help="NetDimm firmware version this image is going to. Defaults to '4.01'. Choose from '1.02', '2.06', '2.17', '3.03', '3.17', '4.01' or '4.02'.",
     )
     parser.add_argument(
         '--patch-file',

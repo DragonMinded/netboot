@@ -10,7 +10,7 @@ from werkzeug.routing import PathConverter
 from arcadeutils.binary import BinaryDiff, BinaryDiffException
 from naomi import NaomiRom, NaomiSettingsPatcher, NaomiRomRegionEnum
 from naomi.settings import SettingsWrapper, SettingsManager
-from netboot import Cabinet, CabinetRegionEnum, CabinetManager, DirectoryManager, PatchManager, TargetEnum, TargetVersionEnum
+from netboot import Cabinet, CabinetRegionEnum, CabinetManager, DirectoryManager, PatchManager, TargetEnum, NetDimmVersionEnum
 
 
 current_directory: str = os.path.abspath(os.path.dirname(__file__))
@@ -146,7 +146,7 @@ def cabinetconfig(ip: str) -> Response:
             cabinet=cabinet_to_dict(cabinet, dirman),
             regions=[cr.value for cr in CabinetRegionEnum if cr != CabinetRegionEnum.REGION_UNKNOWN],
             targets=[t.value for t in TargetEnum],
-            versions=[tv.value for tv in TargetVersionEnum],
+            versions=[tv.value for tv in NetDimmVersionEnum],
         ),
         200
     )
@@ -159,7 +159,7 @@ def addcabinet() -> Response:
             'addcabinet.html',
             regions=[cr.value for cr in CabinetRegionEnum if cr != CabinetRegionEnum.REGION_UNKNOWN],
             targets=[t.value for t in TargetEnum],
-            versions=[tv.value for tv in TargetVersionEnum],
+            versions=[tv.value for tv in NetDimmVersionEnum],
         ),
         200
     )
@@ -343,7 +343,7 @@ def createcabinet(ip: str) -> Dict[str, Any]:
         patches={rom: [] for rom in roms},
         settings={rom: None for rom in roms},
         target=TargetEnum(request.json['target']),
-        version=TargetVersionEnum(request.json['version']),
+        version=NetDimmVersionEnum(request.json['version']),
     )
     cabman.add_cabinet(new_cabinet)
     serialize_app(app)
@@ -366,7 +366,7 @@ def updatecabinet(ip: str) -> Dict[str, Any]:
         patches=old_cabinet.patches,
         settings=old_cabinet.settings,
         target=TargetEnum(request.json['target']),
-        version=TargetVersionEnum(request.json['version']),
+        version=NetDimmVersionEnum(request.json['version']),
     )
     cabman.update_cabinet(new_cabinet)
     serialize_app(app)

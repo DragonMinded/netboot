@@ -16,25 +16,19 @@ class NetDimmException(Exception):
     pass
 
 
-class TargetEnum(Enum):
-    TARGET_CHIHIRO = "chihiro"
-    TARGET_NAOMI = "naomi"
-    TARGET_TRIFORCE = "triforce"
-
-
-class TargetVersionEnum(Enum):
-    TARGET_VERSION_UNKNOWN = "UNKNOWN"
-    TARGET_VERSION_1_07 = "1.07"
-    TARGET_VERSION_2_03 = "2.03"
-    TARGET_VERSION_2_15 = "2.15"
-    TARGET_VERSION_3_01 = "3.01"
-    TARGET_VERSION_3_17 = "3.17"
-    TARGET_VERSION_4_01 = "4.01"
-    TARGET_VERSION_4_02 = "4.02"
+class NetDimmVersionEnum(Enum):
+    VERSION_UNKNOWN = "UNKNOWN"
+    VERSION_1_02 = "1.02"
+    VERSION_2_06 = "2.06"
+    VERSION_2_17 = "2.17"
+    VERSION_3_03 = "3.03"
+    VERSION_3_17 = "3.17"
+    VERSION_4_01 = "4.01"
+    VERSION_4_02 = "4.02"
 
 
 class NetDimmInfo:
-    def __init__(self, current_game_crc: int, game_crc_valid: Optional[bool], memory_size: int, firmware_version: TargetVersionEnum, available_game_memory: int) -> None:
+    def __init__(self, current_game_crc: int, game_crc_valid: Optional[bool], memory_size: int, firmware_version: NetDimmVersionEnum, available_game_memory: int) -> None:
         self.current_game_crc = current_game_crc
         self.game_crc_valid = game_crc_valid
         self.memory_size = memory_size
@@ -60,20 +54,23 @@ class NetDimm:
         crc = zlib.crc32(data, crc)
         return (~crc) & 0xFFFFFFFF
 
-    def __init__(self, ip: str, target: Optional[TargetEnum] = None, version: Optional[TargetVersionEnum] = None, quiet: bool = False) -> None:
+    def __init__(self, ip: str, version: Optional[NetDimmVersionEnum] = None, quiet: bool = False) -> None:
         self.ip: str = ip
         self.sock: Optional[socket.socket] = None
         self.quiet: bool = quiet
-        self.target: TargetEnum = target or TargetEnum.TARGET_NAOMI
-        self.version: TargetVersionEnum = version or TargetVersionEnum.TARGET_VERSION_UNKNOWN
+        self.version: NetDimmVersionEnum = version or NetDimmVersionEnum.VERSION_UNKNOWN
 
     def __repr__(self) -> str:
-        return f"NetDimm(ip={repr(self.ip)}, target={repr(self.target)}, version={repr(self.version)})"
+        return f"NetDimm(ip={repr(self.ip)}, version={repr(self.version)})"
 
     def info(self) -> NetDimmInfo:
         with self.__connection():
             # Ask for DIMM firmware info and such.
-            return self.__get_information()
+            info = self.__get_information()
+
+            # Update our own system information based on the returned version.
+            self.version = info.firmware_version
+            return info
 
     def send(self, data: bytes, key: Optional[bytes] = None, progress_callback: Optional[Callable[[int, int], None]] = None) -> None:
         with self.__connection():
@@ -101,9 +98,6 @@ class NetDimm:
 
             # set time limit to 10 minutes.
             self.__set_time_limit(10)
-
-            if self.target == TargetEnum.TARGET_TRIFORCE:
-                self.__patch_boot_id_check()
 
     def __print(self, string: str, newline: bool = True) -> None:
         if not self.quiet:
@@ -349,9 +343,9 @@ class NetDimm:
         # Extract version and size string.
         version_str = f"{(version >> 8) & 0xFF}.{(version & 0xFF):02}"
         try:
-            firmware_version = TargetVersionEnum(version_str)
+            firmware_version = NetDimmVersionEnum(version_str)
         except ValueError:
-            firmware_version = TargetVersionEnum.TARGET_VERSION_UNKNOWN
+            firmware_version = NetDimmVersionEnum.VERSION_UNKNOWN
 
         # Now, query if the game CRC is valid.
         crc_info = self.__get_crc_information()
@@ -429,29 +423,3 @@ class NetDimm:
     # that don't appear here are not in the master switch statement for 3.17 so they might be from
     # a different version of the net dimm firmware. I have not bothered to document the expected
     # sizes or returns for any of these packets.
-
-    def __patch_boot_id_check(self) -> None:
-        # this essentially removes a region check, and is triforce-specific; It's also segaboot-version specific.
-        # - look for string: "CLogo::CheckBootId: skipped."
-        # - binary-search for lower 16bit of address
-        addr = {
-            TargetVersionEnum.TARGET_VERSION_1_07: 0x8000d8a0,
-            TargetVersionEnum.TARGET_VERSION_2_03: 0x8000CC6C,
-            TargetVersionEnum.TARGET_VERSION_2_15: 0x8000CC6C,
-            TargetVersionEnum.TARGET_VERSION_3_01: 0x8000dc5c,
-        }.get(self.version, None)
-
-        if addr is None:
-            # We can't do anything here.
-            return
-
-        if self.version == TargetVersionEnum.TARGET_VERSION_3_01:
-            self.__host_poke4(addr + 0, 0x4800001C)
-        else:
-            self.__host_poke4(addr + 0, 0x4e800020)
-            self.__host_poke4(addr + 4, 0x38600000)
-            self.__host_poke4(addr + 8, 0x4e800020)
-            # TODO: This was originally + 0 in the original script but it is suspect
-            # given the address we were poking was already overwritten. I can't check
-            # this but maybe somebody else can?
-            self.__host_poke4(addr + 12, 0x60000000)

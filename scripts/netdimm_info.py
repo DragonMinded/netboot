@@ -4,7 +4,7 @@
 import argparse
 import enum
 import sys
-from netboot import NetDimm, TargetEnum
+from netboot import NetDimm
 from typing import Any
 
 
@@ -43,19 +43,11 @@ def main() -> int:
         type=str,
         help="The IP address that the NetDimm is configured on.",
     )
-    parser.add_argument(
-        "--target",
-        metavar="TARGET",
-        type=TargetEnum,
-        action=EnumAction,
-        default=TargetEnum.TARGET_NAOMI,
-        help="Target platform this image is going to. Defaults to 'naomi'. Choose from 'naomi', 'chihiro' or 'triforce'.",
-    )
 
     args = parser.parse_args()
 
     print("Requesting...", file=sys.stderr)
-    netdimm = NetDimm(args.ip, target=args.target)
+    netdimm = NetDimm(args.ip)
     info = netdimm.info()
     if info.game_crc_valid is None:
         validity = "checking..."

@@ -12,12 +12,18 @@ from typing import Optional, Sequence, Tuple, TYPE_CHECKING
 
 from arcadeutils.binary import BinaryDiff
 from netboot.log import log
-from netboot.netboot import NetDimm, NetDimmInfo, NetDimmException, TargetEnum, TargetVersionEnum
+from netboot.netboot import NetDimm, NetDimmInfo, NetDimmException, NetDimmVersionEnum
 from naomi import NaomiSettingsPatcher, get_default_trojan as get_default_naomi_trojan
 
 
 if TYPE_CHECKING:
     from typing import Any  # noqa
+
+
+class TargetEnum(Enum):
+    TARGET_CHIHIRO = "chihiro"
+    TARGET_NAOMI = "naomi"
+    TARGET_TRIFORCE = "triforce"
 
 
 def _handle_patches(data: bytes, target: TargetEnum, patches: Sequence[str], settings: Optional[bytes]) -> bytes:
@@ -44,7 +50,7 @@ def _send_file_to_host(
     patches: Sequence[str],
     settings: Optional[bytes],
     target: TargetEnum,
-    version: TargetVersionEnum,
+    version: NetDimmVersionEnum,
     parent_pid: int,
     progress_queue: "multiprocessing.Queue[Tuple[str, Any]]",
 ) -> None:
@@ -55,7 +61,7 @@ def _send_file_to_host(
         progress_queue.put(("progress", (sent, total)))
 
     try:
-        netdimm = NetDimm(host, target=target, version=version, quiet=True)
+        netdimm = NetDimm(host, version=version, quiet=True)
 
         # Grab the image itself
         with open(filename, "rb") as fp:
@@ -86,9 +92,9 @@ class HostStatusEnum(Enum):
 class Host:
     DEBOUNCE_SECONDS = 3
 
-    def __init__(self, ip: str, target: Optional[TargetEnum] = None, version: Optional[TargetVersionEnum] = None, quiet: bool = False) -> None:
+    def __init__(self, ip: str, target: Optional[TargetEnum] = None, version: Optional[NetDimmVersionEnum] = None, quiet: bool = False) -> None:
         self.target: TargetEnum = target or TargetEnum.TARGET_NAOMI
-        self.version: TargetVersionEnum = version or TargetVersionEnum.TARGET_VERSION_3_01
+        self.version: NetDimmVersionEnum = version or NetDimmVersionEnum.VERSION_4_01
         self.ip: str = ip
         self.alive: bool = False
         self.quiet: bool = quiet
@@ -151,7 +157,7 @@ class Host:
             if self.__proc is not None:
                 raise HostException("Cannot reboot host mid-transfer.")
 
-            netdimm = NetDimm(self.ip, target=self.target, version=self.version, quiet=True)
+            netdimm = NetDimm(self.ip, version=self.version, quiet=True)
             try:
                 netdimm.reboot()
                 return True
@@ -264,7 +270,7 @@ class Host:
                 return None
 
             try:
-                netdimm = NetDimm(self.ip, target=self.target, version=self.version, quiet=True)
+                netdimm = NetDimm(self.ip, version=self.version, quiet=True)
                 return netdimm.info()
             except NetDimmException:
                 return None

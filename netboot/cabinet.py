@@ -7,8 +7,8 @@ from enum import Enum
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from naomi.settings_patch import NaomiSettingsPatcher
-from netboot.netboot import NetDimmInfo, TargetEnum, TargetVersionEnum
-from netboot.hostutils import Host, HostStatusEnum
+from netboot.netboot import NetDimmInfo, NetDimmVersionEnum
+from netboot.hostutils import Host, HostStatusEnum, TargetEnum
 from netboot.log import log
 
 
@@ -43,7 +43,7 @@ class Cabinet:
         patches: Dict[str, Sequence[str]],
         settings: Dict[str, Optional[bytes]],
         target: Optional[TargetEnum] = None,
-        version: Optional[TargetVersionEnum] = None,
+        version: Optional[NetDimmVersionEnum] = None,
         quiet: bool = False,
     ) -> None:
         self.description: str = description
@@ -73,11 +73,11 @@ class Cabinet:
         self.__host.target = newval
 
     @property
-    def version(self) -> TargetVersionEnum:
+    def version(self) -> NetDimmVersionEnum:
         return self.__host.version
 
     @version.setter
-    def version(self, newval: TargetVersionEnum) -> None:
+    def version(self, newval: NetDimmVersionEnum) -> None:
         self.__host.version = newval
 
     @property
@@ -274,7 +274,7 @@ class CabinetManager:
                 # This is accessed differently since we have older YAML files that might need upgrading.
                 settings={str(rom): (bytes(data) or None) for (rom, data) in cab.get('settings', {}).items()},
                 target=TargetEnum(str(cab['target'])) if 'target' in cab else None,
-                version=TargetVersionEnum(str(cab['version'])) if 'version' in cab else None,
+                version=NetDimmVersionEnum(str(cab['version'])) if 'version' in cab else None,
             )
             if cabinet.target == TargetEnum.TARGET_NAOMI:
                 # Make sure that the settings are correct for one of the possible patch types

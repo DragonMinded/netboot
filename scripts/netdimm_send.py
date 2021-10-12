@@ -5,7 +5,7 @@ import argparse
 import enum
 import sys
 from arcadeutils.binary import BinaryDiff
-from netboot import NetDimm, TargetEnum, TargetVersionEnum
+from netboot import NetDimm, TargetEnum, NetDimmVersionEnum
 from naomi import NaomiSettingsPatcher, get_default_trojan as get_default_naomi_trojan
 from typing import Any, Optional
 
@@ -68,10 +68,10 @@ def main() -> int:
     parser.add_argument(
         "--version",
         metavar="VERSION",
-        type=TargetVersionEnum,
+        type=NetDimmVersionEnum,
         action=EnumAction,
-        default=TargetVersionEnum.TARGET_VERSION_3_01,
-        help="NetDimm firmware version this image is going to. Defaults to '3.01'. Choose from '1.07', '2.03', '2.15' or '3.01'.",
+        default=NetDimmVersionEnum.VERSION_4_01,
+        help="NetDimm firmware version this image is going to. Defaults to '4.01'. Choose from '1.02', '2.06', '2.17', '3.03', '3.17', '4.01' or '4.02'.",
     )
     parser.add_argument(
         '--patch-file',
@@ -108,7 +108,7 @@ def main() -> int:
         key = bytes([int(args.key[x:(x + 2)], 16) for x in range(0, len(args.key), 2)])
 
     print("sending...", file=sys.stderr)
-    netdimm = NetDimm(args.ip, target=args.target, version=args.version)
+    netdimm = NetDimm(args.ip, version=args.version)
 
     # Grab the binary, patch it with requested patches.
     with open(args.image, "rb") as fp:
@@ -124,7 +124,7 @@ def main() -> int:
             return 1
 
     # Grab any settings file that should be included.
-    if netdimm.target == TargetEnum.TARGET_NAOMI:
+    if args.target == TargetEnum.TARGET_NAOMI:
         if args.settings_file:
             with open(args.settings_file, "rb") as fp:
                 settings = fp.read()
