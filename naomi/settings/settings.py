@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 import struct
@@ -566,6 +567,32 @@ class SettingsConfig:
         return SettingsConfig(NO_FILE, [])
 
     @staticmethod
+    def __escaped(data: str) -> str:
+        escaped: bool = False
+        output: str = ""
+
+        for c in data:
+            if escaped:
+                output += f"__ESCAPED__{base64.b64encode(c.encode('utf-8')).decode('ascii')}__"
+                escaped = False
+            elif c == "\\":
+                escaped = True
+            else:
+                output += c
+        return output
+
+    @staticmethod
+    def __unescaped(data: str) -> str:
+        while "__ESCAPED__" in data:
+            before, after = data.split("__ESCAPED__", 1)
+            if "__" not in after:
+                raise Exception("Logic error, expected second __ to find escaped character!")
+
+            escaped, after = after.split("__", 1)
+            data = before + base64.b64decode(escaped.encode('ascii')).decode('utf-8') + after
+        return data
+
+    @staticmethod
     def __get_kv(filename: str, name: str, setting: str, length: int) -> Dict[int, str]:
         realsetting = setting.strip()
         if realsetting.startswith("values are "):
@@ -601,7 +628,7 @@ class SettingsConfig:
                 k, v = realsetting.split("-", 1)
                 k = k.strip().replace(" ", "").replace("\t", "")
                 key = int(k, 16)
-                value = v.strip()
+                value = SettingsConfig.__unescaped(v.strip())
 
                 return {key: value}
             else:
@@ -631,7 +658,7 @@ class SettingsConfig:
     def __get_vals(filename: str, name: str, setting: str) -> Tuple[str, List[int]]:
         try:
             name, rest = setting.split(" is ", 1)
-            name = name.strip()
+            name = SettingsConfig.__unescaped(name.strip())
             vals: List[int] = []
 
             for val in rest.split(" or "):
@@ -680,10 +707,12 @@ class SettingsConfig:
 
         pending_insertions: List[Tuple[Tuple[str, str], Setting]] = []
 
+        # Make sure we respect escaping for any character.
+        lines = [SettingsConfig.__escaped(line) for line in lines]
         for line in lines:
             # First, get the name as well as the size and any restrictions.
             name, rest = line.split(":", 1)
-            name = name.strip()
+            name = SettingsConfig.__unescaped(name.strip())
             rest = rest.strip()
 
             # Now, figure out what size it should be.
@@ -783,6 +812,8 @@ class SettingsConfig:
                                     # Wasn't a correct adjustment, assume its the name.
                                     pass
 
+                            valname = SettingsConfig.__unescaped(valname)
+
                             if default is None:
                                 default = DefaultConditionGroup(filename, name, [])
                             if not isinstance(default, DefaultConditionGroup):
@@ -870,12 +901,12 @@ class SettingsConfig:
                     if " before " in bit:
                         display, settingname = bit.split(" before ", 1)
                         display = display.strip()
-                        settingname = settingname.strip()
+                        settingname = SettingsConfig.__unescaped(settingname.strip())
                         directive = "before"
                     elif " after " in bit:
                         display, settingname = bit.split(" after ", 1)
                         display = display.strip()
-                        settingname = settingname.strip()
+                        settingname = SettingsConfig.__unescaped(settingname.strip())
                         directive = "after"
                     else:
                         raise SettingsParseException(f"Couldn't understand position \"{bit}\" for setting \"{name}\". Perhaps you misspelled \"before\" or \"after\"?", filename)

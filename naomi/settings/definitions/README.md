@@ -320,3 +320,21 @@ Other Setting: byte, values are 2 to 5
 ```
 
 Both the above examples produce the exact same list of settings in an editor.
+
+## Using ":" or "," in Setting Names or Values
+
+Since these are special characters used to figure out where a setting name ends
+as well as separate sections, using one of these characters in a setting name or
+value description will result in an error. In order to have a setting that
+includes one of these symbols, you can escale it like so:
+
+```
+Setting With A Colon\: The Revengence: byte, 1 - Good\, Very Good, 2 - Bad\, Very Bad
+```
+
+This defines a setting named "Setting With a Colon: The Revengence" that has two
+labelled values consisting of "Good, Very Good" and "Bad, Very Bad". Whenever you
+need to use a character that is special, prefix it with a "\". This includes the
+"\" character as it denotes that the next character should be escaped. So if you
+want a "\" character in your setting name or value, you should use two "\" characters
+in a row.
