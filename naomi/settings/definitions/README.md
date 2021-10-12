@@ -334,7 +334,7 @@ Setting With A Colon\: The Revengence: byte, 1 - Good\, Very Good, 2 - Bad\, Ver
 
 This defines a setting named "Setting With a Colon: The Revengence" that has two
 labelled values consisting of "Good, Very Good" and "Bad, Very Bad". Whenever you
-need to use a character that is special, prefix it with a "\". This includes the
-"\" character as it denotes that the next character should be escaped. So if you
-want a "\" character in your setting name or value, you should use two "\" characters
+need to use a character that is special, prefix it with a "\\". This includes the
+"\\" character as it denotes that the next character should be escaped. So if you
+want a "\\" character in your setting name or value, you should use two "\\" characters
 in a row.
