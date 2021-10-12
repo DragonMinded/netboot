@@ -20,6 +20,7 @@ class CabinetStateEnum(Enum):
     STATE_STARTUP = "startup"
     STATE_WAIT_FOR_CABINET_POWER_ON = "wait_power_on"
     STATE_SEND_CURRENT_GAME = "send_game"
+    STATE_CHECK_CURRENT_GAME = "check_game"
     STATE_WAIT_FOR_CABINET_POWER_OFF = "wait_power_off"
 
 
@@ -125,10 +126,16 @@ class Cabinet:
                             # Its worth trying to CRC this game and seeing if it matches.
                             crc = self.__host.crc(self.__new_filename, self.patches.get(self.__new_filename, []), self.settings.get(self.__new_filename, None))
                             if crc == info.current_game_crc:
-                                self.__print(f"Cabinet {self.ip} already running game {self.__new_filename}.")
-                                self.__current_filename = self.__new_filename
-                                self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_OFF, 0)
-                                return
+                                if info.game_crc_valid is True:
+                                    self.__print(f"Cabinet {self.ip} already running game {self.__new_filename}.")
+                                    self.__current_filename = self.__new_filename
+                                    self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_OFF, 0)
+                                    return
+                                elif info.game_crc_valid is None:
+                                    self.__print(f"Cabinet {self.ip} is already verifying game {self.__new_filename}.")
+                                    self.__current_filename = self.__new_filename
+                                    self.__state = (CabinetStateEnum.STATE_CHECK_CURRENT_GAME, 0)
+                                    return
 
                         self.__print(f"Cabinet {self.ip} sending game {self.__new_filename}.")
                         self.__current_filename = self.__new_filename
@@ -138,7 +145,8 @@ class Cabinet:
 
             # Wait for send to complete state. Transition to waiting for
             # cabinet power on if transfer failed. Stay in state if transfer
-            # continuing. Transition to waint for power off if transfer success.
+            # continuing. Transition to waiting for CRC verification if transfer
+            # passes.
             if current_state == CabinetStateEnum.STATE_SEND_CURRENT_GAME:
                 if self.__host.status == HostStatusEnum.STATUS_INACTIVE:
                     raise Exception("State error, shouldn't be possible!")
@@ -149,9 +157,38 @@ class Cabinet:
                     self.__print(f"Cabinet {self.ip} failed to send game, waiting for power on.")
                     self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
                 elif self.__host.status == HostStatusEnum.STATUS_COMPLETED:
-                    self.__print(f"Cabinet {self.ip} succeeded sending game, rebooting and waiting for power off.")
+                    self.__print(f"Cabinet {self.ip} succeeded sending game, rebooting and verifying game CRC.")
                     self.__host.reboot()
-                    self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_OFF, 0)
+                    self.__state = (CabinetStateEnum.STATE_CHECK_CURRENT_GAME, 0)
+                return
+
+            # Wait for the CRC verification screen to finish. Transition to waiting
+            # for cabinet power off if CRC passes. Transition to waiting for power
+            # on if CRC fails. If CRC is still in progress wait. If the cabinet
+            # is turned off or the game is changed, also move back to waiting for
+            # power on to send a new game.
+            if current_state == CabinetStateEnum.STATE_CHECK_CURRENT_GAME:
+                if not self.__host.alive:
+                    self.__print(f"Cabinet {self.ip} turned off, waiting for power on.")
+                    self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
+                elif self.__current_filename != self.__new_filename:
+                    self.__print(f"Cabinet {self.ip} changed games to {self.__new_filename}, waiting for power on.")
+                    self.__current_filename = self.__new_filename
+                    self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
+                else:
+                    try:
+                        info = self.__host.info()
+                    except Exception:
+                        info = None
+                    if info is not None and info.current_game_crc != 0:
+                        if info.game_crc_valid is True:
+                            # Game passed onboard CRC, consider it running!
+                            self.__print(f"Cabinet {self.ip} passed CRC verification for {self.__current_filename}, waiting for power off.")
+                            self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_OFF, 0)
+                        elif info.game_crc_valid is False:
+                            # Game failed onboard CRC, try sending again!
+                            self.__print(f"Cabinet {self.ip} failed CRC verification for {self.__current_filename}, waiting for power on.")
+                            self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
                 return
 
             # Wait for cabinet to turn off again. Transition to waiting for

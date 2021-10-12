@@ -119,9 +119,11 @@ def main() -> int:
         elif status == CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON:
             print("waiting for cabinet...\r", end="")
         elif status == CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_OFF:
-            print("waiting for cabinet...\r", end="")
+            print("running game...       \r", end="")
         elif status == CabinetStateEnum.STATE_SEND_CURRENT_GAME:
             print(f"sending ({progress}%)...       \r", end="")
+        elif status == CabinetStateEnum.STATE_CHECK_CURRENT_GAME:
+            print("verifying game crc... \r", end="")
         else:
             raise Exception(f"Unknown status {status}")
 
