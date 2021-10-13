@@ -261,7 +261,8 @@ class NetDimm:
         # In this instance, type appears to be either main RAM or AICA RAM. If type is 0, it tries
         # to read from the main RAM. If type is 1, it tries to read from the AICA RAM. I also can't
         # seem to get this to work properly for main RAM on my setup. It also appears to only read
-        # a byte.
+        # a byte. At least in net dimm firmware 3.17 there is some functionality gated around the
+        # target system not being naomi, so its possible this was never meant to work on naomi.
         self.__send_packet(NetDimmPacket(0x10, 0x00, struct.pack("<II", addr, type)))
         response = self.__recv_packet()
         if response.pktid != 0x10:
@@ -272,7 +273,7 @@ class NetDimm:
         return cast(int, val)
 
     def __host_poke4(self, addr: int, data: int, *, type: int = 0) -> None:
-        # Same type comment as the above peek4 command.
+        # Same type comment as the above peek4 command. Same caveats about naomi systems in particular.
         self.__send_packet(NetDimmPacket(0x11, 0x00, struct.pack("<III", addr, type, data)))
 
     def __exchange_host_mode(self, mask_bits: int, set_bits: int) -> int:
@@ -521,4 +522,6 @@ class NetDimm:
     # that don't appear here are not in the master switch statement for 3.17 so they might be from
     # a different version of the net dimm firmware. I have not bothered to document the expected
     # sizes or returns for any of these packets. 0x0B appears to only be for triforce/chihiro, as
-    # firmware 3.17 explicitly checks against naomi and returns if it is the current target.
+    # firmware 3.17 explicitly checks against naomi and returns if it is the current target. 0x16
+    # appears to be something to do with "control" but I'm not sure what that means. triforcetools.py
+    # had some control packet as well, but it doesn't match the ID.
