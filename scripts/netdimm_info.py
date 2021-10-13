@@ -59,7 +59,7 @@ def main() -> int:
     print(f"DIMM Firmware Version: {info.firmware_version.value}")
     print(f"DIMM Memory Size: {info.memory_size} MB")
     print(f"Available Game Memory Size: {int(info.available_game_memory / 1024 / 1024)} MB")
-    print(f"Current Game CRC: {hex(info.current_game_crc)[2:]} ({validity})")
+    print(f"Current Game CRC: {hex(info.current_game_crc)[2:]} ({int(info.current_game_size / 1024 / 1024)} MB) ({validity})")
 
     return 0
 

@@ -28,8 +28,17 @@ class NetDimmVersionEnum(Enum):
 
 
 class NetDimmInfo:
-    def __init__(self, current_game_crc: int, game_crc_valid: Optional[bool], memory_size: int, firmware_version: NetDimmVersionEnum, available_game_memory: int) -> None:
+    def __init__(
+        self,
+        current_game_crc: int,
+        current_game_size: int,
+        game_crc_valid: Optional[bool],
+        memory_size: int,
+        firmware_version: NetDimmVersionEnum,
+        available_game_memory: int,
+    ) -> None:
         self.current_game_crc = current_game_crc
+        self.current_game_size = current_game_size
         self.game_crc_valid = game_crc_valid
         self.memory_size = memory_size
         self.firmware_version = firmware_version
@@ -81,6 +90,12 @@ class NetDimm:
             # Reboot and display "now loading..." on the cabinet screen
             self.__set_host_mode(1)
 
+            # The official sega transfer tool update sleeps for 5 seconds
+            # here, presumably because the net dimm doesn't respond to
+            # packets while it is ressetting the target to display "now
+            # loading". However, our timeout is 10 seconds so this ends
+            # up working without that sleep in practice.
+
             if key:
                 # Send the key that we're going to use to encrypt
                 self.__set_key_code(key)
@@ -90,6 +105,39 @@ class NetDimm:
 
             # uploads file. Also sets "dimm information" (file length and crc32)
             self.__upload_file(data, key, progress_callback or (lambda _cur, _tot: None))
+
+    def receive(self, progress_callback: Optional[Callable[[int, int], None]] = None) -> Optional[bytes]:
+        with self.__connection():
+            info = self.__get_information()
+
+            if info.game_crc_valid and info.current_game_size > 0:
+                # First, signal back to calling code that we've started
+                if progress_callback:
+                    progress_callback(0, info.current_game_size)
+
+                data: List[bytes] = []
+                address: int = 0
+
+                while address < info.current_game_size:
+                    # Display progress if we're in CLI mode.
+                    self.__print("%08x %d%%\r" % (address, int(float(address * 100) / float(info.current_game_size))), newline=False)
+
+                    # Get next chunk size.
+                    amount = info.current_game_size - address
+                    if amount > 0x8000:
+                        amount = 0x8000
+
+                    # Get next chunk.
+                    chunk = self.__download(address, amount)
+                    data.append(chunk)
+                    address += len(chunk)
+
+                    if progress_callback:
+                        progress_callback(address, info.current_game_size)
+
+                return b''.join(data)
+            else:
+                return None
 
     def reboot(self) -> None:
         with self.__connection():
@@ -285,8 +333,11 @@ class NetDimm:
 
     def __download(self, addr: int, size: int) -> bytes:
         # This appears to have access to not just the dimm bank on the net dimm, but also
-        # some system registers and status, notably address 0xfffeffe0 which will return
-        # the following information:
+        # some system registers and status. System registers are mirrored so the address
+        # 0x3ffeffe0 is the same as 0xfffeffe0. Various official utilities use either
+        # address for various operations.
+        #
+        # One notable register is at address 0xfffeffe0 which will return the following information:
         #
         # 0 - CRC over data has not started.
         # 1 - CRC over data is currently in progress (screen will display now checking...).
@@ -322,7 +373,14 @@ class NetDimm:
                 return data
 
     def __get_crc_information(self) -> int:
+        # Read the system register that the net dimm firmware uses to communicate the
+        # current CRC status.
         return cast(int, struct.unpack("<I", self.__download(0xfffeffe0, 4))[0])
+
+    def __get_game_size(self) -> int:
+        # Read the system register that the net dimm firmware uses to store the game
+        # size after a __set_information call is performed.
+        return cast(int, struct.unpack("<I", self.__download(0xffff0004, 4))[0])
 
     def __get_information(self) -> NetDimmInfo:
         self.__send_packet(NetDimmPacket(0x18, 0x00))
@@ -359,8 +417,12 @@ class NetDimm:
         else:
             raise NetDimmException("Unexpected CRC status value returned from download packet!")
 
+        # Now, query the size of the game loaded in bytes.
+        game_size = self.__get_game_size()
+
         return NetDimmInfo(
             current_game_crc=crc,
+            current_game_size=game_size,
             game_crc_valid=crc_valid,
             memory_size=dimm_memory,
             firmware_version=firmware_version,
@@ -368,6 +430,15 @@ class NetDimm:
         )
 
     def __set_information(self, crc: int, length: int) -> None:
+        # Interestingly enough, this can take up to 28 bytes of data, which the DIMM
+        # firmware will CRC and store at a particular offset as a 32-byte chunk that
+        # includes that CRC. Some official tools send 3 longs (with the last one set
+        # to 0) and some only send two longs. So, I'm not sure what the third value
+        # here should be or if it is even necessary. The data that gets written here
+        # is available in the system registers at 0xffff0000 if you execute a __download
+        # request. The 32 bytes at that address will contain the CRC, the length, some
+        # other garbage that is possible to send that I don't understand, and finally
+        # the crc over the first 28 bytes.
         self.__send_packet(NetDimmPacket(0x19, 0x00, struct.pack("<III", crc & 0xFFFFFFFF, length, 0)))
 
     def __upload_file(self, data: bytes, key: Optional[bytes], progress_callback: Optional[Callable[[int, int], None]]) -> None:
@@ -422,4 +493,5 @@ class NetDimm:
     # much like there is a peek4/poke4. The rest of the packet types documented in triforcetools.py
     # that don't appear here are not in the master switch statement for 3.17 so they might be from
     # a different version of the net dimm firmware. I have not bothered to document the expected
-    # sizes or returns for any of these packets.
+    # sizes or returns for any of these packets. 0x0B appears to only be for triforce/chihiro, as
+    # firmware 3.17 explicitly checks against naomi and returns if it is the current target.
