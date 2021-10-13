@@ -97,6 +97,11 @@ def main() -> int:
             'or a 32-kbyte SRAM file as obtained from an emulator.'
         ),
     )
+    parser.add_argument(
+        '--disable-crc',
+        action="store_true",
+        help="Disable checking memory screen after upload and boot straight into the game",
+    )
 
     args = parser.parse_args()
 
@@ -134,7 +139,7 @@ def main() -> int:
             data = patcher.data
 
     # Send the binary, reboot into the game.
-    netdimm.send(data, key)
+    netdimm.send(data, key, disable_crc_check=args.disable_crc)
     print("rebooting into game...", file=sys.stderr)
     netdimm.reboot()
     print("ok!", file=sys.stderr)

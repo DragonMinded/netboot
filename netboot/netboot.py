@@ -27,19 +27,27 @@ class NetDimmVersionEnum(Enum):
     VERSION_4_02 = "4.02"
 
 
+class CRCStatusEnum(Enum):
+    STATUS_CHECKING = 1
+    STATUS_VALID = 2
+    STATUS_INVALID = 3
+    STATUS_BAD_MEMORY = 4
+    STATUS_DISABLED = 5
+
+
 class NetDimmInfo:
     def __init__(
         self,
         current_game_crc: int,
         current_game_size: int,
-        game_crc_valid: Optional[bool],
+        game_crc_status: CRCStatusEnum,
         memory_size: int,
         firmware_version: NetDimmVersionEnum,
         available_game_memory: int,
     ) -> None:
         self.current_game_crc = current_game_crc
         self.current_game_size = current_game_size
-        self.game_crc_valid = game_crc_valid
+        self.game_crc_status = game_crc_status
         self.memory_size = memory_size
         self.firmware_version = firmware_version
         self.available_game_memory = available_game_memory
@@ -81,7 +89,7 @@ class NetDimm:
             self.version = info.firmware_version
             return info
 
-    def send(self, data: bytes, key: Optional[bytes] = None, progress_callback: Optional[Callable[[int, int], None]] = None) -> None:
+    def send(self, data: bytes, key: Optional[bytes] = None, disable_crc_check: bool = False, progress_callback: Optional[Callable[[int, int], None]] = None) -> None:
         with self.__connection():
             # First, signal back to calling code that we've started
             if progress_callback:
@@ -103,6 +111,11 @@ class NetDimm:
                 # disable encryption by setting magic zero-key
                 self.__set_key_code(b"\x00" * 8)
 
+            if disable_crc_check:
+                self.__disable_crc_check()
+            else:
+                self.__enable_crc_check()
+
             # uploads file. Also sets "dimm information" (file length and crc32)
             self.__upload_file(data, key, progress_callback or (lambda _cur, _tot: None))
 
@@ -110,7 +123,7 @@ class NetDimm:
         with self.__connection():
             info = self.__get_information()
 
-            if info.game_crc_valid and info.current_game_size > 0:
+            if info.game_crc_status in {CRCStatusEnum.STATUS_VALID, CRCStatusEnum.STATUS_DISABLED} and info.current_game_size > 0:
                 # First, signal back to calling code that we've started
                 if progress_callback:
                     progress_callback(0, info.current_game_size)
@@ -382,6 +395,12 @@ class NetDimm:
         # size after a __set_information call is performed.
         return cast(int, struct.unpack("<I", self.__download(0xffff0004, 4))[0])
 
+    def __disable_crc_check(self) -> None:
+        self.__upload(1, 0xfffefff0, struct.pack("<IIII", 0xFFFFFFFF, 0xFFFFFFFF, 0, 0), True)
+
+    def __enable_crc_check(self) -> None:
+        self.__upload(1, 0xfffefff0, struct.pack("<IIII", 0, 0, 0, 0), True)
+
     def __get_information(self) -> NetDimmInfo:
         self.__send_packet(NetDimmPacket(0x18, 0x00))
 
@@ -409,11 +428,19 @@ class NetDimm:
         crc_info = self.__get_crc_information()
         if crc_info in {0, 1}:
             # CRC is running, unknown.
-            crc_valid = None
+            crc_status = CRCStatusEnum.STATUS_CHECKING
         elif crc_info == 2:
-            crc_valid = True
+            # CRC passes, game should be good to run!
+            crc_status = CRCStatusEnum.STATUS_VALID
         elif crc_info == 3:
-            crc_valid = False
+            # CRC failed, need to send a new game!
+            crc_status = CRCStatusEnum.STATUS_INVALID
+        elif crc_info == 4:
+            # DIMM memory is not supported?
+            crc_status = CRCStatusEnum.STATUS_BAD_MEMORY
+        elif crc_info == 5:
+            # CRC is disabled, no checking done.
+            crc_status = CRCStatusEnum.STATUS_DISABLED
         else:
             raise NetDimmException("Unexpected CRC status value returned from download packet!")
 
@@ -423,7 +450,7 @@ class NetDimm:
         return NetDimmInfo(
             current_game_crc=crc,
             current_game_size=game_size,
-            game_crc_valid=crc_valid,
+            game_crc_status=crc_status,
             memory_size=dimm_memory,
             firmware_version=firmware_version,
             available_game_memory=game_memory << 20,

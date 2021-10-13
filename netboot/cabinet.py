@@ -7,7 +7,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from naomi.settings_patch import NaomiSettingsPatcher
-from netboot.netboot import NetDimmInfo, NetDimmVersionEnum
+from netboot.netboot import NetDimmInfo, NetDimmVersionEnum, CRCStatusEnum
 from netboot.hostutils import Host, HostStatusEnum, TargetEnum
 from netboot.log import log
 
@@ -126,12 +126,12 @@ class Cabinet:
                             # Its worth trying to CRC this game and seeing if it matches.
                             crc = self.__host.crc(self.__new_filename, self.patches.get(self.__new_filename, []), self.settings.get(self.__new_filename, None))
                             if crc == info.current_game_crc:
-                                if info.game_crc_valid is True:
+                                if info.game_crc_status == CRCStatusEnum.STATUS_VALID:
                                     self.__print(f"Cabinet {self.ip} already running game {self.__new_filename}.")
                                     self.__current_filename = self.__new_filename
                                     self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_OFF, 0)
                                     return
-                                elif info.game_crc_valid is None:
+                                elif info.game_crc_status == CRCStatusEnum.STATUS_CHECKING:
                                     self.__print(f"Cabinet {self.ip} is already verifying game {self.__new_filename}.")
                                     self.__current_filename = self.__new_filename
                                     self.__state = (CabinetStateEnum.STATE_CHECK_CURRENT_GAME, 0)
@@ -181,11 +181,15 @@ class Cabinet:
                     except Exception:
                         info = None
                     if info is not None and info.current_game_crc != 0:
-                        if info.game_crc_valid is True:
+                        if info.game_crc_status == CRCStatusEnum.STATUS_VALID:
                             # Game passed onboard CRC, consider it running!
                             self.__print(f"Cabinet {self.ip} passed CRC verification for {self.__current_filename}, waiting for power off.")
                             self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_OFF, 0)
-                        elif info.game_crc_valid is False:
+                        elif info.game_crc_status == CRCStatusEnum.STATUS_DISABLED:
+                            # Game failed onboard CRC, try sending again!
+                            self.__print(f"Cabinet {self.ip} had CRC verification disabled for {self.__current_filename}, waiting for power on.")
+                            self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
+                        elif info.game_crc_status in {CRCStatusEnum.STATUS_INVALID, CRCStatusEnum.STATUS_BAD_MEMORY}:
                             # Game failed onboard CRC, try sending again!
                             self.__print(f"Cabinet {self.ip} failed CRC verification for {self.__current_filename}, waiting for power on.")
                             self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)

@@ -4,7 +4,7 @@
 import argparse
 import enum
 import sys
-from netboot import NetDimm
+from netboot import NetDimm, CRCStatusEnum
 from typing import Any
 
 
@@ -49,12 +49,16 @@ def main() -> int:
     print("Requesting...", file=sys.stderr)
     netdimm = NetDimm(args.ip)
     info = netdimm.info()
-    if info.game_crc_valid is None:
+    if info.game_crc_status == CRCStatusEnum.STATUS_CHECKING:
         validity = "checking..."
-    elif info.game_crc_valid is True:
+    elif info.game_crc_status == CRCStatusEnum.STATUS_VALID:
         validity = "valid"
-    else:
+    elif info.game_crc_status == CRCStatusEnum.STATUS_INVALID:
         validity = "invalid"
+    elif info.game_crc_status == CRCStatusEnum.STATUS_BAD_MEMORY:
+        validity = "bad memory module"
+    elif info.game_crc_status == CRCStatusEnum.STATUS_DISABLED:
+        validity = "startup crc checking disabled"
 
     print(f"DIMM Firmware Version: {info.firmware_version.value}")
     print(f"DIMM Memory Size: {info.memory_size} MB")
