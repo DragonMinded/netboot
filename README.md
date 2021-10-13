@@ -18,7 +18,7 @@ For all of these scripts, they should run out of the box on Linux and Mac once y
 
 ### netdimm_info
 
-This script requests firmware information from a single cabinet, displaying it on the screen. Included in that info is the net dimm firmware revision, the memory capacity of the net dimm, the available memory that can be used for game storage, the current game's CRC image and whether the net dimm thinks that CRC is valid or not. Invoke the script like so to see options:
+This script requests firmware information from a single cabinet, displaying it on the screen. Included in that info is the net dimm firmware revision, the memory capacity of the net dimm, the available memory that can be used for game storage, the current game's CRC image, whether the net dimm thinks that CRC is valid or not and whether the CRC check screen has been disabled for this game or not. Invoke the script like so to see options:
 
 ```
 ./netdimm_info --help
@@ -44,7 +44,7 @@ You can invoke it identically to the original triforcetools.py as well. Assuming
 ./netdimm_send 192.168.1.1 my_favorite_game.bin
 ```
 
-As well as sending a single game to a Net Dimm, this script can optionally handle applying patches. See `--help` for more details. It can also handle sending settings along with a game for the Naomi target. Again, see `--help` for more details. This can be a valid EEPROM or SRAM file as obtained from an emulator. Also see `edit_settings` for how to generate settings files that can be sent along with a game to a Naomi system.
+As well as sending a single game to a Net Dimm, this script can optionally handle applying patches. See `--help` for more details. It can also handle sending settings along with a game for the Naomi target. Again, see `--help` for more details. This can be a valid EEPROM or SRAM file as obtained from an emulator. Also see `edit_settings` for how to generate settings files that can be sent along with a game to a Naomi system. It can also disable the CRC check screen in order to boot the ROM you are sending faster. See `--help` for more information.
 
 ### netdimm_ensure
 
@@ -56,6 +56,14 @@ This script will monitor a cabinet, and send a single binary to that cabinet whe
 
 It works identically to netdimm_send, except for it only supports a zero PIC and it tries its best to always ensure the cabinet has the right game. Run it the same way you would run netdimm_send. Just like `netdimm_send`, this script can optionally handle applying patches. See `--help` for more details. It can also handle sending settings along with a game for
 the Naomi target. Again, see `--help` for more details. This can be a valid EEPROM or SRAM file as obtained from an emulator. Also see `edit_settings` for how to generate settings files that can be sent along with a game.
+
+### netdimm_receive
+
+This script handles querying the current running game's size and then downloading it to a file. It is fairly useless as it won't dump anything other than what was previously sent to the net dimm by `netdimm_send` or `netdimm_ensure`. However, it is included for documentation purposes. Invoke the script like so to see options:
+
+```
+./netdimm_receive --help
+```
 
 ### binary_patch
 
