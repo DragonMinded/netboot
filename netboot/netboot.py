@@ -35,6 +35,15 @@ class CRCStatusEnum(Enum):
     STATUS_DISABLED = 5
 
 
+class PeekPokeTypeEnum(Enum):
+    # Retrieve a single byte.
+    TYPE_BYTE = 1
+    # Retrieve a short (two bytes).
+    TYPE_SHORT = 2
+    # Retrieve a long (4 bytes).
+    TYPE_LONG = 3
+
+
 class NetDimmInfo:
     def __init__(
         self,
@@ -257,13 +266,35 @@ class NetDimm:
         # know why transfergame.exe sends this, maybe older versions of net dimm firmware need it?
         self.__send_packet(NetDimmPacket(0x01, 0x00))
 
-    def __host_peek4(self, addr: int, *, type: int = 0) -> int:
-        # In this instance, type appears to be either main RAM or AICA RAM. If type is 0, it tries
-        # to read from the main RAM. If type is 1, it tries to read from the AICA RAM. I also can't
-        # seem to get this to work properly for main RAM on my setup. It also appears to only read
-        # a byte. At least in net dimm firmware 3.17 there is some functionality gated around the
-        # target system not being naomi, so its possible this was never meant to work on naomi.
-        self.__send_packet(NetDimmPacket(0x10, 0x00, struct.pack("<II", addr, type)))
+    def __validate_address(self, addr: int, type: PeekPokeTypeEnum) -> None:
+        if type == PeekPokeTypeEnum.TYPE_BYTE:
+            # Any address can be read as a byte.
+            return
+        if type == PeekPokeTypeEnum.TYPE_SHORT:
+            # Only even addresses can be read as a short, without
+            # returning bogus data.
+            if addr & 0x1 != 0:
+                raise NetDimmException("Cannot have misaligned address for peek/poke and SHORT data type!")
+            return
+        if type == PeekPokeTypeEnum.TYPE_LONG:
+            # Only even addresses can be read as a short, without
+            # returning bogus data.
+            if addr & 0x3 != 0:
+                raise NetDimmException("Cannot have misaligned address for peek/poke and LONG data type!")
+            return
+        raise Exception("Logic error!")
+
+    def __host_peek(self, addr: int, type: PeekPokeTypeEnum) -> int:
+        # Type appears to be the type of data being requested, where the valid values are 1-3 and
+        # they correspond to byte, short and long respectively. It appears thet there is code in
+        # firmware 3.17 that checks against 0 as well. At least in net dimm firmware 3.17 there is
+        # some functionality gated around the target system not being naomi, so it looks like the
+        # implementation might be different on naomi versus triforce/chihiro and might have different
+        # capabilities. It appears that at least on naomi, the addresses must be properly aligned
+        # to their size. So byte can have any address, short must not be on odd addresses and long
+        # must be on multiples of 4.
+        self.__validate_address(addr, type)
+        self.__send_packet(NetDimmPacket(0x10, 0x00, struct.pack("<II", addr, type.value)))
         response = self.__recv_packet()
         if response.pktid != 0x10:
             raise NetDimmException("Unexpected data returned from peek4 packet!")
@@ -272,9 +303,10 @@ class NetDimm:
         _unk, val = struct.unpack("<II", response.data)
         return cast(int, val)
 
-    def __host_poke4(self, addr: int, data: int, *, type: int = 0) -> None:
+    def __host_poke(self, addr: int, data: int, type: PeekPokeTypeEnum) -> None:
         # Same type comment as the above peek4 command. Same caveats about naomi systems in particular.
-        self.__send_packet(NetDimmPacket(0x11, 0x00, struct.pack("<III", addr, type, data)))
+        self.__validate_address(addr, type)
+        self.__send_packet(NetDimmPacket(0x11, 0x00, struct.pack("<III", addr, type.value, data)))
 
     def __exchange_host_mode(self, mask_bits: int, set_bits: int) -> int:
         self.__send_packet(NetDimmPacket(0x07, 0x00, struct.pack("<I", ((mask_bits & 0xFF) << 8) | (set_bits & 0xFF))))
