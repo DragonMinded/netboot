@@ -23,7 +23,6 @@ void main()
 {
     // Set up a crude console
     video_init_simple();
-    maple_init();
     console_base = malloc(((640 * 480) / (8 * 8)) + 1);
     memset(console_base, 0, ((640 * 480) / (8 * 8)) + 1);
 

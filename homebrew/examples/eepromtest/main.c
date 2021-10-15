@@ -9,7 +9,6 @@ void main()
 {
     // Set up a crude console
     video_init_simple();
-    maple_init();
 
     video_fill_screen(rgb(48, 48, 48));
     video_draw_text(0, 0, rgb(255, 255, 255), "Reading EEPROM...");

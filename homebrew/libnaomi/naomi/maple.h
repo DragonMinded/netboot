@@ -94,9 +94,12 @@ typedef struct jvs_buttons
     player_buttons_t player2;
 } jvs_buttons_t;
 
-void maple_wait_for_dma();
+// It is not necessary to call these two functions, as they are handled
+// for you automatically by the runtime.
 void maple_init();
 void maple_free();
+
+void maple_wait_for_dma();
 uint32_t *maple_swap_data(unsigned int port, int peripheral, unsigned int cmd, unsigned int datalen, void *data);
 int maple_response_valid(uint32_t *response);
 uint8_t maple_response_code(uint32_t *response);

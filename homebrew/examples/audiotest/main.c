@@ -2,12 +2,10 @@
 #include <stdint.h>
 #include "naomi/video.h"
 #include "naomi/audio.h"
-#include "naomi/maple.h"
 #include "naomi/system.h"
 
 void main()
 {
-    maple_init();
     video_init_simple();
 
     // Display status, since loading the binary can take awhile.

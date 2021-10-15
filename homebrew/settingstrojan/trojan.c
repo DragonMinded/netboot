@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include "naomi/video.h"
 #include "naomi/maple.h"
+#include "naomi/eeprom.h"
 
 // We will overwrite this in the final linking script when we are injected
 // into a binary. It will point to the original entrypoint that was in the
@@ -14,7 +15,7 @@ uint32_t settings_chunk[7] = {
     START_ADDR,
     0xCFCFCFCF,  // Enable sentinel behavior
     0xDDDDDDDD,  // Enable debug printing
-    20210928,    // Version of this trojan as a date in YYYYMMDD format.
+    20211015,    // Version of this trojan as a date in YYYYMMDD format.
     0xEEEEEEEE,
 };
 
@@ -26,7 +27,7 @@ uint32_t settings_chunk[7] = {
 
 // We will overwrite this as well when we link. It will contain the EEPROM
 // contents that we wish to write.
-uint8_t requested_eeprom[128] = {
+uint8_t requested_eeprom[EEPROM_SIZE] = {
     0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB,
     0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB,
     0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB,
@@ -60,106 +61,6 @@ uint32_t *sentinel = (uint32_t *)(START_ADDR - 4);
 // Whether to display verbose debugging info when debug printing is enabled.
 #define VERBOSE_DEBUG_MODE 0
 
-// Location of the two system data chunks inside the EEPROM.
-#define SYSTEM_CHUNK_1 0
-#define SYSTEM_CHUNK_2 18
-
-// Location of various important data bits within system chunks.
-#define SYSTEM_CRC_LOC 0
-#define SYSTEM_CRC_SIZE 2
-#define SYSTEM_SERIAL_LOC 3
-#define SYSTEM_SERIAL_SIZE 4
-#define SYSTEM_CRC_REGION_LOC 2
-#define SYSTEM_CRC_REGION_SIZE 16
-
-// Location of the two game data header chunks inside the EEPROM.
-#define GAME_CHUNK_1 36
-#define GAME_CHUNK_2 40
-#define GAME_PAYLOAD 44
-
-// Location of various important data bits within game chunks.
-#define GAME_CRC_LOC 0
-#define GAME_CRC_SIZE 2
-#define GAME_LEN_LOC 2
-#define GAME_LEN_SIZE 1
-
-uint32_t crc_inner(uint32_t running_crc, uint8_t next_byte)
-{
-    // First, mask off the values so we don't get a collision
-    running_crc &= 0xFFFFFF00;
-
-    // Add the byte into the CRC
-    running_crc = running_crc | next_byte;
-
-    // Now, run the algorithm across the new byte
-    for (int i = 0; i < 8; i++)
-    {
-        if (running_crc < 0x80000000)
-        {
-            running_crc = running_crc << 1;
-        }
-        else
-        {
-            running_crc = (running_crc << 1) + 0x10210000;
-        }
-    }
-
-    return running_crc;
-}
-
-uint16_t crc(uint8_t *data, unsigned int len)
-{
-    uint32_t running_crc = 0xDEBDEB00;
-
-    // CRC over all the data we've been given.
-    for (unsigned int i = 0; i < len; i++)
-    {
-        running_crc = crc_inner(running_crc, data[i]);
-    }
-
-    // Add in the null byte that Naomi BIOS seems to want.
-    running_crc = crc_inner(running_crc, 0);
-
-    // Calculate the final CRC value by taking the remainder.
-    return (running_crc >> 16) & 0xFFFF;
-}
-
-int eeprom_valid(uint8_t *eeprom)
-{
-    uint16_t expected = 0;
-
-    // Calculate first system chunk.
-    memcpy(&expected, eeprom + SYSTEM_CHUNK_1 + SYSTEM_CRC_LOC, SYSTEM_CRC_SIZE);
-    if (expected != crc(eeprom + SYSTEM_CHUNK_1 + SYSTEM_CRC_REGION_LOC, SYSTEM_CRC_REGION_SIZE))
-    {
-        return 0;
-    }
-
-    // Calculate second system chunk.
-    memcpy(&expected, eeprom + SYSTEM_CHUNK_2 + SYSTEM_CRC_LOC, SYSTEM_CRC_SIZE);
-    if (expected != crc(eeprom + SYSTEM_CHUNK_2 + SYSTEM_CRC_REGION_LOC, SYSTEM_CRC_REGION_SIZE))
-    {
-        return 0;
-    }
-
-    // Calculate first game chunk.
-    memcpy(&expected, eeprom + GAME_CHUNK_1 + GAME_CRC_LOC, GAME_CRC_SIZE);
-    if (expected != crc(eeprom + GAME_PAYLOAD, eeprom[GAME_CHUNK_1 + GAME_LEN_LOC]))
-    {
-        return 0;
-    }
-
-    // Calculate second game chunk.
-    memcpy(&expected, eeprom + GAME_CHUNK_2 + GAME_CRC_LOC, GAME_CRC_SIZE);
-    if (expected != crc(eeprom + GAME_PAYLOAD + eeprom[GAME_CHUNK_1 + GAME_LEN_LOC], eeprom[GAME_CHUNK_2 + GAME_LEN_LOC]))
-    {
-        return 0;
-    }
-
-    // All 4 CRCs passed!
-    return 1;
-}
-
 uint32_t get_sentinel()
 {
     uint16_t sys_crc;
@@ -178,14 +79,13 @@ void main()
 {
     // Set up a crude console
     video_init_simple();
-    maple_init();
 
     video_fill_screen(rgb(0, 0, 0));
     video_draw_text(X_LOC, Y_LOC, rgb(255, 255, 255), "Checking settings...");
 
     // Read current EEPROM contents
-    uint8_t current_eeprom[128];
-    memset(current_eeprom, 0, 128);
+    uint8_t current_eeprom[EEPROM_SIZE];
+    memset(current_eeprom, 0, EEPROM_SIZE);
 
     // First, try to read, bail out of it fails. If we send a new game over and an old
     // one was running, the sentinel might still be written from last time, so we need
@@ -249,7 +149,7 @@ void main()
             // Debug print the current EEPROM contents.
             char eeprom_buf[512];
             memset(eeprom_buf, 0, 512);
-            for(int i = 0; i < 128; i++)
+            for(int i = 0; i < EEPROM_SIZE; i++)
             {
                 sprintf(
                     eeprom_buf + strlen(eeprom_buf),
@@ -279,7 +179,7 @@ void main()
                 eeprom_buf + strlen(eeprom_buf),
                 "Sys Chunk 1 Expected: %04X Calc:%04X\n",
                 expected,
-                crc(current_eeprom + SYSTEM_CHUNK_1 + SYSTEM_CRC_REGION_LOC, SYSTEM_CRC_REGION_SIZE)
+                eeprom_crc(current_eeprom + SYSTEM_CHUNK_1 + SYSTEM_CRC_REGION_LOC, SYSTEM_CRC_REGION_SIZE)
             );
 
             // Calculate and display second system chunk.
@@ -288,7 +188,7 @@ void main()
                 eeprom_buf + strlen(eeprom_buf),
                 "Sys Chunk 2 Expected: %04X Calc:%04X\n",
                 expected,
-                crc(current_eeprom + SYSTEM_CHUNK_2 + SYSTEM_CRC_REGION_LOC, SYSTEM_CRC_REGION_SIZE)
+                eeprom_crc(current_eeprom + SYSTEM_CHUNK_2 + SYSTEM_CRC_REGION_LOC, SYSTEM_CRC_REGION_SIZE)
             );
 
             // Calculate and display first game chunk.
@@ -297,7 +197,7 @@ void main()
                 eeprom_buf + strlen(eeprom_buf),
                 "Game Chunk 1 Expected: %04X Calc:%04X\n",
                 expected,
-                crc(current_eeprom + GAME_PAYLOAD, current_eeprom[GAME_CHUNK_1 + GAME_LEN_LOC])
+                eeprom_crc(current_eeprom + GAME_PAYLOAD, current_eeprom[GAME_CHUNK_1 + GAME_LEN_LOC])
             );
 
             // Calculate and display second game chunk.
@@ -306,7 +206,7 @@ void main()
                 eeprom_buf + strlen(eeprom_buf),
                 "Game Chunk 2 Expected: %04X Calc:%04X\n",
                 expected,
-                crc(current_eeprom + GAME_PAYLOAD + current_eeprom[GAME_CHUNK_1 + GAME_LEN_LOC], current_eeprom[GAME_CHUNK_2 + GAME_LEN_LOC])
+                eeprom_crc(current_eeprom + GAME_PAYLOAD + current_eeprom[GAME_CHUNK_1 + GAME_LEN_LOC], current_eeprom[GAME_CHUNK_2 + GAME_LEN_LOC])
             );
 
             sprintf(

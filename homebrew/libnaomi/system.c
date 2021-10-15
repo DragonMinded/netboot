@@ -3,6 +3,7 @@
 #include <sys/types.h>
 #include <sys/reent.h>
 #include <stdlib.h>
+#include "naomi/maple.h"
 
 int errno;
 
@@ -70,11 +71,23 @@ void _enter()
 
     if(_boot_mode == 0)
     {
-        _exit(main());
+        int status;
+
+        maple_init();
+        status = main();
+        maple_free();
+
+        _exit(status);
     }
     else
     {
-        _exit(test());
+        int status;
+
+        maple_init();
+        status = test();
+        maple_free();
+
+        _exit(status);
     }
 }
 
