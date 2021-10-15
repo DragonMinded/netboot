@@ -19,6 +19,181 @@ def get_default_trojan() -> bytes:
         return bfp.read()
 
 
+def add_or_update_section(
+    data: bytes,
+    location: int,
+    newsection: bytes,
+    header: Optional[NaomiRom] = None,
+    verbose: bool = False,
+) -> bytes:
+    # Note that if an external header is supplied, it will be modified to match the updated
+    # data.
+    if header is None:
+        header = NaomiRom(data)
+
+    # First, find out if there's already a section in this header.
+    executable = header.main_executable
+    for section in executable.sections:
+        if section.load_address == location:
+            # This is a section chunk
+            if section.length != len(newsection):
+                raise NaomiSettingsPatcherException("Found section in executable, but it is the wrong size!")
+
+            if verbose:
+                print("Overwriting old section in existing ROM section.")
+
+            # We can just update the data to overwrite this section
+            data = data[:section.offset] + newsection + data[(section.offset + section.length):]
+            break
+    else:
+        # We need to add an init section to the ROM
+        if len(executable.sections) >= 8:
+            raise NaomiSettingsPatcherException("ROM already has the maximum number of sections!")
+
+        # Add a new section to the end of the rom for this binary data.
+        if verbose:
+            print("Attaching section to a new ROM section at the end of the file.")
+
+        # Add a new section to the end of the rom for this section
+        executable.sections.append(
+            NaomiRomSection(
+                offset=len(data),
+                load_address=location,
+                length=len(newsection)
+            )
+        )
+        header.main_executable = executable
+
+        # Now, just append it to the end of the file
+        data = header.data + data[header.HEADER_LENGTH:] + newsection
+
+    # Return the updated data.
+    return data
+
+
+def get_config(data: bytes) -> Tuple[int, int, bool, bool, Tuple[int, int, int]]:
+    # Returns a tuple consisting of the original EXE start address and
+    # the desired trojan start address, whether sentinel mode is enabled
+    # and whether debug printing is enabled, and the date string of the
+    # trojan we're using.
+    for i in range(len(data) - 28):
+        if all(x == 0xEE for x in data[i:(i + 4)]) and all(x == 0xEE for x in data[(i + 24):(i + 28)]):
+            original_start, trojan_start, sentinel, debug, date = struct.unpack("<IIIII", data[(i + 4):(i + 24)])
+            if sentinel not in {0, 1, 0xCFCFCFCF} or debug not in {0, 1, 0xDDDDDDDD}:
+                continue
+
+            day = date % 100
+            month = (date // 100) % 100
+            year = (date // 10000)
+
+            return (
+                original_start,
+                trojan_start,
+                sentinel != 0,
+                debug != 0,
+                (year, month, day),
+            )
+
+    raise NaomiSettingsPatcherException("Couldn't find config in executable!")
+
+
+def change(binfile: bytes, tochange: bytes, loc: int) -> bytes:
+    return binfile[:loc] + tochange + binfile[(loc + len(tochange)):]
+
+
+def patch_bytesequence(data: bytes, sentinel: int, replacement: bytes) -> bytes:
+    length = len(replacement)
+    for i in range(len(data) - length + 1):
+        if all(x == sentinel for x in data[i:(i + length)]):
+            return change(data, replacement, i)
+
+    raise NaomiSettingsPatcherException("Couldn't find spot to patch in data!")
+
+
+def add_or_update_trojan(
+    data: bytes,
+    trojan: bytes,
+    debug: int,
+    options: int,
+    datachunk: Optional[bytes] = None,
+    header: Optional[NaomiRom] = None,
+    verbose: bool = False,
+) -> bytes:
+    # Note that if an external header is supplied, it will be modified to match the updated
+    # data.
+    if header is None:
+        header = NaomiRom(data)
+
+    # Grab a safe-to-mutate cop of the trojan, get its current config.
+    executable = header.main_executable
+    exe = trojan[:]
+    _, location, _, _, _ = get_config(exe)
+
+    for sec in executable.sections:
+        if sec.load_address == location:
+            # Grab the old entrypoint from the existing modification since the ROM header
+            # entrypoint will be the old trojan EXE.
+            entrypoint, _, _, _, _ = get_config(data[sec.offset:(sec.offset + sec.length)])
+            exe = patch_bytesequence(exe, 0xAA, struct.pack("<I", entrypoint))
+            if datachunk:
+                exe = patch_bytesequence(exe, 0xBB, datachunk)
+            exe = patch_bytesequence(exe, 0xCF, struct.pack("<I", options))
+            exe = patch_bytesequence(exe, 0xDD, struct.pack("<I", debug))
+
+            # We can reuse this section, but first we need to get rid of the old patch.
+            if sec.offset + sec.length == len(data):
+                # We can just stick the new file right on top of where the old was.
+                if verbose:
+                    print("Overwriting old section in existing ROM section.")
+
+                # Cut off the old section, add our new section, make sure the length is correct.
+                data = data[:sec.offset] + exe
+                sec.length = len(exe)
+            else:
+                # It is somewhere in the middle of an executable, zero it out and
+                # then add this section to the end of the ROM.
+                if verbose:
+                    print("Zeroing out old section in existing ROM section and attaching new section to the end of the file.")
+
+                # Patch the executable with the correct settings and entrypoint.
+                data = change(data, b"\0" * sec.length, sec.offset)
+                sec.offset = len(data)
+                sec.length = len(exe)
+                sec.load_address = location
+                data += exe
+            break
+    else:
+        if len(executable.sections) >= 8:
+            raise NaomiSettingsPatcherException("ROM already has the maximum number of init sections!")
+
+        # Add a new section to the end of the rom for this binary data.
+        if verbose:
+            print("Attaching section to a new ROM section at the end of the file.")
+
+        executable.sections.append(
+            NaomiRomSection(
+                offset=len(data),
+                load_address=location,
+                length=len(exe),
+            )
+        )
+
+        # Patch the executable with the correct settings and entrypoint.
+        exe = patch_bytesequence(exe, 0xAA, struct.pack("<I", executable.entrypoint))
+        if datachunk:
+            exe = patch_bytesequence(exe, 0xBB, datachunk)
+        exe = patch_bytesequence(exe, 0xCF, struct.pack("<I", options))
+        exe = patch_bytesequence(exe, 0xDD, struct.pack("<I", debug))
+        data += exe
+
+    # Generate new header and attach executable to end of data.
+    executable.entrypoint = location
+    header.main_executable = executable
+
+    # Now, return the updated ROM with the new header and appended data.
+    return header.data + data[header.HEADER_LENGTH:]
+
+
 class NaomiSettingsPatcherException(Exception):
     pass
 
@@ -58,45 +233,6 @@ class NaomiSettingsPatcher:
             raise Exception("Logic error! Adjust the max trojan size to match the compiled tojan!")
         self.__rom: Optional[NaomiRom] = None
         self.__type: Optional[NaomiSettingsTypeEnum] = None
-
-    @staticmethod
-    def __change(binfile: bytes, tochange: bytes, loc: int) -> bytes:
-        return binfile[:loc] + tochange + binfile[(loc + len(tochange)):]
-
-    @staticmethod
-    def __patch_bytesequence(data: bytes, sentinel: int, replacement: bytes) -> bytes:
-        length = len(replacement)
-        for i in range(len(data) - length + 1):
-            if all(x == sentinel for x in data[i:(i + length)]):
-                return NaomiSettingsPatcher.__change(data, replacement, i)
-
-        raise NaomiSettingsPatcherException("Couldn't find spot to patch in data!")
-
-    @staticmethod
-    def __get_config(data: bytes) -> Tuple[int, int, bool, bool, Tuple[int, int, int]]:
-        # Returns a tuple consisting of the original EXE start address and
-        # the desired trojan start address, whether sentinel mode is enabled
-        # and whether debug printing is enabled, and the date string of the
-        # trojan we're using.
-        for i in range(len(data) - 28):
-            if all(x == 0xEE for x in data[i:(i + 4)]) and all(x == 0xEE for x in data[(i + 24):(i + 28)]):
-                original_start, trojan_start, sentinel, debug, date = struct.unpack("<IIIII", data[(i + 4):(i + 24)])
-                if sentinel not in {0, 1, 0xCFCFCFCF} or debug not in {0, 1, 0xDDDDDDDD}:
-                    continue
-
-                day = date % 100
-                month = (date // 100) % 100
-                year = (date // 10000)
-
-                return (
-                    original_start,
-                    trojan_start,
-                    sentinel != 0,
-                    debug != 0,
-                    (year, month, day),
-                )
-
-        raise NaomiSettingsPatcherException("Couldn't find config in executable!")
 
     @property
     def serial(self) -> bytes:
@@ -158,7 +294,7 @@ class NaomiSettingsPatcher:
                     # Grab the old entrypoint from the existing modification since the ROM header
                     # entrypoint will be the old trojan EXE.
                     data = self.data[sec.offset:(sec.offset + sec.length)]
-                    _, _, sentinel, debug, date = self.__get_config(data)
+                    _, _, sentinel, debug, date = get_config(data)
 
                     return NaomiSettingsInfo(sentinel, debug, date)
                 except Exception:
@@ -193,7 +329,7 @@ class NaomiSettingsPatcher:
                     # Grab the old entrypoint from the existing modification since the ROM header
                     # entrypoint will be the old trojan EXE.
                     data = self.data[sec.offset:(sec.offset + sec.length)]
-                    self.__get_config(data)
+                    get_config(data)
 
                     # Returns the requested EEPRom settings that should be written prior
                     # to the game starting.
@@ -247,102 +383,21 @@ class NaomiSettingsPatcher:
             # Now we need to add an EXE init section to the ROM.
             if self.__trojan is None or not self.__trojan:
                 raise NaomiSettingsPatcherException("Cannot have an empty trojan when attaching EEPROM settings!")
-            exe = self.__trojan[:]
-            executable = naomi.main_executable
-            _, location, _, _, _ = self.__get_config(exe)
 
-            for sec in executable.sections:
-                if sec.load_address == location:
-                    # Grab the old entrypoint from the existing modification since the ROM header
-                    # entrypoint will be the old trojan EXE.
-                    entrypoint, _, _, _, _ = self.__get_config(self.data[sec.offset:(sec.offset + sec.length)])
-                    exe = self.__patch_bytesequence(exe, 0xAA, struct.pack("<I", entrypoint))
-                    exe = self.__patch_bytesequence(exe, 0xBB, settings)
-                    exe = self.__patch_bytesequence(exe, 0xCF, struct.pack("<I", 1 if enable_sentinel else 0))
-                    exe = self.__patch_bytesequence(exe, 0xDD, struct.pack("<I", 1 if enable_debugging else 0))
-
-                    # We can reuse this section, but first we need to get rid of the old patch.
-                    if sec.offset + sec.length == len(self.data):
-                        # We can just stick the new file right on top of where the old was.
-                        if verbose:
-                            print("Overwriting old settings in existing ROM section.")
-
-                        # Cut off the old section, add our new section, make sure the length is correct.
-                        self.data = self.data[:sec.offset] + exe
-                        sec.length = len(exe)
-                    else:
-                        # It is somewhere in the middle of an executable, zero it out and
-                        # then add this section to the end of the ROM.
-                        if verbose:
-                            print("Zeroing out old settings in existing ROM section and attaching new settings to the end of the file.")
-
-                        # Patch the executable with the correct settings and entrypoint.
-                        self.data = self.__change(self.data, b"\0" * sec.length, sec.offset)
-                        sec.offset = len(self.data)
-                        sec.length = len(exe)
-                        sec.load_address = location
-                        self.data += exe
-                    break
-            else:
-                if len(executable.sections) >= 8:
-                    raise NaomiSettingsPatcherException("ROM already has the maximum number of init sections!")
-
-                # Add a new section to the end of the rom for this binary data.
-                if verbose:
-                    print("Attaching settings to a new ROM section at the end of the file.")
-
-                executable.sections.append(
-                    NaomiRomSection(
-                        offset=len(self.data),
-                        load_address=location,
-                        length=len(exe),
-                    )
-                )
-
-                # Patch the executable with the correct settings and entrypoint.
-                exe = self.__patch_bytesequence(exe, 0xAA, struct.pack("<I", executable.entrypoint))
-                exe = self.__patch_bytesequence(exe, 0xBB, settings)
-                exe = self.__patch_bytesequence(exe, 0xCF, struct.pack("<I", 1 if enable_sentinel else 0))
-                exe = self.__patch_bytesequence(exe, 0xDD, struct.pack("<I", 1 if enable_debugging else 0))
-                self.data += exe
-
-            executable.entrypoint = location
-
-            # Generate new header and attach executable to end of data.
-            naomi.main_executable = executable
-
-            # Now, save this back so it can be read by other callers.
-            self.data = naomi.data + self.data[naomi.HEADER_LENGTH:]
+            # Patch the trojan onto the ROM, updating the settings in the trojan accordingly.
+            self.data = add_or_update_trojan(
+                self.data,
+                self.__trojan,
+                1 if enable_debugging else 0,
+                1 if enable_sentinel else 0,
+                datachunk=settings,
+                header=naomi,
+                verbose=verbose,
+            )
 
         elif self.__type == NaomiSettingsTypeEnum.TYPE_SRAM:
-            # First, find out if there's already an SRAM portion to the file
-            executable = naomi.main_executable
-            for section in executable.sections:
-                if section.load_address == self.SRAM_LOCATION:
-                    # This is a SRAM load chunk
-                    if section.length != self.SRAM_SIZE:
-                        raise NaomiSettingsPatcherException("Found SRAM init section, but it is the wrong size!")
-
-                    # We can just update the data to overwrite this section
-                    self.data = self.data[:section.offset] + settings + self.data[(section.offset + section.length):]
-                    break
-            else:
-                # We need to add a SRAM init section to the ROM
-                if len(executable.sections) >= 8:
-                    raise NaomiSettingsPatcherException("ROM already has the maximum number of init sections!")
-
-                # Add a new section to the end of the rom for this SRAM section
-                executable.sections.append(
-                    NaomiRomSection(
-                        offset=len(self.data),
-                        load_address=self.SRAM_LOCATION,
-                        length=self.SRAM_SIZE,
-                    )
-                )
-                naomi.main_executable = executable
-
-                # Now, just append it to the end of the file
-                self.data = naomi.data + self.data[naomi.HEADER_LENGTH:] + settings
+            # Patch the section directly onto the ROM.
+            self.data = add_or_update_section(self.data, self.SRAM_LOCATION, settings, header=naomi, verbose=verbose)
 
         # Also, write back the new ROM.
         self.__rom = naomi
