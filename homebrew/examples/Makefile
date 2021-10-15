@@ -1,4 +1,4 @@
-all: hellonaomi hellocpp inputtest eepromtest audiotest
+all: hellonaomi hellocpp inputtest eepromtest audiotest netdimm
 
 .PHONY: hellonaomi
 hellonaomi:
@@ -20,6 +20,10 @@ eepromtest:
 audiotest:
 	$(MAKE) -C audiotest
 
+.PHONY: netdimm
+netdimm:
+	$(MAKE) -C netdimm
+
 .PHONY: copy
 copy: hellonaomi hellocpp inputtest eepromtest
 	cp -r hellonaomi/hellonaomi.bin ../binaries/
@@ -27,6 +31,7 @@ copy: hellonaomi hellocpp inputtest eepromtest
 	cp -r inputtest/inputtest.bin ../binaries/
 	cp -r eepromtest/eepromtest.bin ../binaries/
 	cp -r audiotest/audiotest.bin ../binaries/
+	cp -r netdimm/netdimm.bin ../binaries/
 
 .PHONY: clean
 clean:
@@ -35,3 +40,4 @@ clean:
 	$(MAKE) -C inputtest clean
 	$(MAKE) -C eepromtest clean
 	$(MAKE) -C audiotest clean
+	$(MAKE) -C netdimm clean

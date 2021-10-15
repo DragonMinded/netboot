@@ -19,9 +19,13 @@ class NetDimmException(Exception):
 class NetDimmVersionEnum(Enum):
     VERSION_UNKNOWN = "UNKNOWN"
     VERSION_1_02 = "1.02"
+    VERSION_2_03 = "2.03"
     VERSION_2_06 = "2.06"
+    VERSION_2_13 = "2.13"
     VERSION_2_17 = "2.17"
+    VERSION_3_01 = "3.01"
     VERSION_3_03 = "3.03"
+    VERSION_3_12 = "3.12"
     VERSION_3_17 = "3.17"
     VERSION_4_01 = "4.01"
     VERSION_4_02 = "4.02"

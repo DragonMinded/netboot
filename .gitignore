@@ -20,3 +20,4 @@ homebrew/examples/hellocpp/hellocpp.bin
 homebrew/examples/inputtest/inputtest.bin
 homebrew/examples/eepromtest/eepromtest.bin
 homebrew/examples/audiotest/audiotest.bin
+homebrew/examples/netdimm/netdimm.bin
