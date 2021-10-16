@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include "naomi/video.h"
+#include "naomi/timer.h"
 
 void main()
 {
@@ -8,8 +9,13 @@ void main()
 
     char buffer[64];
     unsigned int counter = 0;
+    double fps_value = 0.0;
     while ( 1 )
     {
+        // Grab a few profilers so we can see the performance of this code.
+        int fps = profile_start();
+        int draw_time = profile_start();
+
         // Draw a few simple things on the screen.
         video_fill_screen(rgb(48, 48, 48));
         video_fill_box(20, 20, 100, 100, rgb(0, 0, 0));
@@ -25,8 +31,17 @@ void main()
         // Display a liveness counter that goes up 60 times a second.
         sprintf(buffer, "Aliveness counter: %d", counter++);
         video_draw_text(20, 220, rgb(200, 200, 20), buffer);
+        sprintf(buffer, "Draw Time in uS: %d", profile_end(draw_time));
+        video_draw_text(20, 240, rgb(200, 200, 20), buffer);
+        sprintf(buffer, "FPS: %.01f, %dx%d", fps_value, video_width(), video_height());
+        video_draw_text(20, 260, rgb(200, 200, 20), buffer);
+
         video_wait_for_vblank();
         video_display();
+
+        // Calculate instantaneous FPS.
+        uint32_t uspf = profile_end(fps);
+        fps_value = 1000000.0 / (double)uspf;
     }
 }
 

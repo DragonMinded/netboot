@@ -4,16 +4,20 @@
 #include "naomi/video.h"
 #include "naomi/system.h"
 #include "naomi/dimmcomms.h"
+#include "naomi/eeprom.h"
 #include "font.h"
 
 
 // TODO: Need to support more than 640x480 framebuffer mode.
-// TODO: Need to support more than RGB565 color.
-// TODO: Need to support vertical orientation.
+// TODO: Need to support more than RGB1555 color.
 
 
 static void *buffer_base = 0;
 static int buffer_loc = 0;
+static unsigned int global_video_width = 0;
+static unsigned int global_video_height = 0;
+static unsigned int global_video_depth = 0;
+static unsigned int global_video_vertical = 0;
 
 
 void video_wait_for_vblank()
@@ -32,26 +36,44 @@ void video_wait_for_vblank()
 
 unsigned int video_width()
 {
-    // Hardcoded for now
-    return 640;
+    if (global_video_vertical) {
+        return global_video_height;
+    } else {
+        return global_video_width;
+    }
 }
 
 unsigned int video_height()
 {
-    // Hardcoded for now
-    return 480;
+    if (global_video_vertical) {
+        return global_video_width;
+    } else {
+        return global_video_height;
+    }
 }
 
 unsigned int video_depth()
 {
-    // Hardcoded for now
-    return 2;
+    return global_video_depth;
+}
+
+unsigned int video_is_vertical()
+{
+    return global_video_vertical;
 }
 
 // TODO: This function assumes 640x480 VGA, we should support more varied options.
 void video_init_simple()
 {
     volatile unsigned int *videobase = (volatile unsigned int *)POWERVR2_BASE;
+    global_video_width = 640;
+    global_video_height = 480;
+    global_video_depth = 2;
+
+    // First, read the EEPROM and figure out if we're vertical orientation.
+    eeprom_t eeprom;
+    eeprom_read(&eeprom);
+    global_video_vertical = eeprom.system.monitor_orientation == MONITOR_ORIENTATION_VERTICAL ? 1 : 0;
 
     // Set up video timings copied from Naomi BIOS.
     videobase[POWERVR2_VRAM_CFG3] = 0x15D1C955;
@@ -68,22 +90,22 @@ void video_init_simple()
 
     // Set up frameebuffer config to enable display, set pixel mode, no line double.
     videobase[POWERVR2_FB_DISPLAY_CFG] = (
-        0x1 << 23 |  // Double pixel clock for VGA.
-        0x1 << 2 |   // RGB565 mode.
-        0x1 << 0     // Enable display.
+        0x1 << 23 |                 // Double pixel clock for VGA.
+        DISPLAY_CFG_RGB1555 << 2 |  // RGB1555 mode.
+        0x1 << 0                    // Enable display.
     );
 
-    // Set up framebuffer render config to dither enabled, RGB565, no alpha threshold.
+    // Set up framebuffer render config to dither enabled, RGB0555, no alpha threshold.
     videobase[POWERVR2_FB_RENDER_CFG] = (
-        0x1 << 3 |  // Dither enabled.
-        0x1 << 0    // RGB565 mode.
+        0x1 << 3 |               // Dither enabled.
+        RENDER_CFG_RGB0555 << 0  // RGB555 mode, no alpha threshold.
     );
 
     // Set up even/odd field video base address, shifted by bpp.
     video_display();
 
     // Set up render modulo, (bpp * width) / 8.
-    videobase[POWERVR2_FB_RENDER_MODULO] = (2 * 640) / 8;
+    videobase[POWERVR2_FB_RENDER_MODULO] = (global_video_depth * global_video_width) / 8;
 
     // Set up vertical position.
     videobase[POWERVR2_VPOS] = (
@@ -92,7 +114,7 @@ void video_init_simple()
     );
     videobase[POWERVR2_VBORDER] = (
         40 << 16 |  // Start.
-        (480 + 40) << 0    // End.
+        (global_video_height + 40) << 0    // End.
     );
 
     // Set up horizontal position.
@@ -107,8 +129,8 @@ void video_init_simple()
     // Set up display size.
     videobase[POWERVR2_FB_DISPLAY_SIZE] = (
         1 << 20 |                   // Interlace skip modulo if we are interlaced ((width / 4) * bpp) + 1
-        (480 - 1) << 10 |           // height - 1
-        (((640 / 4) * 2) - 1) << 0  // ((width / 4) * bpp) - 1
+        (global_video_height - 1) << 10 |           // height - 1
+        (((global_video_width / 4) * global_video_depth) - 1) << 0  // ((width / 4) * bpp) - 1
     );
 
     // Enable display
@@ -121,10 +143,10 @@ void video_init_simple()
     );
 
     // Set up horizontal clipping to clip within 0-640.
-    videobase[POWERVR2_FB_CLIP_X] = (640 << 16) | (0 << 0);
+    videobase[POWERVR2_FB_CLIP_X] = (global_video_width << 16) | (0 << 0);
 
     // Set up vertical clipping to within 0-480.
-    videobase[POWERVR2_FB_CLIP_Y] = (480 << 16) | (0 << 0);
+    videobase[POWERVR2_FB_CLIP_Y] = (global_video_height << 16) | (0 << 0);
 
     // Wait for vblank like games do.
     video_wait_for_vblank();
@@ -132,13 +154,24 @@ void video_init_simple()
 
 uint32_t rgb(unsigned int r, unsigned int g, unsigned int b)
 {
-    if(video_depth() == 2)
+    if(global_video_depth == 2)
     {
-        r = (r >> 3) & 0x1F;
-        g = (g >> 2) & 0x3F;
-        b = (b >> 3) & 0x1F;
+        // Make a 1555 color that is non-transparent.
+        return ((b >> 3) & (0x1F << 0)) | ((g << 2) & (0x1F << 5)) | ((r << 7) & (0x1F << 10)) | 0x8000;
+    }
+    else
+    {
+        // TODO
+        return 0;
+    }
+}
 
-        return b | (g << 5) | (r << 11);
+uint32_t rgba(unsigned int r, unsigned int g, unsigned int b, unsigned int a)
+{
+    if(global_video_depth == 2)
+    {
+        // Make a 1555 color that is transparent if a < 128 and opaque if a >= 128.
+        return ((b >> 3) & (0x1F << 0)) | ((g << 2) & (0x1F << 5)) | ((r << 7) & (0x1F << 10)) | ((a << 8) & 0x8000);
     }
     else
     {
@@ -149,11 +182,11 @@ uint32_t rgb(unsigned int r, unsigned int g, unsigned int b)
 
 void video_fill_screen(uint32_t color)
 {
-    if(video_depth() == 2)
+    if(global_video_depth == 2)
     {
         /* 16bpp colors, double our fill speed */
         uint32_t realcolor = (color & 0xFFFF) | ((color << 16) & 0xFFFF0000);
-        for(unsigned int x = 0; x < ((video_width() * video_height()) / 2); x++)
+        for(unsigned int x = 0; x < ((global_video_width * global_video_height) / 2); x++)
         {
             ((uint32_t *)buffer_base)[x] = realcolor;
         }
@@ -190,9 +223,16 @@ void video_fill_box(int x0, int y0, int x1, int y1, uint32_t color)
 
 void video_draw_pixel(int x, int y, uint32_t color)
 {
-    if(video_depth() == 2)
+    if (global_video_depth == 2)
     {
-        ((uint16_t *)buffer_base)[x + (y * video_width())] = color & 0xFFFF;
+        if (global_video_vertical)
+        {
+            ((uint16_t *)buffer_base)[(global_video_width - y) + (x * global_video_width)] = color & 0xFFFF;
+        }
+        else
+        {
+            ((uint16_t *)buffer_base)[x + (y * global_video_width)] = color & 0xFFFF;
+        }
     }
     else
     {
@@ -242,7 +282,7 @@ void video_draw_line(int x0, int y0, int x1, int y1, uint32_t color)
             }
             x0 += sx;
             frac += dy;
-            video_draw_pixel(x0, y0 , color);
+            video_draw_pixel(x0, y0, color);
         }
     }
     else
@@ -257,7 +297,7 @@ void video_draw_line(int x0, int y0, int x1, int y1, uint32_t color)
             }
             y0 += sy;
             frac += dx;
-            video_draw_pixel(x0, y0 , color);
+            video_draw_pixel(x0, y0, color);
         }
     }
 }
@@ -283,7 +323,7 @@ void video_draw_character( int x, int y, uint32_t color, char ch )
 
 void video_draw_sprite( int x, int y, int width, int height, void *data )
 {
-    if(video_depth() == 2)
+    if(global_video_depth == 2)
     {
         uint16_t *pixels = (uint16_t *)data;
 
@@ -291,7 +331,10 @@ void video_draw_sprite( int x, int y, int width, int height, void *data )
         {
             for(int col = 0; col < width; col++)
             {
-                video_draw_pixel( x + col, y + row, pixels[col + (row * width)] );
+                uint16_t pixel = pixels[col + (row * width)];
+                if (pixel & 0x8000) {
+                    video_draw_pixel( x + col, y + row, pixel );
+                }
             }
         }
     }
@@ -330,7 +373,7 @@ void video_draw_text( int x, int y, uint32_t color, const char * const msg )
                 break;
         }
 
-        if (tx == video_width())
+        if ((tx + 8) >= video_width())
         {
             tx = 0;
             ty += 8;
@@ -345,12 +388,12 @@ void video_display()
     volatile unsigned int *videobase = (volatile unsigned int *)POWERVR2_BASE;
     uint32_t buffer_offset[2] = {
         0,
-        video_width() * video_height() * video_depth(),
+        global_video_width * global_video_height * global_video_depth,
     };
 
     // Swap buffers in HW
     videobase[POWERVR2_FB_DISPLAY_ADDR_1] = buffer_offset[buffer_loc];
-    videobase[POWERVR2_FB_DISPLAY_ADDR_2] = buffer_offset[buffer_loc] + (video_width() * video_depth());
+    videobase[POWERVR2_FB_DISPLAY_ADDR_2] = buffer_offset[buffer_loc] + (global_video_width * global_video_depth);
 
     // Swap buffer pointer in SW
     buffer_loc = buffer_loc ? 0 : 1;

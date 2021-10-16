@@ -32,11 +32,26 @@ extern "C" {
 #define POWERVR2_SYNC_CFG (0x0D0 >> 2)
 #define POWERVR2_SYNC_STAT (0x10C >> 2)
 
+#define DISPLAY_CFG_RGB1555 0
+#define DISPLAY_CFG_RGB565 1
+#define DISPLAY_CFG_RGB888 2
+#define DISPLAY_CFG_RGB0888 3
+
+#define RENDER_CFG_RGB0555 0
+#define RENDER_CFG_RGB565 1
+#define RENDER_CFG_ARGB4444 2
+#define RENDER_CFG_ARGB1555 3
+#define RENDER_CFG_RGB888 4
+#define RENDER_CFG_RGB0888 5
+#define RENDER_CFG_ARGB8888 6
+// Mode 7 appears to be a redefinition of mode 2.
+
 void video_wait_for_vblank();
 unsigned int video_width();
 unsigned int video_height();
 void video_init_simple();
 uint32_t rgb(unsigned int r, unsigned int g, unsigned int b);
+uint32_t rgba(unsigned int r, unsigned int g, unsigned int b, unsigned int a);
 void video_fill_screen(uint32_t color);
 void video_fill_box(int x0, int y0, int x1, int y1, uint32_t color);
 void video_draw_pixel(int x, int y, uint32_t color);
