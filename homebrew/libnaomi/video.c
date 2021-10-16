@@ -184,11 +184,14 @@ void video_fill_screen(uint32_t color)
 {
     if(global_video_depth == 2)
     {
-        /* 16bpp colors, double our fill speed */
+        /* 16bpp colors, fill as fast as we can */
         uint32_t realcolor = (color & 0xFFFF) | ((color << 16) & 0xFFFF0000);
-        for(unsigned int x = 0; x < ((global_video_width * global_video_height) / 2); x++)
+        uint32_t *start = (uint32_t *)buffer_base;
+        uint32_t *end = &start[((global_video_width * global_video_height) / 2)];
+
+        while (start != end)
         {
-            ((uint32_t *)buffer_base)[x] = realcolor;
+            *start++ = realcolor;
         }
     }
     else
@@ -304,19 +307,142 @@ void video_draw_line(int x0, int y0, int x1, int y1, uint32_t color)
 
 void video_draw_character( int x, int y, uint32_t color, char ch )
 {
-    for(int row = 0; row < 8; row++)
+    for(int row = y; row < y + 8; row++)
     {
-        uint8_t c = __font_data[(ch * 8) + row];
+        uint8_t c = __font_data[(ch * 8) + (row - y)];
 
-        for(int col = 0; col < 8; col++)
+        /* Draw top half unrolled */
+        switch( c & 0xF0 )
         {
-            if( c & 0x80 )
-            {
-                /* Only draw it if it is active */
-                video_draw_pixel( x + col, y + row, color );
-            }
+            case 0x10:
+                video_draw_pixel( x + 3, row, color );
+                break;
+            case 0x20:
+                video_draw_pixel( x + 2, row, color );
+                break;
+            case 0x30:
+                video_draw_pixel( x + 2, row, color );
+                video_draw_pixel( x + 3, row, color );
+                break;
+            case 0x40:
+                video_draw_pixel( x + 1, row, color );
+                break;
+            case 0x50:
+                video_draw_pixel( x + 1, row, color );
+                video_draw_pixel( x + 3, row, color );
+                break;
+            case 0x60:
+                video_draw_pixel( x + 1, row, color );
+                video_draw_pixel( x + 2, row, color );
+                break;
+            case 0x70:
+                video_draw_pixel( x + 1, row, color );
+                video_draw_pixel( x + 2, row, color );
+                video_draw_pixel( x + 3, row, color );
+                break;
+            case 0x80:
+                video_draw_pixel( x, row, color );
+                break;
+            case 0x90:
+                video_draw_pixel( x, row, color );
+                video_draw_pixel( x + 3, row, color );
+                break;
+            case 0xA0:
+                video_draw_pixel( x, row, color );
+                video_draw_pixel( x + 2, row, color );
+                break;
+            case 0xB0:
+                video_draw_pixel( x, row, color );
+                video_draw_pixel( x + 2, row, color );
+                video_draw_pixel( x + 3, row, color );
+                break;
+            case 0xC0:
+                video_draw_pixel( x, row, color );
+                video_draw_pixel( x + 1, row, color );
+                break;
+            case 0xD0:
+                video_draw_pixel( x, row, color );
+                video_draw_pixel( x + 1, row, color );
+                video_draw_pixel( x + 3, row, color );
+                break;
+            case 0xE0:
+                video_draw_pixel( x, row, color );
+                video_draw_pixel( x + 1, row, color );
+                video_draw_pixel( x + 2, row, color );
+                break;
+            case 0xF0:
+                video_draw_pixel( x, row, color );
+                video_draw_pixel( x + 1, row, color );
+                video_draw_pixel( x + 2, row, color );
+                video_draw_pixel( x + 3, row, color );
+                break;
+        }
 
-            c <<= 1;
+        /* Draw bottom half unrolled */
+        switch( c & 0x0F )
+        {
+            case 0x01:
+                video_draw_pixel( x + 7, row, color );
+                break;
+            case 0x02:
+                video_draw_pixel( x + 6, row, color );
+                break;
+            case 0x03:
+                video_draw_pixel( x + 6, row, color );
+                video_draw_pixel( x + 7, row, color );
+                break;
+            case 0x04:
+                video_draw_pixel( x + 5, row, color );
+                break;
+            case 0x05:
+                video_draw_pixel( x + 5, row, color );
+                video_draw_pixel( x + 7, row, color );
+                break;
+            case 0x06:
+                video_draw_pixel( x + 5, row, color );
+                video_draw_pixel( x + 6, row, color );
+                break;
+            case 0x07:
+                video_draw_pixel( x + 5, row, color );
+                video_draw_pixel( x + 6, row, color );
+                video_draw_pixel( x + 7, row, color );
+                break;
+            case 0x08:
+                video_draw_pixel( x + 4, row, color );
+                break;
+            case 0x09:
+                video_draw_pixel( x + 4, row, color );
+                video_draw_pixel( x + 7, row, color );
+                break;
+            case 0x0A:
+                video_draw_pixel( x + 4, row, color );
+                video_draw_pixel( x + 6, row, color );
+                break;
+            case 0x0B:
+                video_draw_pixel( x + 4, row, color );
+                video_draw_pixel( x + 6, row, color );
+                video_draw_pixel( x + 7, row, color );
+                break;
+            case 0x0C:
+                video_draw_pixel( x + 4, row, color );
+                video_draw_pixel( x + 5, row, color );
+                break;
+            case 0x0D:
+                video_draw_pixel( x + 4, row, color );
+                video_draw_pixel( x + 5, row, color );
+                video_draw_pixel( x + 7, row, color );
+                break;
+            case 0x0E:
+                video_draw_pixel( x + 4, row, color );
+                video_draw_pixel( x + 5, row, color );
+                video_draw_pixel( x + 6, row, color );
+                break;
+            case 0x0F:
+                video_draw_pixel( x + 4, row, color );
+                video_draw_pixel( x + 5, row, color );
+                video_draw_pixel( x + 6, row, color );
+                video_draw_pixel( x + 7, row, color );
+                break;
         }
     }
 }
