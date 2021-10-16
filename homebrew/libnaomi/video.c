@@ -18,6 +18,12 @@ static unsigned int global_video_width = 0;
 static unsigned int global_video_height = 0;
 static unsigned int global_video_depth = 0;
 static unsigned int global_video_vertical = 0;
+static uint32_t global_background_color = 0;
+static uint32_t *global_background_fill_start = 0;
+static uint32_t *global_background_fill_end = 0;
+static uint32_t global_background_fill_color = 0;
+static unsigned int global_background_set = 0;
+static uint32_t global_buffer_offset[2];
 
 
 void video_wait_for_vblank()
@@ -30,8 +36,28 @@ void video_wait_for_vblank()
     // for now this is how it works.
     dimm_comms_poll();
 
-    while(!(videobase[POWERVR2_SYNC_STAT] & 0x01ff)) { ; }
-    while((videobase[POWERVR2_SYNC_STAT] & 0x01ff)) { ; }
+    // Handle filling the background of the other screen while we wait.
+    if (global_background_set) {
+        void *next_buffer_base = (void *)((VRAM_BASE + global_buffer_offset[buffer_loc ? 0 : 1]) | 0xA0000000);
+        if (global_video_depth == 2) {
+            global_background_fill_start = (uint32_t *)next_buffer_base;
+            global_background_fill_end = &global_background_fill_start[((global_video_width * global_video_height) / 2)];
+        }
+        else {
+            // TODO
+        }
+    }
+
+    while(!(videobase[POWERVR2_SYNC_STAT] & 0x01ff)) {
+        if (global_background_fill_start != global_background_fill_end) {
+            *global_background_fill_start++ = global_background_fill_color;
+        }
+    }
+    while((videobase[POWERVR2_SYNC_STAT] & 0x01ff)) {
+        if (global_background_fill_start != global_background_fill_end) {
+            *global_background_fill_start++ = global_background_fill_color;
+        }
+    }
 }
 
 unsigned int video_width()
@@ -69,11 +95,19 @@ void video_init_simple()
     global_video_width = 640;
     global_video_height = 480;
     global_video_depth = 2;
+    global_background_color = 0;
+    global_background_set = 0;
+    global_buffer_offset[0] = 0;
+    global_buffer_offset[1] = global_video_width * global_video_height * global_video_depth;
 
     // First, read the EEPROM and figure out if we're vertical orientation.
     eeprom_t eeprom;
     eeprom_read(&eeprom);
     global_video_vertical = eeprom.system.monitor_orientation == MONITOR_ORIENTATION_VERTICAL ? 1 : 0;
+
+    // Now, zero out the screen so there's no garbage if we never display.
+    void *zero_base = (void *)(VRAM_BASE | 0xA0000000);
+    memset(zero_base, 0, global_video_width * global_video_height * global_video_depth * 2);
 
     // Set up video timings copied from Naomi BIOS.
     videobase[POWERVR2_VRAM_CFG3] = 0x15D1C955;
@@ -193,6 +227,21 @@ void video_fill_screen(uint32_t color)
         {
             *start++ = realcolor;
         }
+    }
+    else
+    {
+        // TODO
+    }
+}
+
+void video_set_background_color(uint32_t color)
+{
+    video_fill_screen(color);
+    global_background_set = 1;
+
+    if(global_video_depth == 2)
+    {
+        global_background_fill_color = (color & 0xFFFF) | ((color << 16) & 0xFFFF0000);
     }
     else
     {
@@ -512,16 +561,17 @@ void video_draw_text( int x, int y, uint32_t color, const char * const msg )
 void video_display()
 {
     volatile unsigned int *videobase = (volatile unsigned int *)POWERVR2_BASE;
-    uint32_t buffer_offset[2] = {
-        0,
-        global_video_width * global_video_height * global_video_depth,
-    };
 
-    // Swap buffers in HW
-    videobase[POWERVR2_FB_DISPLAY_ADDR_1] = buffer_offset[buffer_loc];
-    videobase[POWERVR2_FB_DISPLAY_ADDR_2] = buffer_offset[buffer_loc] + (global_video_width * global_video_depth);
+    // Swap buffers in HW.
+    videobase[POWERVR2_FB_DISPLAY_ADDR_1] = global_buffer_offset[buffer_loc];
+    videobase[POWERVR2_FB_DISPLAY_ADDR_2] = global_buffer_offset[buffer_loc] + (global_video_width * global_video_depth);
 
-    // Swap buffer pointer in SW
+    // Swap buffer pointer in SW.
     buffer_loc = buffer_loc ? 0 : 1;
-    buffer_base = (void *)((VRAM_BASE + buffer_offset[buffer_loc]) | 0xA0000000);
+    buffer_base = (void *)((VRAM_BASE + global_buffer_offset[buffer_loc]) | 0xA0000000);
+
+    // Finish filling in the background.
+    while (global_background_fill_start != global_background_fill_end) {
+        *global_background_fill_start++ = global_background_fill_color;
+    }
 }

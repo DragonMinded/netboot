@@ -57,6 +57,7 @@ void main()
 {
     // We just want a simple display buffer.
     video_init_simple();
+    video_set_background_color(rgb(48, 48, 48));
 
     char buffer[64];
     unsigned int counter = 0;
@@ -67,7 +68,6 @@ void main()
     while ( 1 )
     {
         // Draw a few simple things on the screen.
-        video_fill_screen(rgb(48, 48, 48));
         video_draw_text(100, 180, rgb(255, 255, 255), "Net Dimm communications test stub.");
         video_draw_text(100, 200, rgb(255, 0, 255), "Use the peek/poke commands to talk to this code!");
 

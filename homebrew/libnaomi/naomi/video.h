@@ -53,6 +53,7 @@ void video_init_simple();
 uint32_t rgb(unsigned int r, unsigned int g, unsigned int b);
 uint32_t rgba(unsigned int r, unsigned int g, unsigned int b, unsigned int a);
 void video_fill_screen(uint32_t color);
+void video_set_background_color(uint32_t color);
 void video_fill_box(int x0, int y0, int x1, int y1, uint32_t color);
 void video_draw_pixel(int x, int y, uint32_t color);
 void video_draw_line(int x0, int y0, int x1, int y1, uint32_t color);

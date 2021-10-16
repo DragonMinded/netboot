@@ -6,6 +6,7 @@
 void main()
 {
     video_init_simple();
+    video_set_background_color(rgb(48, 48, 48));
 
     char buffer[64];
     unsigned int counter = 0;
@@ -17,7 +18,6 @@ void main()
         int draw_time = profile_start();
 
         // Draw a few simple things on the screen.
-        video_fill_screen(rgb(48, 48, 48));
         video_fill_box(20, 20, 100, 100, rgb(0, 0, 0));
         video_draw_line(20, 20, 100, 100, rgb(0, 255, 0));
         video_draw_line(100, 20, 20, 100, rgb(0, 255, 0));
