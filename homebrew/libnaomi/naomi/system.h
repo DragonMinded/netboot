@@ -9,6 +9,8 @@ extern "C" {
 #define UNCACHED_MIRROR 0xA0000000
 #define PHYSICAL_MASK 0x0FFFFFFF
 
+#define STORE_QUEUE_BASE 0xE0000000
+
 // Constants that relate to the Naomi's memory map.
 #define BIOS_BASE 0x00000000
 #define BIOS_SIZE 0x200000
@@ -24,6 +26,8 @@ extern "C" {
 
 #define RAM_BASE 0x0c000000
 #define RAM_SIZE 0x2000000
+
+void hw_memset(void *addr, uint32_t value, unsigned int amount);
 
 #ifdef __cplusplus
 }

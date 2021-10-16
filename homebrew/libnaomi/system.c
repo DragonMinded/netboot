@@ -3,8 +3,13 @@
 #include <sys/types.h>
 #include <sys/reent.h>
 #include <stdlib.h>
+#include "naomi/system.h"
 #include "naomi/maple.h"
 #include "naomi/timer.h"
+
+#define CCR (*(uint32_t *)0xFF00001C)
+#define QACR0 (*(uint32_t *)0xFF000038)
+#define QACR1 (*(uint32_t *)0xFF00003C)
 
 int errno;
 
@@ -47,7 +52,7 @@ void _enter()
     uint32_t _boot_mode = boot_mode;
 
     // Invalidate cache, as is done in real games.
-    ((uint32_t *)0xFF00001C)[0] = 0x905;
+    CCR = 0x905;
 
     // Set up system DMA to allow for things like Maple to operate. This
     // was kindly copied from the Mvc2 init code after bisecting to it
@@ -70,6 +75,8 @@ void _enter()
         ctor_ptr++;
     }
 
+    // Execute main/test executable based on boot variable set in
+    // crt0.s which comes from the entrypoint used to start the code.
     if(_boot_mode == 0)
     {
         int status;
@@ -94,6 +101,47 @@ void _enter()
 
         _exit(status);
     }
+}
+
+void hw_memset(void *addr, uint32_t value, unsigned int amount)
+{
+    // Very similar to a standard memset, but the address pointer must be aligned
+    // to a 32 byte boundary, the amount must be a multiple of 32 bytes and the
+    // value must be 32 bits. TODO: The data must not also cross any memory boundary
+    // that would change address bits 28:26. This could be fixed by detecting such
+    // a possibility and updating QACR0/1 during the copy loop.
+
+    // Set the base queue address pointer to the queue location with address bits
+    // 25:5. The bottom bits should be all 0s since hw_memset requires an alignment
+    // to a 32 byte boundary. We will use both queue areas since SQ0/SQ1 specification
+    // is the same bit as address bit 5. Technically this means the below queue setup
+    // interleaves the data between the two queues, but it really does not matter what
+    // order the hardware copies things.
+    uint32_t *queue = (uint32_t *)(STORE_QUEUE_BASE | (((uint32_t)addr) & 0x03FFFFE0));
+
+    // Set the top address bits (28:26) into the store queue address control registers.
+    QACR0 = (((uint32_t)addr) >> 24) & 0x1C;
+    QACR1 = (((uint32_t)addr) >> 24) & 0x1C;
+
+    // Now, set up both store queues to contain the same value that we want to memset.
+    // This is 8 32-bit values per store queue.
+    for (int i = 0; i < 16; i++) {
+        queue[i] = value;
+    }
+
+    // Now, trigger the hardware to copy the values from the queue to the address we
+    // care about, triggering one 32-byte prefetch at a time.
+    for (int cycles = amount >> 5; cycles > 0; cycles--)
+    {
+        __asm__("pref @%0" : : "r"(queue));
+        queue += 8;
+    }
+
+    // Finally, attempt a new write to both queues in order to stall the CPU until the
+    // last write is done.
+    queue = (uint32_t *)STORE_QUEUE_BASE;
+    queue[0] = 0;
+    queue[8] = 0;
 }
 
 _ssize_t _read_r(struct _reent *reent, int file, void *ptr, size_t len)

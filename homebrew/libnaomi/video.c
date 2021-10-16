@@ -1,4 +1,3 @@
-#include <memory.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include "naomi/video.h"
@@ -19,8 +18,8 @@ static unsigned int global_video_height = 0;
 static unsigned int global_video_depth = 0;
 static unsigned int global_video_vertical = 0;
 static uint32_t global_background_color = 0;
-static uint32_t *global_background_fill_start = 0;
-static uint32_t *global_background_fill_end = 0;
+static uint32_t global_background_fill_start = 0;
+static uint32_t global_background_fill_end = 0;
 static uint32_t global_background_fill_color = 0;
 static unsigned int global_background_set = 0;
 static uint32_t global_buffer_offset[2];
@@ -38,10 +37,9 @@ void video_wait_for_vblank()
 
     // Handle filling the background of the other screen while we wait.
     if (global_background_set) {
-        void *next_buffer_base = (void *)((VRAM_BASE + global_buffer_offset[buffer_loc ? 0 : 1]) | 0xA0000000);
         if (global_video_depth == 2) {
-            global_background_fill_start = (uint32_t *)next_buffer_base;
-            global_background_fill_end = &global_background_fill_start[((global_video_width * global_video_height) / 2)];
+            global_background_fill_start = ((VRAM_BASE + global_buffer_offset[buffer_loc ? 0 : 1]) | 0xA0000000);
+            global_background_fill_end = global_background_fill_start + ((global_video_width * global_video_height) * 2);
         }
         else {
             // TODO
@@ -49,13 +47,15 @@ void video_wait_for_vblank()
     }
 
     while(!(videobase[POWERVR2_SYNC_STAT] & 0x01ff)) {
-        if (global_background_fill_start != global_background_fill_end) {
-            *global_background_fill_start++ = global_background_fill_color;
+        if (global_background_fill_start < global_background_fill_end) {
+            hw_memset((void *)global_background_fill_start, global_background_fill_color, 32);
+            global_background_fill_start += 32;
         }
     }
     while((videobase[POWERVR2_SYNC_STAT] & 0x01ff)) {
-        if (global_background_fill_start != global_background_fill_end) {
-            *global_background_fill_start++ = global_background_fill_color;
+        if (global_background_fill_start < global_background_fill_end) {
+            hw_memset((void *)global_background_fill_start, global_background_fill_color, 32);
+            global_background_fill_start += 32;
         }
     }
 }
@@ -107,7 +107,7 @@ void video_init_simple()
 
     // Now, zero out the screen so there's no garbage if we never display.
     void *zero_base = (void *)(VRAM_BASE | 0xA0000000);
-    memset(zero_base, 0, global_video_width * global_video_height * global_video_depth * 2);
+    hw_memset(zero_base, 0, global_video_width * global_video_height * global_video_depth * 2);
 
     // Set up video timings copied from Naomi BIOS.
     videobase[POWERVR2_VRAM_CFG3] = 0x15D1C955;
@@ -218,15 +218,7 @@ void video_fill_screen(uint32_t color)
 {
     if(global_video_depth == 2)
     {
-        /* 16bpp colors, fill as fast as we can */
-        uint32_t realcolor = (color & 0xFFFF) | ((color << 16) & 0xFFFF0000);
-        uint32_t *start = (uint32_t *)buffer_base;
-        uint32_t *end = &start[((global_video_width * global_video_height) / 2)];
-
-        while (start != end)
-        {
-            *start++ = realcolor;
-        }
+        hw_memset(buffer_base, (color & 0xFFFF) | ((color << 16) & 0xFFFF0000), global_video_width * global_video_height * 2);
     }
     else
     {
@@ -571,7 +563,9 @@ void video_display()
     buffer_base = (void *)((VRAM_BASE + global_buffer_offset[buffer_loc]) | 0xA0000000);
 
     // Finish filling in the background.
-    while (global_background_fill_start != global_background_fill_end) {
-        *global_background_fill_start++ = global_background_fill_color;
+    if (global_background_fill_start < global_background_fill_end) {
+        hw_memset((void *)global_background_fill_start, global_background_fill_color, global_background_fill_end - global_background_fill_start);
     }
+    global_background_fill_start = 0;
+    global_background_fill_end = 0;
 }
