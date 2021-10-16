@@ -304,13 +304,25 @@ class NetDimm:
             raise NetDimmException("Unexpected data returned from peek4 packet!")
         if response.length != 8:
             raise NetDimmException("Unexpected data length returned from peek4 packet!")
-        _unk, val = struct.unpack("<II", response.data)
+        _success, val = struct.unpack("<II", response.data)
         return cast(int, val)
 
     def __host_poke(self, addr: int, data: int, type: PeekPokeTypeEnum) -> None:
         # Same type comment as the above peek4 command. Same caveats about naomi systems in particular.
         self.__validate_address(addr, type)
         self.__send_packet(NetDimmPacket(0x11, 0x00, struct.pack("<III", addr, type.value, data)))
+
+    def __host_control_read(self) -> int:
+        # Read the control data location from the host that the net dimm is plugged into.
+        self.__send_packet(NetDimmPacket(0x16, 0x00))
+        response = self.__recv_packet()
+        if response.pktid != 0x10:
+            # Yes, its buggy for this as well, and they reused the peek ID.
+            raise NetDimmException("Unexpected data returned from control read packet!")
+        if response.length != 8:
+            raise NetDimmException("Unexpected data length returned from control read packet!")
+        _success, val = struct.unpack("<II", response.data)
+        return cast(int, val)
 
     def __exchange_host_mode(self, mask_bits: int, set_bits: int) -> int:
         self.__send_packet(NetDimmPacket(0x07, 0x00, struct.pack("<I", ((mask_bits & 0xFF) << 8) | (set_bits & 0xFF))))
@@ -405,7 +417,7 @@ class NetDimm:
             chunk = self.__recv_packet()
 
             if chunk.pktid != 0x04:
-                # For some reason, this is wrong for 3.17?
+                # Yes, they have a bug and they used the upload packet type here.
                 raise NetDimmException("Unexpected data returned from download packet!")
             if chunk.length <= 10:
                 raise NetDimmException("Unexpected data length returned from download packet!")
@@ -552,12 +564,10 @@ class NetDimm:
         # less than 10, and if so multiplied by 60,000. If not, the default value of 60,000 is used.
         self.__send_packet(NetDimmPacket(0x17, 0x00, struct.pack("<I", minutes)))
 
-    # TODO: We are missing any documentation for packet IDs 0x0B, 0x16, 0x1F, 0xF0 and 0xF1.
+    # TODO: We are missing any documentation for packet IDs 0x0B, 0x1F, 0xF0 and 0xF1.
     # At least according to triforcetools.py, 0xF0 is "host_read16" so 0xF1 might be "host_write16"
     # much like there is a peek4/poke4. The rest of the packet types documented in triforcetools.py
     # that don't appear here are not in the master switch statement for 3.17 so they might be from
     # a different version of the net dimm firmware. I have not bothered to document the expected
     # sizes or returns for any of these packets. 0x0B appears to only be for triforce/chihiro, as
-    # firmware 3.17 explicitly checks against naomi and returns if it is the current target. 0x16
-    # appears to be something to do with "control" but I'm not sure what that means. triforcetools.py
-    # had some control packet as well, but it doesn't match the ID.
+    # firmware 3.17 explicitly checks against naomi and returns if it is the current target.
