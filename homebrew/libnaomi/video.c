@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include "naomi/video.h"
 #include "naomi/system.h"
+#include "naomi/dimmcomms.h"
 #include "font.h"
 
 
@@ -18,6 +19,12 @@ static int buffer_loc = 0;
 void video_wait_for_vblank()
 {
     volatile unsigned int *videobase = (volatile unsigned int *)POWERVR2_BASE;
+
+    // Poll for dimm communications during wait for vblank, since this is
+    // a convenient place to put this. It probably should go int an interrupt
+    // handler or something, or get added to video_display() as well, but
+    // for now this is how it works.
+    dimm_comms_poll();
 
     while(!(videobase[POWERVR2_SYNC_STAT] & 0x01ff)) { ; }
     while((videobase[POWERVR2_SYNC_STAT] & 0x01ff)) { ; }

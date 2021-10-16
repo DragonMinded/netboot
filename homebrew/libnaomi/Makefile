@@ -6,6 +6,8 @@ all: libnaomi.a
 # The source files that make libnaomi.a tick.
 SRCS += crt0.s
 SRCS += system.c
+SRCS += timer.c
+SRCS += dimmcomms.c
 SRCS += video.c
 SRCS += maple.c
 SRCS += eeprom.c

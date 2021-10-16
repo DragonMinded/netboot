@@ -4,6 +4,7 @@
 #include <sys/reent.h>
 #include <stdlib.h>
 #include "naomi/maple.h"
+#include "naomi/timer.h"
 
 int errno;
 
@@ -73,9 +74,11 @@ void _enter()
     {
         int status;
 
+        timer_init();
         maple_init();
         status = main();
         maple_free();
+        timer_free();
 
         _exit(status);
     }
@@ -83,9 +86,11 @@ void _enter()
     {
         int status;
 
+        timer_init();
         maple_init();
         status = test();
         maple_free();
+        timer_free();
 
         _exit(status);
     }

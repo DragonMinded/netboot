@@ -1,148 +1,68 @@
 #include <stdio.h>
+#include <string.h>
 #include <stdint.h>
 #include "naomi/video.h"
+#include "naomi/dimmcomms.h"
 
+uint32_t last_read_addr = 0;
+uint32_t last_read_length = 0;
+uint32_t last_read_data = 0;
+uint32_t last_write_addr = 0;
+uint32_t last_write_length = 0;
+uint32_t last_write_data = 0;
 
-#define REG_A05F6904 ((volatile uint32_t *)0xA05F6904)
-#define REG_A05F6914 ((volatile uint32_t *)0xA05F6914)
-#define NAOMI_DIMM_COMMAND ((volatile uint16_t *)0xA05F703C)
-#define NAOMI_DIMM_OFFSETL ((volatile uint16_t *)0xA05F7040)
-#define NAOMI_DIMM_PARAMETERL ((volatile uint16_t *)0xA05F7044)
-#define NAOMI_DIMM_PARAMETERH ((volatile uint16_t *)0xA05F7048)
-#define NAOMI_DIMM_STATUS ((volatile uint16_t *)0xA05F704C)
-#define REG_A05F7418 ((volatile int32_t *)0xA05F7418)
-
-#define CONST_NO_DIMM 0xFFFF
-#define CONST_DIMM_HAS_COMMAND 0x8000
-#define CONST_DIMM_COMMAND_MASK 0x7E00
-#define CONST_DIMM_TOP_MASK 0x1FF
-
-
-int check_has_dimm_inserted(int param_1)
+uint32_t peek_memory(unsigned int address, int size)
 {
-    if ((param_1 != 0) && (*REG_A05F7418 != 0)) {
-        return 0;
+    static uint32_t memval = 0x12345678;
+
+    if (size == 1)
+    {
+        last_read_addr = address;
+        last_read_length = size;
+        last_read_data = memval & 0xFF;
+        memval++;
+        return last_read_data;
     }
-    if (*NAOMI_DIMM_COMMAND == CONST_NO_DIMM) {
-        return -1;
+    if (size == 2)
+    {
+        last_read_addr = address;
+        last_read_length = size;
+        last_read_data = memval & 0xFFFF;
+        memval++;
+        return last_read_data;
     }
-    return 1;
+    if (size == 4)
+    {
+        last_read_addr = address;
+        last_read_length = size;
+        last_read_data = memval;
+        memval++;
+        return last_read_data;
+    }
+
+    return 0;
 }
 
-void marshall_dimm_command()
+void poke_memory(unsigned int address, int size, uint32_t data)
 {
-    static uint32_t base_address = 0;
-
-    if (*REG_A05F7418 == 0) {
-        // Do stuff here
-        uint16_t dimm_command = *NAOMI_DIMM_COMMAND;
-
-        if (dimm_command & CONST_DIMM_HAS_COMMAND) {
-            // Get the command ID
-            unsigned int dimm_command_id = (dimm_command & CONST_DIMM_COMMAND_MASK) >> 9;
-            unsigned char offseth = 0;
-            unsigned short offsetl = 0;
-            unsigned short paraml = 0;
-            unsigned short paramh = 0;
-
-            switch (dimm_command_id) {
-                case 0:
-                {
-                    /* NOOP command */
-                    break;
-                }
-                case 1:
-                {
-                    /* Unknown lookup of some BIOS value. We don't implement this. */
-                    break;
-                }
-                case 3:
-                {
-                    /* Update base address */
-                    base_address = (((*NAOMI_DIMM_PARAMETERH) & 0xFFFF) << 16) | ((*NAOMI_DIMM_PARAMETERL) & 0xFFFF);
-                    break;
-                }
-                case 4:
-                {
-                    /* Peek 8-bit value out of memory */
-                    uint32_t address = (((dimm_command & CONST_DIMM_TOP_MASK) << 16) | (*NAOMI_DIMM_OFFSETL) & 0xFFFF) + base_address;
-                    paramh = 0;
-                    paraml = 0xAA;
-                    break;
-                }
-                case 5:
-                {
-                    /* Peek 16-bit value out of memory */
-                    uint32_t address = (((dimm_command & CONST_DIMM_TOP_MASK) << 16) | (*NAOMI_DIMM_OFFSETL) & 0xFFFF) + base_address;
-                    paramh = 0;
-                    paraml = 0xCAFE;
-                    break;
-                }
-                case 6:
-                {
-                    /* Peek 32-bit value out of memory */
-                    uint32_t address = (((dimm_command & CONST_DIMM_TOP_MASK) << 16) | (*NAOMI_DIMM_OFFSETL) & 0xFFFF) + base_address;
-                    paramh = 0xDEAD;
-                    paraml = 0xBEEF;
-                    break;
-                }
-                case 8:
-                {
-                    /* Poke 8-bit value into memory */
-                    uint32_t address = (((dimm_command & CONST_DIMM_TOP_MASK) << 16) | (*NAOMI_DIMM_OFFSETL) & 0xFFFF) + base_address;
-                    uint8_t value = (*NAOMI_DIMM_PARAMETERL) & 0xFF;
-                    break;
-                }
-                case 9:
-                {
-                    /* Poke 16-bit value into memory */
-                    uint32_t address = (((dimm_command & CONST_DIMM_TOP_MASK) << 16) | (*NAOMI_DIMM_OFFSETL) & 0xFFFF) + base_address;
-                    uint16_t value = (*NAOMI_DIMM_PARAMETERL) & 0xFFFF;
-                    break;
-                }
-                case 10:
-                {
-                    /* Poke 32-bit value into memory */
-                    uint32_t address = (((dimm_command & CONST_DIMM_TOP_MASK) << 16) | (*NAOMI_DIMM_OFFSETL) & 0xFFFF) + base_address;
-                    uint32_t value = (((*NAOMI_DIMM_PARAMETERH) & 0xFFFF) << 16) | ((*NAOMI_DIMM_PARAMETERL) & 0xFFFF);
-                    break;
-                }
-            }
-
-            // Acknowledge the command, return the response.
-            *NAOMI_DIMM_COMMAND = (dimm_command & CONST_DIMM_COMMAND_MASK) | (offseth & 0xFF);
-            *NAOMI_DIMM_OFFSETL = offsetl;
-            *NAOMI_DIMM_PARAMETERL = paraml;
-            *NAOMI_DIMM_PARAMETERH = paramh;
-            *NAOMI_DIMM_STATUS = *NAOMI_DIMM_STATUS | 0x100;
-
-            do {
-                /* Do some spinlop to wait for some other register. */
-            } while ((*REG_A05F6904 & 8) != 0);
-
-            /* Send interrupt to the DIMM itself saying we have data. */
-            *NAOMI_DIMM_STATUS = *NAOMI_DIMM_STATUS & 0xFFFE;
-        }
-        else {
-            /* Acknowledge the command */
-            *NAOMI_DIMM_STATUS = *NAOMI_DIMM_STATUS | 0x100;
-            do {
-                /* Do some spinloop to wait for some other register. */
-            } while ((*REG_A05F6904 & 8) != 0);
-        }
-    }
-    else {
-        // Some other acknowledge?
-        *REG_A05F6914 = *REG_A05F6914 & 0xfffffff7;
+    if (size == 1 || size == 2 || size == 4)
+    {
+        last_write_addr = address;
+        last_write_data = data;
+        last_write_length = size;
     }
 }
 
 void main()
 {
+    // We just want a simple display buffer.
     video_init_simple();
 
     char buffer[64];
     unsigned int counter = 0;
+
+    // Attach our handler so we can see what the net dimm is doing.
+    dimm_comms_attach_hooks(&peek_memory, &poke_memory);
 
     while ( 1 )
     {
@@ -151,14 +71,32 @@ void main()
         video_draw_text(100, 180, rgb(255, 255, 255), "Net Dimm communications test stub.");
         video_draw_text(100, 200, rgb(255, 0, 255), "Use the peek/poke commands to talk to this code!");
 
+        // Display the last read/write that was executed.
+        if (last_read_length == 1) {
+            sprintf(buffer, "Last read: %08X (1 byte: %02X)", last_read_addr, last_read_data & 0xFF);
+        } else if (last_read_length == 2) {
+            sprintf(buffer, "Last read: %08X (2 bytes: %02X)", last_read_addr, last_read_data & 0xFFFF);
+        } else if (last_read_length == 4) {
+            sprintf(buffer, "Last read: %08X (4 bytes: %02X)", last_read_addr, last_read_data);
+        } else {
+            strcpy(buffer, "No reads...");
+        }
+        video_draw_text(100, 220, rgb(0, 255, 0), buffer);
+
+        if (last_write_length == 1) {
+            sprintf(buffer, "Last write: %08X = %02X", last_write_addr, last_write_data & 0xFF);
+        } else if (last_write_length == 2) {
+            sprintf(buffer, "Last write: %08X = %04X", last_write_addr, last_write_data & 0xFFFF);
+        } else if (last_write_length == 4) {
+            sprintf(buffer, "Last write: %08X = %08X", last_write_addr, last_write_data);
+        } else {
+            strcpy(buffer, "No writes...");
+        }
+        video_draw_text(100, 240, rgb(0, 255, 0), buffer);
+
         // Display a liveness counter that goes up 60 times a second.
         sprintf(buffer, "Aliveness counter: %d", counter++);
-        video_draw_text(100, 220, rgb(200, 200, 20), buffer);
-
-        // Copy BIOS DIMM service routine basics.
-        if (check_has_dimm_inserted(1) == 1) {
-            marshall_dimm_command();
-        }
+        video_draw_text(100, 260, rgb(200, 200, 20), buffer);
 
         // Actually draw the buffer.
         video_wait_for_vblank();
