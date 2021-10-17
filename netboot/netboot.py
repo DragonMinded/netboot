@@ -94,7 +94,7 @@ class NetDimm:
         return f"NetDimm(ip={repr(self.ip)}, version={repr(self.version)})"
 
     def info(self) -> NetDimmInfo:
-        with self.__connection():
+        with self.connection():
             # Ask for DIMM firmware info and such.
             info = self.__get_information()
 
@@ -103,7 +103,7 @@ class NetDimm:
             return info
 
     def send(self, data: bytes, key: Optional[bytes] = None, disable_crc_check: bool = False, progress_callback: Optional[Callable[[int, int], None]] = None) -> None:
-        with self.__connection():
+        with self.connection():
             # First, signal back to calling code that we've started
             if progress_callback:
                 progress_callback(0, len(data))
@@ -133,7 +133,7 @@ class NetDimm:
             self.__upload_file(data, key, progress_callback or (lambda _cur, _tot: None))
 
     def receive(self, progress_callback: Optional[Callable[[int, int], None]] = None) -> Optional[bytes]:
-        with self.__connection():
+        with self.connection():
             info = self.__get_information()
 
             if info.game_crc_status in {CRCStatusEnum.STATUS_VALID, CRCStatusEnum.STATUS_DISABLED} and info.current_game_size > 0:
@@ -166,7 +166,7 @@ class NetDimm:
                 return None
 
     def reboot(self) -> None:
-        with self.__connection():
+        with self.connection():
             # restart host, this wil boot into game
             self.__restart()
 
@@ -174,11 +174,11 @@ class NetDimm:
             self.__set_time_limit(10)
 
     def peek(self, addr: int, type: PeekPokeTypeEnum) -> int:
-        with self.__connection():
+        with self.connection():
             return self.__host_peek(addr, type)
 
     def poke(self, addr: int, type: PeekPokeTypeEnum, data: int) -> None:
-        with self.__connection():
+        with self.connection():
             self.__host_poke(addr, data, type)
 
     def __print(self, string: str, newline: bool = True) -> None:
@@ -201,7 +201,12 @@ class NetDimm:
         return b"".join(res)
 
     @contextmanager
-    def __connection(self) -> Generator[None, None, None]:
+    def connection(self) -> Generator[None, None, None]:
+        if self.sock is not None:
+            # We are already connected!
+            yield
+            return
+
         # connect to the net dimm. Port is tcp/10703.
         # note that this port is only open on
         # - all Type-3 triforces,
