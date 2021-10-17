@@ -122,6 +122,13 @@ def main() -> int:
         )
     )
     parser.add_argument(
+        '-o',
+        '--main-binary-includes-test-binary',
+        action='store_true',
+        help='Mark that the main binary also includes the test binary entrypoint.',
+    )
+
+    parser.add_argument(
         '-b',
         '--pad-before-data',
         type=str,
@@ -220,6 +227,17 @@ def main() -> int:
                 load_address=int(offset, 16),
             )
         )
+        if args.main_binary_includes_test_binary:
+            # The test binary entrypoint exists in the main binary, so
+            # we should copy the main sections to test as well.
+            test_sections.append(
+                NaomiRomSection(
+                    offset=romoffset,
+                    length=len(sectiondata),
+                    load_address=int(offset, 16),
+                )
+            )
+
         romoffset += len(sectiondata)
         romdata += sectiondata
 

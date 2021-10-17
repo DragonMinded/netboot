@@ -21,6 +21,7 @@ eepromtest.bin: build/naomi.bin
 		--publisher "DragonMinded" \
 		--section $<,${START_ADDR} \
 		--entrypoint ${MAIN_ADDR} \
+		--main-binary-includes-test-binary \
 		--test-entrypoint ${TEST_ADDR}
 
 # Include a simple clean target which wipes the build directory

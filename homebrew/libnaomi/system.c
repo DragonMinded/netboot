@@ -11,6 +11,11 @@
 #define QACR0 (*(uint32_t *)0xFF000038)
 #define QACR1 (*(uint32_t *)0xFF00003C)
 
+#define SYSCALL_VECTOR_BASE ((uint32_t *)0xAC018000)
+#define SYSCALL_READ_AND_PERFORM_DIMM_COMMAND 0x9
+#define SYSCALL_ENTER_TEST_MODE 0x11
+#define SYSCALL_POLL_HAS_DIMM_COMMAND 0x14
+
 int errno;
 
 /* This is used by _sbrk.  */
@@ -142,6 +147,15 @@ void hw_memset(void *addr, uint32_t value, unsigned int amount)
     queue = (uint32_t *)STORE_QUEUE_BASE;
     queue[0] = 0;
     queue[8] = 0;
+}
+
+void enter_test_mode()
+{
+    // Look up the address of the enter test mode syscall.
+    uint32_t test_mode_syscall = SYSCALL_VECTOR_BASE[SYSCALL_ENTER_TEST_MODE] | UNCACHED_MIRROR;
+
+    // Call it.
+    ((void (*)())test_mode_syscall)();
 }
 
 _ssize_t _read_r(struct _reent *reent, int file, void *ptr, size_t len)

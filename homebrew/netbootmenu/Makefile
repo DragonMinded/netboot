@@ -19,8 +19,10 @@ netbootmenu.bin: build/naomi.bin
 	PYTHONPATH=../../ python3 -m scripts.makerom $@ \
 		--title "Net Boot ROM Picker Menu" \
 		--publisher "DragonMinded" \
+		--serial "RP0" \
 		--section $<,${START_ADDR} \
 		--entrypoint ${MAIN_ADDR} \
+		--main-binary-includes-test-binary \
 		--test-entrypoint ${TEST_ADDR}
 
 # Include a simple clean target which wipes the build directory

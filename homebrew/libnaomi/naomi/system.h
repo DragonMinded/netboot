@@ -27,7 +27,12 @@ extern "C" {
 #define RAM_BASE 0x0c000000
 #define RAM_SIZE 0x2000000
 
+// A 32-byte aligned and 32-byte multiple hardware memset that is about 3x faster than
+// the fastest tight loop that you can write in software.
 void hw_memset(void *addr, uint32_t value, unsigned int amount);
+
+// Syscalls that request the BIOS do something.
+void enter_test_mode();
 
 #ifdef __cplusplus
 }

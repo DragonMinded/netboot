@@ -3,6 +3,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include "naomi/video.h"
+#include "naomi/maple.h"
+#include "naomi/eeprom.h"
+#include "naomi/system.h"
 #include "naomi/dimmcomms.h"
 
 #define MAX_OUTSTANDING_PACKETS 128
@@ -426,6 +429,10 @@ void poke_memory(unsigned int address, int size, uint32_t data)
 
 void main()
 {
+    // Grab the system configuration
+    eeprom_t settings;
+    eeprom_read(&settings);
+
     // Attach our communication handler for packet sending/receiving.
     packetlib_init();
 
@@ -442,6 +449,15 @@ void main()
 
     while ( 1 )
     {
+        // First, poll the buttons and act accordingly.
+        jvs_buttons_t buttons = maple_request_jvs_buttons(0x01, settings.system.players);
+
+        if (buttons.test || buttons.psw1)
+        {
+            // Request to go into system test mode.
+            enter_test_mode();
+        }
+
         // Draw a few simple things on the screen.
         video_draw_text(100, 200, rgb(255, 255, 255), "Menu test...");
 
@@ -482,12 +498,27 @@ void main()
 
 void test()
 {
+    // Grab the system configuration
+    eeprom_t settings;
+    eeprom_read(&settings);
+
+    // Initialize a simple console
     video_init_simple();
+    video_set_background_color(rgb(0, 0, 0));
 
-    video_fill_screen(rgb(48, 48, 48));
-    video_draw_text(320 - 56, 236, rgb(255, 255, 255), "test mode stub");
-    video_wait_for_vblank();
-    video_display();
+    while ( 1 )
+    {
+        // First, poll the buttons and act accordingly.
+        jvs_buttons_t buttons = maple_request_jvs_buttons(0x01, settings.system.players);
 
-    while ( 1 ) { ; }
+        if (buttons.psw2 || buttons.player1.service || (settings.system.players >= 2 && buttons.player2.service))
+        {
+            // Request to go into system test mode.
+            enter_test_mode();
+        }
+
+        video_draw_text(320 - 56, 236, rgb(255, 255, 255), "test mode stub\n\n[service] - exit");
+        video_wait_for_vblank();
+        video_display();
+    }
 }
