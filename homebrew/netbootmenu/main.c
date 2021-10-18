@@ -734,6 +734,8 @@ games_list_t *get_games_list(unsigned int *count)
     return (games_list_t *)(*((uint32_t *)(config + GAMES_POINTER_LOC)) + CONFIG_MEMORY_LOCATION);
 }
 
+#define MESSAGE_SELECTION 0x1000
+
 void main()
 {
     // Grab the system configuration
@@ -754,15 +756,49 @@ void main()
     unsigned int count = 0;
     games_list_t *games = get_games_list(&count);
 
+    // Leave 24 pixels of padding on top and bottom of the games list.
+    // Space out games 16 pixels across.
+    unsigned int maxgames = (video_height() - (24 + 16)) / 16;
+
     while ( 1 )
     {
         // First, poll the buttons and act accordingly.
-        jvs_buttons_t buttons = maple_request_jvs_buttons(0x01);
+        maple_poll_buttons();
+        jvs_buttons_t buttons = maple_buttons_pressed();
 
         if (buttons.test || buttons.psw1)
         {
             // Request to go into system test mode.
             enter_test_mode();
+        }
+        if (buttons.player1.up || buttons.player2.up)
+        {
+            // Moved cursor up.
+            if (cursor > 0)
+            {
+                cursor --;
+            }
+            if (cursor < top)
+            {
+                top = cursor;
+            }
+        }
+        else if (buttons.player1.down || buttons.player2.down)
+        {
+            // Moved cursor down.
+            if (cursor < (count - 1))
+            {
+                cursor ++;
+            }
+            if (cursor >= (top + maxgames))
+            {
+                top = cursor - (maxgames - 1);
+            }
+        }
+        else if (buttons.player1.start || buttons.player2.start)
+        {
+            // Made a selection!
+            message_send(MESSAGE_SELECTION, &cursor, 4);
         }
 
         // Now, see if we have a packet to handle.
@@ -783,10 +819,6 @@ void main()
 
         // Now, render the actual list of games.
         {
-            // Leave 24 pixels of padding on top and bottom of the games list.
-            // Space out games 16 pixels across.
-            unsigned int maxgames = (video_height() - (24 + 16)) / 16;
-
             for (unsigned int game = top; game < top + maxgames; game++)
             {
                 if (game >= count)
@@ -820,15 +852,16 @@ void test()
     while ( 1 )
     {
         // First, poll the buttons and act accordingly.
-        jvs_buttons_t buttons = maple_request_jvs_buttons(0x01);
+        maple_poll_buttons();
+        jvs_buttons_t buttons = maple_buttons_pressed();
 
-        if (buttons.psw2 || buttons.player1.service || buttons.player2.service)
+        if (buttons.psw1 || buttons.test)
         {
             // Request to go into system test mode.
             enter_test_mode();
         }
 
-        video_draw_debug_text(320 - 56, 236, rgb(255, 255, 255), "test mode stub\n\n[service] - exit");
+        video_draw_debug_text(320 - 56, 236, rgb(255, 255, 255), "test mode stub\n\n[test] - exit");
         video_wait_for_vblank();
         video_display();
     }

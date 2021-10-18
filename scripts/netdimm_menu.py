@@ -279,6 +279,9 @@ def receive_message(netdimm: NetDimm) -> Optional[Message]:
     return Message(msgid, msgdata)
 
 
+MESSAGE_SELECTION: int = 0x1000
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Provide an on-target menu for selecting games. Currently only works with Naomi.")
     parser.add_argument(
@@ -325,7 +328,7 @@ def main() -> int:
     }.get(args.region, NaomiRomRegionEnum.REGION_JAPAN)
 
     # First, load the rom directory, list out the contents and figure out which ones are naomi games.
-    games: List[Tuple[str, bytes]] = []
+    games: List[Tuple[str, str, bytes]] = []
     romdir = os.path.abspath(args.romdir)
     for filename in [f for f in os.listdir(romdir) if os.path.isfile(os.path.join(romdir, f))]:
         # Grab the header so we can parse it.
@@ -353,11 +356,11 @@ def main() -> int:
         if verbose:
             print(f"Added {name} with serial {serial.decode('ascii')} to ROM list.")
 
-        games.append((name, serial))
+        games.append((filename, name, serial))
 
     # Now, create the settings section.
     config = struct.pack("<II", 8, len(games))
-    for index, (name, serial) in enumerate(games):
+    for index, (_, name, serial) in enumerate(games):
         namebytes = name.encode('ascii')[:127]
         while len(namebytes) < 128:
             namebytes = namebytes + b"\0"
@@ -378,7 +381,18 @@ def main() -> int:
     while True:
         msg = receive_message(netdimm)
         if msg:
-            print(f"Received type: {hex(msg.id)}, length: {len(msg.data)}")
+            if verbose:
+                print(f"Received type: {hex(msg.id)}, length: {len(msg.data)}")
+            if msg.id == MESSAGE_SELECTION:
+                index = struct.unpack("<I", msg.data)[0]
+                filename = os.path.join(romdir, games[index][0])
+                print(f"Requested {games[index][1]} be loaded...")
+
+                with open(filename, "rb") as fp:
+                    gamedata = fp.read()
+                netdimm.send(gamedata, disable_crc_check=True)
+                netdimm.reboot()
+                break
 
     return 0
 

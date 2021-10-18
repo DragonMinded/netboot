@@ -11,6 +11,11 @@ static uint8_t *maple_base = 0;
 static int __outstanding_request = 0;
 static unsigned int __outstanding_request_addr = 0;
 
+// Last and current poll results for maple buttons.
+static jvs_buttons_t last_buttons;
+static jvs_buttons_t cur_buttons;
+static int first_poll = 0;
+
 void maple_wait_for_dma()
 {
     volatile unsigned int *maplebase = (volatile unsigned int *)MAPLE_BASE;
@@ -22,6 +27,11 @@ void maple_wait_for_dma()
 void maple_init()
 {
     volatile unsigned int *maplebase = (volatile unsigned int *)MAPLE_BASE;
+
+    // Reset button polling API.
+    memset(&last_buttons, 0, sizeof(last_buttons));
+    memset(&cur_buttons, 0, sizeof(cur_buttons));
+    first_poll = 0;
 
     // Maple init routines based on Mvc2.
     maplebase[MAPLE_DMA_HW_INIT] = (
@@ -751,5 +761,130 @@ jvs_buttons_t maple_request_jvs_buttons(uint8_t addr)
     // Finally, send another request to be ready next time we poll.
     __outstanding_request = __maple_request_jvs_send_buttons_packet(addr, 1);
     __outstanding_request_addr = addr;
+    return buttons;
+}
+
+void maple_poll_buttons()
+{
+    if (first_poll)
+    {
+        // We already polled at least once, so copy what we have to
+        // the previous buttons.
+        last_buttons = cur_buttons;
+    }
+
+    // Grab the new current buttons.
+    cur_buttons = maple_request_jvs_buttons(0x01);
+
+    if (!first_poll)
+    {
+        // We haven't polled yet, set the last buttons to what we just
+        // polled so if a user starts a game with a button held that is
+        // doesn't register as pressed on the first loop. No half an A
+        // press here!
+        last_buttons = cur_buttons;
+        first_poll = 1;
+    }
+}
+
+jvs_buttons_t maple_buttons_current()
+{
+    // Just return the state of all buttons currently.
+    return cur_buttons;
+}
+
+uint8_t __press(uint8_t old, uint8_t new)
+{
+    return (old == 0 && new != 0) ? 1 : 0;
+}
+
+uint8_t __release(uint8_t old, uint8_t new)
+{
+    return (old != 0 && new == 0) ? 1 : 0;
+}
+
+jvs_buttons_t maple_buttons_pressed()
+{
+    jvs_buttons_t buttons;
+
+    buttons.dip1 = __press(last_buttons.dip1, cur_buttons.dip1);
+    buttons.dip2 = __press(last_buttons.dip2, cur_buttons.dip2);
+    buttons.dip3 = __press(last_buttons.dip3, cur_buttons.dip3);
+    buttons.dip4 = __press(last_buttons.dip4, cur_buttons.dip4);
+    buttons.psw1 = __press(last_buttons.psw1, cur_buttons.psw1);
+    buttons.psw2 = __press(last_buttons.psw2, cur_buttons.psw2);
+    buttons.test = __press(last_buttons.test, cur_buttons.test);
+
+    // Player 1 controls
+    buttons.player1.service = __press(last_buttons.player1.service, cur_buttons.player1.service);
+    buttons.player1.start = __press(last_buttons.player1.start, cur_buttons.player1.start);
+    buttons.player1.up = __press(last_buttons.player1.up, cur_buttons.player1.up);
+    buttons.player1.down = __press(last_buttons.player1.down, cur_buttons.player1.down);
+    buttons.player1.left = __press(last_buttons.player1.left, cur_buttons.player1.left);
+    buttons.player1.right = __press(last_buttons.player1.right, cur_buttons.player1.right);
+    buttons.player1.button1 = __press(last_buttons.player1.button1, cur_buttons.player1.button1);
+    buttons.player1.button2 = __press(last_buttons.player1.button2, cur_buttons.player1.button2);
+    buttons.player1.button3 = __press(last_buttons.player1.button3, cur_buttons.player1.button3);
+    buttons.player1.button4 = __press(last_buttons.player1.button4, cur_buttons.player1.button4);
+    buttons.player1.button5 = __press(last_buttons.player1.button5, cur_buttons.player1.button5);
+    buttons.player1.button6 = __press(last_buttons.player1.button6, cur_buttons.player1.button6);
+
+    // Player 2 controls
+    buttons.player2.service = __press(last_buttons.player2.service, cur_buttons.player2.service);
+    buttons.player2.start = __press(last_buttons.player2.start, cur_buttons.player2.start);
+    buttons.player2.up = __press(last_buttons.player2.up, cur_buttons.player2.up);
+    buttons.player2.down = __press(last_buttons.player2.down, cur_buttons.player2.down);
+    buttons.player2.left = __press(last_buttons.player2.left, cur_buttons.player2.left);
+    buttons.player2.right = __press(last_buttons.player2.right, cur_buttons.player2.right);
+    buttons.player2.button1 = __press(last_buttons.player2.button1, cur_buttons.player2.button1);
+    buttons.player2.button2 = __press(last_buttons.player2.button2, cur_buttons.player2.button2);
+    buttons.player2.button3 = __press(last_buttons.player2.button3, cur_buttons.player2.button3);
+    buttons.player2.button4 = __press(last_buttons.player2.button4, cur_buttons.player2.button4);
+    buttons.player2.button5 = __press(last_buttons.player2.button5, cur_buttons.player2.button5);
+    buttons.player2.button6 = __press(last_buttons.player2.button6, cur_buttons.player2.button6);
+
+    return buttons;
+}
+
+jvs_buttons_t maple_buttons_released()
+{
+    jvs_buttons_t buttons;
+
+    buttons.dip1 = __release(last_buttons.dip1, cur_buttons.dip1);
+    buttons.dip2 = __release(last_buttons.dip2, cur_buttons.dip2);
+    buttons.dip3 = __release(last_buttons.dip3, cur_buttons.dip3);
+    buttons.dip4 = __release(last_buttons.dip4, cur_buttons.dip4);
+    buttons.psw1 = __release(last_buttons.psw1, cur_buttons.psw1);
+    buttons.psw2 = __release(last_buttons.psw2, cur_buttons.psw2);
+    buttons.test = __release(last_buttons.test, cur_buttons.test);
+
+    // Player 1 controls
+    buttons.player1.service = __release(last_buttons.player1.service, cur_buttons.player1.service);
+    buttons.player1.start = __release(last_buttons.player1.start, cur_buttons.player1.start);
+    buttons.player1.up = __release(last_buttons.player1.up, cur_buttons.player1.up);
+    buttons.player1.down = __release(last_buttons.player1.down, cur_buttons.player1.down);
+    buttons.player1.left = __release(last_buttons.player1.left, cur_buttons.player1.left);
+    buttons.player1.right = __release(last_buttons.player1.right, cur_buttons.player1.right);
+    buttons.player1.button1 = __release(last_buttons.player1.button1, cur_buttons.player1.button1);
+    buttons.player1.button2 = __release(last_buttons.player1.button2, cur_buttons.player1.button2);
+    buttons.player1.button3 = __release(last_buttons.player1.button3, cur_buttons.player1.button3);
+    buttons.player1.button4 = __release(last_buttons.player1.button4, cur_buttons.player1.button4);
+    buttons.player1.button5 = __release(last_buttons.player1.button5, cur_buttons.player1.button5);
+    buttons.player1.button6 = __release(last_buttons.player1.button6, cur_buttons.player1.button6);
+
+    // Player 2 controls
+    buttons.player2.service = __release(last_buttons.player2.service, cur_buttons.player2.service);
+    buttons.player2.start = __release(last_buttons.player2.start, cur_buttons.player2.start);
+    buttons.player2.up = __release(last_buttons.player2.up, cur_buttons.player2.up);
+    buttons.player2.down = __release(last_buttons.player2.down, cur_buttons.player2.down);
+    buttons.player2.left = __release(last_buttons.player2.left, cur_buttons.player2.left);
+    buttons.player2.right = __release(last_buttons.player2.right, cur_buttons.player2.right);
+    buttons.player2.button1 = __release(last_buttons.player2.button1, cur_buttons.player2.button1);
+    buttons.player2.button2 = __release(last_buttons.player2.button2, cur_buttons.player2.button2);
+    buttons.player2.button3 = __release(last_buttons.player2.button3, cur_buttons.player2.button3);
+    buttons.player2.button4 = __release(last_buttons.player2.button4, cur_buttons.player2.button4);
+    buttons.player2.button5 = __release(last_buttons.player2.button5, cur_buttons.player2.button5);
+    buttons.player2.button6 = __release(last_buttons.player2.button6, cur_buttons.player2.button6);
+
     return buttons;
 }
