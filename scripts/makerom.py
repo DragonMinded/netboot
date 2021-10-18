@@ -24,7 +24,7 @@ def main() -> int:
         '--serial',
         type=str,
         default=None,
-        help='Three digit ascii serial code for this game.',
+        help='Four digit ascii serial code for this game. Must start with "B" and end with three ascii digits.',
     )
     parser.add_argument(
         '-p',
@@ -198,9 +198,11 @@ def main() -> int:
         header.date = datetime.date.today()
 
     if args.serial is not None:
-        if len(args.serial) != 3:
-            raise Exception("Serial must be 3 ascii digits!")
-        header.serial = b"B" + args.serial.encode('ascii')
+        if len(args.serial) != 4:
+            raise Exception("Serial must be 4 ascii digits!")
+        if args.serial[0] != "B":
+            raise Exception("Serial must start with \"B\"!")
+        header.serial = args.serial.encode('ascii')
     else:
         header.serial = b"B999"
 

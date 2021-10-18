@@ -15,7 +15,7 @@ uint32_t settings_chunk[7] = {
     START_ADDR,
     0xCFCFCFCF,  // Enable sentinel behavior
     0xDDDDDDDD,  // Enable debug printing
-    20211016,    // Version of this trojan as a date in YYYYMMDD format.
+    BUILD_DATE,  // Version of this trojan as a date in YYYYMMDD format.
     0xEEEEEEEE,
 };
 

@@ -10,6 +10,9 @@ all: netbootmenu.bin
 # these files exist.
 SRCS += main.c
 
+# Override the default serial so this program has its own settings.
+SERIAL = BRP0
+
 # Pick up base makefile rules common to all examples.
 include ../Makefile.base
 
@@ -19,7 +22,7 @@ netbootmenu.bin: build/naomi.bin
 	PYTHONPATH=../../ python3 -m scripts.makerom $@ \
 		--title "Net Boot ROM Picker Menu" \
 		--publisher "DragonMinded" \
-		--serial "RP0" \
+		--serial "${SERIAL}" \
 		--section $<,${START_ADDR} \
 		--entrypoint ${MAIN_ADDR} \
 		--main-binary-includes-test-binary \

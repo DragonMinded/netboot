@@ -19,6 +19,7 @@ netdimm.bin: build/naomi.bin
 	PYTHONPATH=../../../ python3 -m scripts.makerom $@ \
 		--title "Net Dimm Peek/Poke Sample" \
 		--publisher "DragonMinded" \
+		--serial "${SERIAL}" \
 		--section $<,${START_ADDR} \
 		--entrypoint ${MAIN_ADDR} \
 		--main-binary-includes-test-binary \

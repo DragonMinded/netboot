@@ -99,13 +99,16 @@ ARMLIBS ?= -lgcc
 ARMOBJCOPY = ${NAOMI_ARM_OBJCOPY}
 
 # Set up default archiver, used for creating libraries.
-ARMAR  = ${NAOMI_ARM_AR}
+ARMAR = ${NAOMI_ARM_AR}
 
 # Set up various toolchain utilities.
-BIN2C  = python3 $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/bin2c.py
+BIN2C = python3 $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/bin2c.py
 
 # Set up various toolchain utilities.
-ADDR  = python3 $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/addr.py
+ADDR = python3 $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/addr.py
+
+# Set up various toolchain utilities.
+DATE = python3 $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/date.py
 
 # A List of source files that should be included.
 SRCS ?=
@@ -123,6 +126,12 @@ MAIN_ADDR = $(shell ${ADDR} ${START_ADDR} 0)
 # The entrypoint for the test executable. The default crt0 and linkscript put this at
 # the start addr + 4. If you provide a custom linker/crt0 you can overwrite this.
 TEST_ADDR = $(shell ${ADDR} ${START_ADDR} 4)
+
+# The serial number for your game. Should be unique for every released game as well
+# as every released homebrew. Override this in your Makefile to change it to something
+# else. Note that it must start with "B" and have 3 ascii digits following, usually
+# two capital letters followed by a number.
+SERIAL ?= B999
 
 OBJS = $(patsubst %.cpp, build/%.o, $(patsubst %.s, build/%.o, $(patsubst %.c, build/%.o, $(SRCS))))
 
@@ -148,12 +157,12 @@ build/%.o: %.s
 # A rule for how to build C files. Depends on the build dir being created.
 build/%.o: %.c
 	@mkdir -p $(dir $@)
-	${CC} -c $< -o $@
+	${CC} -c $< -o $@ -DSERIAL=\"${SERIAL}\" -DBUILD_DATE=$(shell ${DATE})
 
 # A rule for how to build C++ files. Depends on the build dir being created.
 build/%.o: %.cpp
 	@mkdir -p $(dir $@)
-	${CPP} -c $< -o $@
+	${CPP} -c $< -o $@ -DSERIAL=\"${SERIAL}\" -DBUILD_DATE=$(shell ${DATE})
 
 # Mark intermediate build files as precious in case we need to examine them later.
 .PRECIOUS: ${OBJS}

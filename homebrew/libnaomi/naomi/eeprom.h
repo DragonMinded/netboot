@@ -89,6 +89,10 @@ typedef struct eeprom
 int eeprom_read(eeprom_t *eeprom);
 int eeprom_write(eeprom_t *eeprom);
 
+// Helper function to return the current executing software's serial
+// as specified in the header and build scripts.
+uint8_t *eeprom_serial();
+
 // Size of an EEPROM.
 #define EEPROM_SIZE 128
 

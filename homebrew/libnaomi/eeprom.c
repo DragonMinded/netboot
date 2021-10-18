@@ -170,7 +170,7 @@ void parse_eeprom(uint8_t *data, eeprom_t *eeprom)
         // Let's set up defaults. This shouldn't happen if the BIOS
         // has properly run before us, but its conceivable somebody
         // messed with the EEPROM directly.
-        memcpy(eeprom->system.serial, "B001", 4);
+        memcpy(eeprom->system.serial, eeprom_serial(), 4);
         eeprom->system.attract_sounds = ATTRACT_SOUNDS_ON;
         eeprom->system.monitor_orientation = MONITOR_ORIENTATION_HORIZONTAL;
         eeprom->system.players = 2;
@@ -345,4 +345,17 @@ int eeprom_write(eeprom_t *eeprom)
 
     //  Now, write it to the actual chip.
     return maple_request_eeprom_write(data);
+}
+
+uint8_t *eeprom_serial()
+{
+    static unsigned int initialized = 0;
+    static uint8_t serial[4];
+
+    if (!initialized) {
+        memcpy(serial, &SERIAL, 4);
+        initialized = 1;
+    }
+
+    return serial;
 }
