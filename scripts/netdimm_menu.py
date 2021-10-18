@@ -2,10 +2,11 @@
 # Triforce Netfirm Toolbox, put into the public domain.
 # Please attribute properly, but only if you want.
 import argparse
+import struct
 import sys
 import time
 from netboot import NetDimm, PeekPokeTypeEnum
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 
 MAX_PACKET_LENGTH: int = 253
@@ -200,6 +201,71 @@ def send_packet(netdimm: NetDimm, data: bytes) -> bool:
                 raise Exception("Logic error!")
 
 
+class Message:
+    def __init__(self, msgid: int, data: bytes) -> None:
+        self.id = msgid
+        self.data = data
+
+
+MESSAGE_HEADER_LENGTH: int = 8
+MAX_MESSAGE_DATA_LENGTH: int = MAX_PACKET_LENGTH - MESSAGE_HEADER_LENGTH
+
+
+send_sequence: int = 1
+
+
+def send_message(netdimm: NetDimm, message: Message) -> bool:
+    global send_sequence
+    if send_sequence == 0:
+        send_sequence = 1
+
+    total_length = len(message.data)
+    location = 0
+    for chunk in [message.data[i:(i + MAX_MESSAGE_DATA_LENGTH)] for i in range(0, total_length, MAX_MESSAGE_DATA_LENGTH)]:
+        packetdata = struct.pack("<HHHH", message.id & 0xFFFF, send_sequence & 0xFFFF, total_length & 0xFFFF, location & 0xFFFF) + chunk
+        location += len(chunk)
+
+        if not send_packet(netdimm, packetdata):
+            send_sequence = (send_sequence + 1) & 0xFFFF
+            return False
+
+    send_sequence = (send_sequence + 1) & 0xFFFF
+    return True
+
+
+pending_received_chunks: Dict[int, Dict[int, bytes]] = {}
+
+
+def receive_message(netdimm: NetDimm) -> Optional[Message]:
+    # Try to receive a new packet.
+    new_packet = receive_packet(netdimm)
+    if new_packet is None:
+        return None
+
+    # Make sure it isn't a dud packet.
+    if len(new_packet) < MESSAGE_HEADER_LENGTH:
+        return None
+
+    # See if this packet can be reassembled.
+    msgid, sequence, total_length, location = struct.unpack("<HHHH", new_packet[0:8])
+
+    if sequence not in pending_received_chunks:
+        pending_received_chunks[sequence] = {}
+    if location not in pending_received_chunks[sequence]:
+        pending_received_chunks[sequence][location] = new_packet[8:]
+
+    for needed_location in range(0, total_length, MAX_MESSAGE_DATA_LENGTH):
+        if needed_location not in pending_received_chunks[sequence]:
+            # We're missing this location.
+            return None
+
+    # We have it all!
+    msgdata = b"".join(pending_received_chunks[sequence][position] for position in range(0, total_length, MAX_MESSAGE_DATA_LENGTH))
+    del pending_received_chunks[sequence]
+
+    return Message(msgid, msgdata)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Provide an on-target menu for selecting games. Currently only works with Naomi.")
     parser.add_argument(
@@ -212,23 +278,16 @@ def main() -> int:
     args = parser.parse_args()
 
     netdimm = NetDimm(args.ip)
-    packet = receive_packet(netdimm)
-
-    if packet:
-        print(packet.decode('ascii'))
-
-    tries = 0
-    failed = False
-    while not send_packet(netdimm, f"This is a test {time.time()}!".encode('ascii')):
-        tries += 1
-        if tries > MAX_FAILED_WRITES:
-            failed = True
-            break
-
-    if failed:
+    if not send_message(netdimm, Message(0x1234, b"Four" + b"\0" * 1020)):
         print("Failed to send!")
-    else:
-        print("Successfully sent message!")
+        return 1
+
+    while True:
+        msg = receive_message(netdimm)
+        if msg:
+            print(f"Received type: {hex(msg.id)}, length: {len(msg.data)}, {msg.data.decode('ascii')}")
+            break
+        print("Failed to receive, trying again!")
 
     return 0
 

@@ -8,7 +8,7 @@
 #include "naomi/system.h"
 #include "naomi/dimmcomms.h"
 
-#define MAX_OUTSTANDING_PACKETS 128
+#define MAX_OUTSTANDING_PACKETS 268
 #define MAX_PACKET_LENGTH 253
 
 typedef struct
@@ -151,6 +151,30 @@ int packetlib_recv(void *data, unsigned int *length)
     }
 
     return -1;
+}
+
+void *packetlib_peek(int packetno, unsigned int *length)
+{
+    if (packetlib_state.received_packets[packetno] != 0)
+    {
+        *length = packetlib_state.received_packets[packetno]->len;
+        return packetlib_state.received_packets[packetno]->data;
+    }
+    else
+    {
+        *length = 0;
+        return 0;
+    }
+}
+
+void packetlib_discard(int packetno)
+{
+    if (packetlib_state.received_packets[packetno] != 0)
+    {
+        // Free up the packet for later use.
+        free(packetlib_state.received_packets[packetno]);
+        packetlib_state.received_packets[packetno] = 0;
+    }
 }
 
 uint32_t checksum_add(uint32_t value)
@@ -427,6 +451,247 @@ void poke_memory(unsigned int address, int size, uint32_t data)
     }
 }
 
+void packetlib_render_stats(char *buffer)
+{
+    // Display information about current packet library.
+    packetlib_stats_t stats = packetlib_stats();
+    sprintf(
+        buffer,
+        "Total packets sent: %d\nTotal packets received: %d\n"
+        "Cancelled packets: %d\nChecksum errors: %d\n"
+        "Pending packets: %d to send, %d to receive\n"
+        "Send in progress: %s\nReceive in progress: %s",
+        stats.packets_sent,
+        stats.packets_received,
+        stats.packets_cancelled,
+        stats.checksum_errors,
+        stats.packets_pending_send,
+        stats.packets_pending_receive,
+        stats.send_in_progress ? "yes" : "no",
+        stats.receive_in_progress ? "yes" : "no"
+    );
+}
+
+#define MAX_MESSAGE_LENGTH 0xFFFF
+#define MESSAGE_HEADER_LENGTH 8
+#define MAX_MESSAGE_DATA_LENGTH (MAX_PACKET_LENGTH - MESSAGE_HEADER_LENGTH)
+#define MESSAGE_ID_LOC 0
+#define MESSAGE_SEQ_LOC 2
+#define MESSAGE_LEN_LOC 4
+#define MESSAGE_LOC_LOC 6
+#define MESSAGE_DATA_LOC 8
+
+int message_send(uint16_t type, void * data, unsigned int length)
+{
+    uint8_t buffer[MAX_PACKET_LENGTH];
+    static uint16_t sequence = 1;
+
+    if (length > MAX_MESSAGE_LENGTH)
+    {
+        return -3;
+    }
+
+    for (unsigned int loc = 0 ; loc < length; loc += MAX_MESSAGE_DATA_LENGTH)
+    {
+        unsigned int packet_len = length - loc;
+        if (packet_len > MAX_MESSAGE_DATA_LENGTH)
+        {
+            packet_len = MAX_MESSAGE_DATA_LENGTH;
+        }
+
+        // Set up packet type in header.
+        uint16_t tmp = type;
+        memcpy(&buffer[MESSAGE_ID_LOC], &tmp, 2);
+
+        // Set up sequence number in header.
+        memcpy(&buffer[MESSAGE_SEQ_LOC], &sequence, 2);
+
+        // Set up packet length in header.
+        tmp = length;
+        memcpy(&buffer[MESSAGE_LEN_LOC], &tmp, 2);
+
+        // Set up current packet location in header.
+        tmp = loc;
+        memcpy(&buffer[MESSAGE_LOC_LOC], &tmp, 2);
+
+        // Finally, copy the data in.
+        memcpy(&buffer[MESSAGE_DATA_LOC], ((uint8_t *)data) + loc, packet_len);
+
+        // Now, send the packet.
+        if (packetlib_send(buffer, packet_len + MESSAGE_HEADER_LENGTH) != 0)
+        {
+            return -4;
+        }
+    }
+
+    // We finished this packet, set the sequence number to something else for
+    // the next packet.
+    sequence ++;
+    if (sequence == 0)
+    {
+        // Don't want sequence ID 0 for reassembly purposes.
+        sequence = 1;
+    }
+}
+
+void *message_recv(uint16_t *type, unsigned int *length)
+{
+    // Figure out if there is a packet worth assembling. This is a really gross,
+    // inefficient algorithm, but whatever its good enough for now.
+    uint8_t *reassembled_data = 0;
+    uint16_t seen_packet_sequences[MAX_OUTSTANDING_PACKETS];
+    uint8_t *seen_positions[MAX_OUTSTANDING_PACKETS];
+    uint16_t seen_packet_lengths[MAX_OUTSTANDING_PACKETS];
+    memset(seen_packet_sequences, 0, sizeof(uint16_t) * MAX_OUTSTANDING_PACKETS);
+    memset(seen_positions, 0, sizeof(uint8_t *) * MAX_OUTSTANDING_PACKETS);
+    memset(seen_packet_lengths, 0, sizeof(uint16_t) * MAX_OUTSTANDING_PACKETS);
+
+    for (unsigned int pkt = 0; pkt < MAX_OUTSTANDING_PACKETS; pkt++)
+    {
+        // Grab the potential packet we could receive.
+        unsigned int pkt_length = 0;
+        uint8_t *pkt_data = packetlib_peek(pkt, &pkt_length);
+        if (pkt_data == 0)
+        {
+            // No data for this packet.
+            continue;
+        }
+        if (pkt_length < MESSAGE_HEADER_LENGTH)
+        {
+            // Toss bogus packet.
+            packetlib_discard(pkt);
+            continue;
+        }
+
+        // Grab the sequence number from this packet.
+        uint16_t sequence;
+        unsigned int index;
+        memcpy(&sequence, &pkt_data[MESSAGE_SEQ_LOC], 2);
+
+        if (sequence == 0)
+        {
+            // Toss bogus packet.
+            packetlib_discard(pkt);
+            continue;
+        }
+
+        // Grab the length and needed total packets for this packet.
+        uint16_t msg_length;
+        memcpy(&msg_length, &pkt_data[MESSAGE_LEN_LOC], 2);
+        unsigned int num_packets_needed = (msg_length + (MAX_MESSAGE_DATA_LENGTH - 1)) / MAX_MESSAGE_DATA_LENGTH;
+
+        // Find the positions data for this sequence.
+        for (unsigned int i = 0; i < MAX_OUTSTANDING_PACKETS; i++)
+        {
+            if (seen_packet_sequences[i] == sequence)
+            {
+                index = i;
+                break;
+            }
+            if (seen_packet_sequences[i] == 0)
+            {
+                // The index doesn't exist, lets create it.
+                index = i;
+
+                // Calculate how many parts of the message we need to see.
+                seen_packet_sequences[index] = sequence;
+                seen_packet_lengths[index] = msg_length;
+                seen_positions[index] = malloc(num_packets_needed);
+                memset(seen_positions[index], 0, num_packets_needed);
+                break;
+            }
+        }
+
+        // Now, mark the particular portion of this packet as present.
+        uint16_t location;
+        memcpy(&location, &pkt_data[MESSAGE_LOC_LOC], 2);
+        seen_positions[index][location / MAX_MESSAGE_DATA_LENGTH] = 1;
+    }
+
+    // Now that we've gathered up which packets we have, see if any packets
+    // we care about are fully received.
+    for (unsigned int index = 0; index < MAX_OUTSTANDING_PACKETS; index++)
+    {
+        if (seen_packet_sequences[index] == 0)
+        {
+            // We ran out of packet sequences we're tracking.
+            break;
+        }
+
+        unsigned int num_packets_needed = (seen_packet_lengths[index] + (MAX_MESSAGE_DATA_LENGTH - 1)) / MAX_MESSAGE_DATA_LENGTH;
+        int ready = 1;
+
+        for (unsigned int i = 0; i < num_packets_needed; i++)
+        {
+            if (!seen_positions[index][i])
+            {
+                // This packet is not ready.
+                ready = 0;
+                break;
+            }
+        }
+
+        if (ready)
+        {
+            // This packet is ready!
+            reassembled_data = malloc(seen_packet_lengths[index]);
+            *length = seen_packet_lengths[index];
+
+            for (unsigned int pkt = 0; pkt < MAX_OUTSTANDING_PACKETS; pkt++)
+            {
+                // Grab the potential packet we could receive.
+                unsigned int pkt_length = 0;
+                uint8_t *pkt_data = packetlib_peek(pkt, &pkt_length);
+                if (pkt_data == 0 || pkt_length < MESSAGE_HEADER_LENGTH)
+                {
+                    // No data for this packet.
+                    continue;
+                }
+
+                // Grab the sequence number from this packet.
+                uint16_t sequence;
+                memcpy(&sequence, &pkt_data[MESSAGE_SEQ_LOC], 2);
+
+                if (sequence != seen_packet_sequences[index])
+                {
+                    // This packet is not one of the ones we're after.
+                    continue;
+                }
+
+                // Grab the type from this packet. This is inefficient since we
+                // only need to do it once, but whatever.
+                memcpy(type, &pkt_data[MESSAGE_ID_LOC], 2);
+
+                // Grab the location from this packet, so we can copy it into
+                // the right spot in the destination.
+                uint16_t location;
+                memcpy(&location, &pkt_data[MESSAGE_LOC_LOC], 2);
+
+                // Actually copy it.
+                memcpy(reassembled_data + location, &pkt_data[MESSAGE_DATA_LOC], pkt_length - MESSAGE_HEADER_LENGTH);
+
+                // We don't need this packet anymore, since we received it.
+                packetlib_discard(pkt);
+            }
+
+            // We finished assembling the packet, lets return it!
+            break;
+        }
+    }
+
+    // Need to free a bunch of stuff.
+    for (unsigned int index = 0; index < MAX_OUTSTANDING_PACKETS; index++)
+    {
+        if (seen_positions[index])
+        {
+            free(seen_positions[index]);
+        }
+    }
+
+    // Return the possibly reassembled packet.
+    return reassembled_data;
+}
+
 void main()
 {
     // Grab the system configuration
@@ -440,12 +705,9 @@ void main()
     video_init_simple();
     video_set_background_color(rgb(0, 0, 0));
 
-    // Send a simple packet
-    packetlib_send("Hello, world!", 13);
-
     char buffer[512];
-    char received_packet[MAX_PACKET_LENGTH + 1];
-    memset(received_packet, 0, MAX_PACKET_LENGTH + 1);
+    char last_recvd[128];
+    memset(last_recvd, 0, 128);
 
     while ( 1 )
     {
@@ -458,36 +720,30 @@ void main()
             enter_test_mode();
         }
 
-        // Draw a few simple things on the screen.
-        video_draw_text(100, 200, rgb(255, 255, 255), "Menu test...");
-
-        // Try to receive a packet.
-        unsigned int recvlength = 0;
-        if (packetlib_recv(received_packet, &recvlength) == 0)
+        // Now, see if we have a packet to handle.
         {
-            // Send a new one!
-            received_packet[recvlength] = 0;
-            packetlib_send("Another one!", 12);
+            uint16_t type = 0;
+            unsigned int length = 0;
+            void *data = message_recv(&type, &length);
+
+            if (length > 0)
+            {
+                sprintf(last_recvd, "Type: %04X, Length: %d, Msg: %s", type, length, (char *)data);
+                memcpy(data, "A new message!", 14);
+                message_send(0xABCD, data, 768);
+            }
+
+            if (data != 0)
+            {
+                free(data);
+            }
         }
 
-        // Display information about current packet library.
-        packetlib_stats_t stats = packetlib_stats();
-        sprintf(
-            buffer,
-            "Total packets sent: %d\nTotal packets received: %d\n"
-            "Cancelled packets: %d\nChecksum errors: %d\n"
-            "Pending packets: %d to send, %d to receive\n"
-            "Send in progress: %s\nReceive in progress: %s\n\n%s",
-            stats.packets_sent,
-            stats.packets_received,
-            stats.packets_cancelled,
-            stats.checksum_errors,
-            stats.packets_pending_send,
-            stats.packets_pending_receive,
-            stats.send_in_progress ? "yes" : "no",
-            stats.receive_in_progress ? "yes" : "no",
-            received_packet
-        );
+        // Draw a few simple things on the screen.
+        video_draw_text(100, 200, rgb(255, 255, 255), last_recvd);
+
+        // Try to receive a packet.
+        packetlib_render_stats(buffer);
         video_draw_text(100, 220, rgb(200, 200, 20), buffer);
 
         // Actually draw the buffer.
