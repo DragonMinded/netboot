@@ -124,7 +124,7 @@ uint8_t *jvs_packet_payload(uint8_t *data);
 void maple_request_jvs_reset(uint8_t addr);
 void maple_request_jvs_assign_address(uint8_t old_addr, uint8_t new_addr);
 int maple_request_jvs_id(uint8_t addr, char *outptr);
-jvs_buttons_t maple_request_jvs_buttons(uint8_t addr, unsigned int players);
+jvs_buttons_t maple_request_jvs_buttons(uint8_t addr);
 
 #ifdef __cplusplus
 }

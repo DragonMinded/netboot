@@ -733,7 +733,7 @@ void main()
     while ( 1 )
     {
         // First, poll the buttons and act accordingly.
-        jvs_buttons_t buttons = maple_request_jvs_buttons(0x01, settings.system.players);
+        jvs_buttons_t buttons = maple_request_jvs_buttons(0x01);
 
         if (buttons.test || buttons.psw1)
         {
@@ -783,10 +783,6 @@ void main()
 
 void test()
 {
-    // Grab the system configuration
-    eeprom_t settings;
-    eeprom_read(&settings);
-
     // Initialize a simple console
     video_init_simple();
     video_set_background_color(rgb(0, 0, 0));
@@ -794,9 +790,9 @@ void test()
     while ( 1 )
     {
         // First, poll the buttons and act accordingly.
-        jvs_buttons_t buttons = maple_request_jvs_buttons(0x01, settings.system.players);
+        jvs_buttons_t buttons = maple_request_jvs_buttons(0x01);
 
-        if (buttons.psw2 || buttons.player1.service || (settings.system.players >= 2 && buttons.player2.service))
+        if (buttons.psw2 || buttons.player1.service || buttons.player2.service)
         {
             // Request to go into system test mode.
             enter_test_mode();

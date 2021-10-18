@@ -10,7 +10,6 @@ static uint8_t *maple_base = 0;
 // Whether we have an outstanding JVS request to get to.
 static int __outstanding_request = 0;
 static unsigned int __outstanding_request_addr = 0;
-static int __outstanding_request_players = 0;
 
 void maple_wait_for_dma()
 {
@@ -635,17 +634,17 @@ int maple_request_jvs_id(uint8_t addr, char *outptr)
     return 0;
 }
 
-int __maple_request_jvs_send_buttons_packet(uint8_t addr, unsigned int players)
+int __maple_request_jvs_send_buttons_packet(uint8_t addr, unsigned int unknown)
 {
     uint8_t subcommand[12] = {
-        0x27,                   // Subcommand 0x27, send JVS buttons packet.
+        0x27,                  // Subcommand 0x27, send JVS buttons packet.
         0x77,                  // GPIO direction, sent in these packets for some reason?
         0x00,
         0x00,
         0x00,
         0x00,
         addr & 0xFF,           // JVS address to send to (0xFF is broadcast).
-        (players - 1) & 0xFF,  // Player count - 1, I THINK?
+        unknown & 0xFF,        // I thought this was player count but I am wrong, not sure now.
         0x00,
         0x00,
         0x00,
@@ -664,15 +663,15 @@ int __maple_request_jvs_send_buttons_packet(uint8_t addr, unsigned int players)
 /**
  * Request JVS button read from JVS ID addr and return buttons.
  */
-jvs_buttons_t maple_request_jvs_buttons(uint8_t addr, unsigned int players)
+jvs_buttons_t maple_request_jvs_buttons(uint8_t addr)
 {
     // Set up a sane response.
     jvs_buttons_t buttons;
     memset(&buttons, 0, sizeof(buttons));
 
-    if (!__outstanding_request || __outstanding_request_addr != addr || __outstanding_request_players != players)
+    if (!__outstanding_request || __outstanding_request_addr != addr)
     {
-        if(!__maple_request_jvs_send_buttons_packet(addr, players))
+        if(!__maple_request_jvs_send_buttons_packet(addr, 1))
         {
             // Didn't get a valid response for sending JVS.
             return buttons;
@@ -731,30 +730,26 @@ jvs_buttons_t maple_request_jvs_buttons(uint8_t addr, unsigned int players)
     buttons.player1.analog3 = payload[15];
     buttons.player1.analog4 = payload[17];
 
-    if (players >= 2)
-    {
-        // Player 2 controls
-        buttons.player2.service = (payload[3] >> 6) & 0x1;
-        buttons.player2.start = (payload[3] >> 7) & 0x1;
-        buttons.player2.up = (payload[3] >> 5) & 0x1;
-        buttons.player2.down = (payload[3] >> 4) & 0x1;
-        buttons.player2.left = (payload[3] >> 3) & 0x1;
-        buttons.player2.right = (payload[3] >> 2) & 0x1;
-        buttons.player2.button1 = (payload[3] >> 1) & 0x1;
-        buttons.player2.button2 = payload[3] & 0x1;
-        buttons.player2.button3 = (payload[4] >> 7) & 0x1;
-        buttons.player2.button4 = (payload[4] >> 6) & 0x1;
-        buttons.player2.button5 = (payload[4] >> 5) & 0x1;
-        buttons.player2.button6 = (payload[4] >> 4) & 0x1;
-        buttons.player2.analog1 = payload[19];
-        buttons.player2.analog2 = payload[21];
-        buttons.player2.analog3 = payload[23];
-        buttons.player2.analog4 = payload[25];
-    }
+    // Player 2 controls
+    buttons.player2.service = (payload[3] >> 6) & 0x1;
+    buttons.player2.start = (payload[3] >> 7) & 0x1;
+    buttons.player2.up = (payload[3] >> 5) & 0x1;
+    buttons.player2.down = (payload[3] >> 4) & 0x1;
+    buttons.player2.left = (payload[3] >> 3) & 0x1;
+    buttons.player2.right = (payload[3] >> 2) & 0x1;
+    buttons.player2.button1 = (payload[3] >> 1) & 0x1;
+    buttons.player2.button2 = payload[3] & 0x1;
+    buttons.player2.button3 = (payload[4] >> 7) & 0x1;
+    buttons.player2.button4 = (payload[4] >> 6) & 0x1;
+    buttons.player2.button5 = (payload[4] >> 5) & 0x1;
+    buttons.player2.button6 = (payload[4] >> 4) & 0x1;
+    buttons.player2.analog1 = payload[19];
+    buttons.player2.analog2 = payload[21];
+    buttons.player2.analog3 = payload[23];
+    buttons.player2.analog4 = payload[25];
 
     // Finally, send another request to be ready next time we poll.
-    __outstanding_request = __maple_request_jvs_send_buttons_packet(addr, players);
+    __outstanding_request = __maple_request_jvs_send_buttons_packet(addr, 1);
     __outstanding_request_addr = addr;
-    __outstanding_request_players = players;
     return buttons;
 }

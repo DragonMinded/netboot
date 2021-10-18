@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include "naomi/video.h"
 #include "naomi/maple.h"
+#include "naomi/eeprom.h"
 
 // Debug console
 char *console_base = 0;
@@ -21,6 +22,10 @@ void display()
 
 void main()
 {
+    // Grab the system configuration
+    eeprom_t settings;
+    eeprom_read(&settings);
+
     // Set up a crude console
     video_init_simple();
     console_base = malloc(((640 * 480) / (8 * 8)) + 1);
@@ -55,7 +60,7 @@ void main()
     {
         console_loc = reset_loc;
         console_printf("Liveness indicator: %d\n", liveness++);
-        jvs_buttons_t buttons = maple_request_jvs_buttons(0x01, 2);
+        jvs_buttons_t buttons = maple_request_jvs_buttons(0x01);
 
         console_printf("\n\nSystem buttons: ");
         if(buttons.dip1)
@@ -136,56 +141,59 @@ void main()
             console_printf("b6 ");
         }
         console_printf("\n1P Analog: %02X %02X %02X %02X", buttons.player1.analog1, buttons.player1.analog2, buttons.player1.analog3, buttons.player1.analog4);
-        console_printf("\n2P Buttons: ");
-        if(buttons.player2.service)
+        if (settings.system.players >= 2)
         {
-            console_printf("svc ");
+            console_printf("\n2P Buttons: ");
+            if(buttons.player2.service)
+            {
+                console_printf("svc ");
+            }
+            if(buttons.player2.start)
+            {
+                console_printf("start ");
+            }
+            if(buttons.player2.up)
+            {
+                console_printf("up ");
+            }
+            if(buttons.player2.down)
+            {
+                console_printf("down ");
+            }
+            if(buttons.player2.left)
+            {
+                console_printf("left ");
+            }
+            if(buttons.player2.right)
+            {
+                console_printf("right ");
+            }
+            if(buttons.player2.button1)
+            {
+                console_printf("b1 ");
+            }
+            if(buttons.player2.button2)
+            {
+                console_printf("b2 ");
+            }
+            if(buttons.player2.button3)
+            {
+                console_printf("b3 ");
+            }
+            if(buttons.player2.button4)
+            {
+                console_printf("b4 ");
+            }
+            if(buttons.player2.button5)
+            {
+                console_printf("b5 ");
+            }
+            if(buttons.player2.button6)
+            {
+                console_printf("b6 ");
+            }
+            console_printf("\n2P Analog: %02X %02X %02X %02X\n", buttons.player2.analog1, buttons.player2.analog2, buttons.player2.analog3, buttons.player2.analog4);
         }
-        if(buttons.player2.start)
-        {
-            console_printf("start ");
-        }
-        if(buttons.player2.up)
-        {
-            console_printf("up ");
-        }
-        if(buttons.player2.down)
-        {
-            console_printf("down ");
-        }
-        if(buttons.player2.left)
-        {
-            console_printf("left ");
-        }
-        if(buttons.player2.right)
-        {
-            console_printf("right ");
-        }
-        if(buttons.player2.button1)
-        {
-            console_printf("b1 ");
-        }
-        if(buttons.player2.button2)
-        {
-            console_printf("b2 ");
-        }
-        if(buttons.player2.button3)
-        {
-            console_printf("b3 ");
-        }
-        if(buttons.player2.button4)
-        {
-            console_printf("b4 ");
-        }
-        if(buttons.player2.button5)
-        {
-            console_printf("b5 ");
-        }
-        if(buttons.player2.button6)
-        {
-            console_printf("b6 ");
-        }
-        console_printf("\n2P Analog: %02X %02X %02X %02X\n", buttons.player2.analog1, buttons.player2.analog2, buttons.player2.analog3, buttons.player2.analog4);
         display();
     }
 }
