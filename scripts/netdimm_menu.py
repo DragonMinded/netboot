@@ -202,7 +202,7 @@ def send_packet(netdimm: NetDimm, data: bytes) -> bool:
 
 
 class Message:
-    def __init__(self, msgid: int, data: bytes) -> None:
+    def __init__(self, msgid: int, data: bytes = b"") -> None:
         self.id = msgid
         self.data = data
 
@@ -220,14 +220,20 @@ def send_message(netdimm: NetDimm, message: Message) -> bool:
         send_sequence = 1
 
     total_length = len(message.data)
-    location = 0
-    for chunk in [message.data[i:(i + MAX_MESSAGE_DATA_LENGTH)] for i in range(0, total_length, MAX_MESSAGE_DATA_LENGTH)]:
-        packetdata = struct.pack("<HHHH", message.id & 0xFFFF, send_sequence & 0xFFFF, total_length & 0xFFFF, location & 0xFFFF) + chunk
-        location += len(chunk)
-
+    if total_length == 0:
+        packetdata = struct.pack("<HHHH", message.id & 0xFFFF, send_sequence & 0xFFFF, 0, 0)
         if not send_packet(netdimm, packetdata):
             send_sequence = (send_sequence + 1) & 0xFFFF
             return False
+    else:
+        location = 0
+        for chunk in [message.data[i:(i + MAX_MESSAGE_DATA_LENGTH)] for i in range(0, total_length, MAX_MESSAGE_DATA_LENGTH)]:
+            packetdata = struct.pack("<HHHH", message.id & 0xFFFF, send_sequence & 0xFFFF, total_length & 0xFFFF, location & 0xFFFF) + chunk
+            location += len(chunk)
+
+            if not send_packet(netdimm, packetdata):
+                send_sequence = (send_sequence + 1) & 0xFFFF
+                return False
 
     send_sequence = (send_sequence + 1) & 0xFFFF
     return True
@@ -286,8 +292,7 @@ def main() -> int:
         msg = receive_message(netdimm)
         if msg:
             print(f"Received type: {hex(msg.id)}, length: {len(msg.data)}, {msg.data.decode('ascii')}")
-            break
-        print("Failed to receive, trying again!")
+            send_message(netdimm, Message(0xC0DE))
 
     return 0
 

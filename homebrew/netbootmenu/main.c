@@ -491,7 +491,9 @@ int message_send(uint16_t type, void * data, unsigned int length)
         return -3;
     }
 
-    for (unsigned int loc = 0 ; loc < length; loc += MAX_MESSAGE_DATA_LENGTH)
+    // We always want to run this loop at least one time, so we can send
+    // packets of 0 bytes in length.
+    for (unsigned int loc = 0; (loc == 0 || loc < length); loc += MAX_MESSAGE_DATA_LENGTH)
     {
         unsigned int packet_len = length - loc;
         if (packet_len > MAX_MESSAGE_DATA_LENGTH)
@@ -514,8 +516,11 @@ int message_send(uint16_t type, void * data, unsigned int length)
         tmp = loc;
         memcpy(&buffer[MESSAGE_LOC_LOC], &tmp, 2);
 
-        // Finally, copy the data in.
-        memcpy(&buffer[MESSAGE_DATA_LOC], ((uint8_t *)data) + loc, packet_len);
+        if (packet_len > 0)
+        {
+            // Finally, copy the data in.
+            memcpy(&buffer[MESSAGE_DATA_LOC], ((uint8_t *)data) + loc, packet_len);
+        }
 
         // Now, send the packet.
         if (packetlib_send(buffer, packet_len + MESSAGE_HEADER_LENGTH) != 0)
@@ -534,11 +539,12 @@ int message_send(uint16_t type, void * data, unsigned int length)
     }
 }
 
-void *message_recv(uint16_t *type, unsigned int *length)
+int message_recv(uint16_t *type, void ** data, unsigned int *length)
 {
     // Figure out if there is a packet worth assembling. This is a really gross,
     // inefficient algorithm, but whatever its good enough for now.
     uint8_t *reassembled_data = 0;
+    int success = -5;
     uint16_t seen_packet_sequences[MAX_OUTSTANDING_PACKETS];
     uint8_t *seen_positions[MAX_OUTSTANDING_PACKETS];
     uint16_t seen_packet_lengths[MAX_OUTSTANDING_PACKETS];
@@ -596,16 +602,22 @@ void *message_recv(uint16_t *type, unsigned int *length)
                 // Calculate how many parts of the message we need to see.
                 seen_packet_sequences[index] = sequence;
                 seen_packet_lengths[index] = msg_length;
-                seen_positions[index] = malloc(num_packets_needed);
-                memset(seen_positions[index], 0, num_packets_needed);
+                if (num_packets_needed > 0)
+                {
+                    seen_positions[index] = malloc(num_packets_needed);
+                    memset(seen_positions[index], 0, num_packets_needed);
+                }
                 break;
             }
         }
 
-        // Now, mark the particular portion of this packet as present.
-        uint16_t location;
-        memcpy(&location, &pkt_data[MESSAGE_LOC_LOC], 2);
-        seen_positions[index][location / MAX_MESSAGE_DATA_LENGTH] = 1;
+        if (num_packets_needed > 0)
+        {
+            // Now, mark the particular portion of this packet as present.
+            uint16_t location;
+            memcpy(&location, &pkt_data[MESSAGE_LOC_LOC], 2);
+            seen_positions[index][location / MAX_MESSAGE_DATA_LENGTH] = 1;
+        }
     }
 
     // Now that we've gathered up which packets we have, see if any packets
@@ -634,7 +646,11 @@ void *message_recv(uint16_t *type, unsigned int *length)
         if (ready)
         {
             // This packet is ready!
-            reassembled_data = malloc(seen_packet_lengths[index]);
+            if (seen_packet_lengths[index] > 0)
+            {
+                reassembled_data = malloc(seen_packet_lengths[index]);
+            }
+            *data = reassembled_data;
             *length = seen_packet_lengths[index];
 
             for (unsigned int pkt = 0; pkt < MAX_OUTSTANDING_PACKETS; pkt++)
@@ -659,22 +675,27 @@ void *message_recv(uint16_t *type, unsigned int *length)
                 }
 
                 // Grab the type from this packet. This is inefficient since we
-                // only need to do it once, but whatever.
+                // only need to do it once, but whatever. Its two whole bytes and
+                // this entire reassembly algorithm could use work.
                 memcpy(type, &pkt_data[MESSAGE_ID_LOC], 2);
 
-                // Grab the location from this packet, so we can copy it into
-                // the right spot in the destination.
-                uint16_t location;
-                memcpy(&location, &pkt_data[MESSAGE_LOC_LOC], 2);
+                if (seen_packet_lengths[index] > 0)
+                {
+                    // Grab the location from this packet, so we can copy it into
+                    // the right spot in the destination.
+                    uint16_t location;
+                    memcpy(&location, &pkt_data[MESSAGE_LOC_LOC], 2);
 
-                // Actually copy it.
-                memcpy(reassembled_data + location, &pkt_data[MESSAGE_DATA_LOC], pkt_length - MESSAGE_HEADER_LENGTH);
+                    // Actually copy it.
+                    memcpy(reassembled_data + location, &pkt_data[MESSAGE_DATA_LOC], pkt_length - MESSAGE_HEADER_LENGTH);
+                }
 
                 // We don't need this packet anymore, since we received it.
                 packetlib_discard(pkt);
             }
 
             // We finished assembling the packet, lets return it!
+            success = 0;
             break;
         }
     }
@@ -689,7 +710,7 @@ void *message_recv(uint16_t *type, unsigned int *length)
     }
 
     // Return the possibly reassembled packet.
-    return reassembled_data;
+    return success;
 }
 
 void main()
@@ -723,19 +744,27 @@ void main()
         // Now, see if we have a packet to handle.
         {
             uint16_t type = 0;
+            uint8_t *data = 0;
             unsigned int length = 0;
-            void *data = message_recv(&type, &length);
-
-            if (length > 0)
+            if (message_recv(&type, (void *)&data, &length) == 0)
             {
-                sprintf(last_recvd, "Type: %04X, Length: %d, Msg: %s", type, length, (char *)data);
-                memcpy(data, "A new message!", 14);
-                message_send(0xABCD, data, 768);
-            }
+                if (length > 0)
+                {
+                    sprintf(last_recvd, "Type: %04X, Length: %d, Msg: %s", type, length, (char *)data);
+                    sprintf(buffer, "You sent me a %d byte message!", length);
+                    message_send(type, buffer, strlen(buffer));
+                }
+                if (length == 0)
+                {
+                    sprintf(last_recvd, "Type: %04X, Length: %d", type, length);
+                    message_send(type, "You sent me a blank message!", 28);
+                    message_send(0xBEEF, 0, 0);
+                }
 
-            if (data != 0)
-            {
-                free(data);
+                if (data != 0)
+                {
+                    free(data);
+                }
             }
         }
 
