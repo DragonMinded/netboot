@@ -2,11 +2,18 @@
 # Triforce Netfirm Toolbox, put into the public domain.
 # Please attribute properly, but only if you want.
 import argparse
+import os
 import struct
 import sys
 import time
+from typing import Dict, List, Optional, Tuple
+
+from naomi import NaomiRom, NaomiRomRegionEnum, add_or_update_section
 from netboot import NetDimm, PeekPokeTypeEnum
-from typing import Dict, List, Optional
+
+
+# The root of the repo.
+root = os.path.realpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
 
 
 MAX_PACKET_LENGTH: int = 253
@@ -280,19 +287,98 @@ def main() -> int:
         type=str,
         help="The IP address that the NetDimm is configured on.",
     )
+    parser.add_argument(
+        "romdir",
+        metavar="ROMDIR",
+        type=str,
+        default=os.path.join(root, 'roms'),
+        help='The directory of ROMs to select a game from. Defaults to %(default)s.',
+    )
+    parser.add_argument(
+        '--region',
+        metavar="REGION",
+        type=str,
+        help='The region of the Naomi which we are running the menu on. Defaults to "japan".',
+    )
+    parser.add_argument(
+        '--exe',
+        metavar='EXE',
+        type=str,
+        default=os.path.join(root, 'homebrew', 'netbootmenu', 'netbootmenu.bin'),
+        help='The menu executable that we should send to display games on the Naomi. Defaults to %(default)s.',
+    )
+    parser.add_argument(
+        '--verbose',
+        action="store_true",
+        help="Display verbose debugging information.",
+    )
 
     args = parser.parse_args()
+    verbose = args.verbose
 
-    netdimm = NetDimm(args.ip)
-    if not send_message(netdimm, Message(0x1234, b"Four" + b"\0" * 1020)):
-        print("Failed to send!")
-        return 1
+    region = {
+        "japan": NaomiRomRegionEnum.REGION_JAPAN,
+        "usa": NaomiRomRegionEnum.REGION_USA,
+        "export": NaomiRomRegionEnum.REGION_EXPORT,
+        "korea": NaomiRomRegionEnum.REGION_KOREA,
+        "australia": NaomiRomRegionEnum.REGION_AUSTRALIA,
+    }.get(args.region, NaomiRomRegionEnum.REGION_JAPAN)
 
+    # First, load the rom directory, list out the contents and figure out which ones are naomi games.
+    games: List[Tuple[str, bytes]] = []
+    romdir = os.path.abspath(args.romdir)
+    for filename in [f for f in os.listdir(romdir) if os.path.isfile(os.path.join(romdir, f))]:
+        # Grab the header so we can parse it.
+        with open(os.path.join(romdir, filename), "rb") as fp:
+            data = fp.read(NaomiRom.HEADER_LENGTH)
+
+        if verbose:
+            print(f"Discovered file {filename}.")
+
+        # Validate that it is a Naomi ROM.
+        if len(data) < NaomiRom.HEADER_LENGTH:
+            if verbose:
+                print("Not long enough to be a ROM!")
+            continue
+        rom = NaomiRom(data)
+        if not rom.valid:
+            if verbose:
+                print("Not a Naomi ROM!")
+            continue
+
+        # Get the name of the game.
+        name = rom.names[region]
+        serial = rom.serial
+
+        if verbose:
+            print(f"Added {name} with serial {serial.decode('ascii')} to ROM list.")
+
+        games.append((name, serial))
+
+    # Now, create the settings section.
+    config = struct.pack("<II", 8, len(games))
+    for index, (name, serial) in enumerate(games):
+        namebytes = name.encode('ascii')[:127]
+        while len(namebytes) < 128:
+            namebytes = namebytes + b"\0"
+        config += namebytes + serial + struct.pack("<I", index)
+
+    # Now, load up the menu ROM and append the settings to it.
+    with open(args.exe, "rb") as fp:
+        menudata = add_or_update_section(fp.read(), 0x0D000000, config, verbose=verbose)
+
+    # Now, connect to the net dimm, send the menu and then start communicating with it.
+    print("Connecting to net dimm...")
+    netdimm = NetDimm(args.ip, quiet=not verbose)
+    print("Sending menu to net dimm...")
+    netdimm.send(menudata, disable_crc_check=True)
+    netdimm.reboot()
+
+    print("Talking to net dimm to wait for ROM selection...")
     while True:
         msg = receive_message(netdimm)
         if msg:
-            print(f"Received type: {hex(msg.id)}, length: {len(msg.data)}, {msg.data.decode('ascii')}")
-            send_message(netdimm, Message(0xC0DE))
+            print(f"Received type: {hex(msg.id)}, length: {len(msg.data)}")
 
     return 0
 

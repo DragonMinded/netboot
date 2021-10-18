@@ -713,6 +713,27 @@ int message_recv(uint16_t *type, void ** data, unsigned int *length)
     return success;
 }
 
+#define CONFIG_MEMORY_LOCATION 0x0D000000
+#define GAMES_POINTER_LOC 0x0
+#define GAMES_COUNT_LOC 0x4
+
+typedef struct __attribute__((__packed__))
+{
+    char name[128];
+    uint8_t serial[4];
+    unsigned int id;
+} games_list_t;
+
+games_list_t *get_games_list(unsigned int *count)
+{
+    uint32_t config = CONFIG_MEMORY_LOCATION;
+
+    // Index into config memory to grab the count of games, as well as the offset pointer
+    // to where the games blob is.
+    *count = *((uint32_t *)(config + GAMES_COUNT_LOC));
+    return (games_list_t *)(*((uint32_t *)(config + GAMES_POINTER_LOC)) + CONFIG_MEMORY_LOCATION);
+}
+
 void main()
 {
     // Grab the system configuration
@@ -726,9 +747,12 @@ void main()
     video_init_simple();
     video_set_background_color(rgb(0, 0, 0));
 
-    char buffer[512];
-    char last_recvd[128];
-    memset(last_recvd, 0, 128);
+    // Grab our configuration.
+    unsigned int cursor = 0;
+    unsigned int top = 0;
+    int selection = -1;
+    unsigned int count = 0;
+    games_list_t *games = get_games_list(&count);
 
     while ( 1 )
     {
@@ -748,18 +772,7 @@ void main()
             unsigned int length = 0;
             if (message_recv(&type, (void *)&data, &length) == 0)
             {
-                if (length > 0)
-                {
-                    sprintf(last_recvd, "Type: %04X, Length: %d, Msg: %s", type, length, (char *)data);
-                    sprintf(buffer, "You sent me a %d byte message!", length);
-                    message_send(type, buffer, strlen(buffer));
-                }
-                if (length == 0)
-                {
-                    sprintf(last_recvd, "Type: %04X, Length: %d", type, length);
-                    message_send(type, "You sent me a blank message!", 28);
-                    message_send(0xBEEF, 0, 0);
-                }
+                // Respond to packets here.
 
                 if (data != 0)
                 {
@@ -768,12 +781,29 @@ void main()
             }
         }
 
-        // Draw a few simple things on the screen.
-        video_draw_text(100, 200, rgb(255, 255, 255), last_recvd);
+        // Now, render the actual list of games.
+        {
+            // Leave 24 pixels of padding on top and bottom of the games list.
+            // Space out games 16 pixels across.
+            unsigned int maxgames = (video_height() - (24 + 16)) / 16;
 
-        // Try to receive a packet.
-        packetlib_render_stats(buffer);
-        video_draw_text(100, 220, rgb(200, 200, 20), buffer);
+            for (unsigned int game = top; game < top + maxgames; game++)
+            {
+                if (game >= count)
+                {
+                    // Ran out of games to display.
+                    break;
+                }
+
+                // Draw cursor itself.
+                if (game == cursor) {
+                    video_draw_debug_text(16, 24 + ((game - top) * 16), rgb(255, 255, 20), ">");
+                }
+                
+                // Draw game, highlighted if it is selected.
+                video_draw_debug_text(32, 24 + ((game - top) * 16), game == cursor ? rgb(255, 255, 20) : rgb(255, 255, 255), games[game].name);
+            }
+        }
 
         // Actually draw the buffer.
         video_wait_for_vblank();
@@ -798,7 +828,7 @@ void test()
             enter_test_mode();
         }
 
-        video_draw_text(320 - 56, 236, rgb(255, 255, 255), "test mode stub\n\n[service] - exit");
+        video_draw_debug_text(320 - 56, 236, rgb(255, 255, 255), "test mode stub\n\n[service] - exit");
         video_wait_for_vblank();
         video_display();
     }

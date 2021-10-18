@@ -44,7 +44,6 @@ extern "C" void main()
 {
     video_init_simple();
 
-    char buffer[64];
     while ( 1 )
     {
         // Draw a few simple things on the screen.
@@ -56,11 +55,10 @@ extern "C" void main()
         video_draw_line(20, 20, 20, 100, rgb(0, 255, 0));
         video_draw_line(100, 20, 100, 100, rgb(0, 255, 0));
         video_draw_line(20, 100, 100, 100, rgb(0, 255, 0));
-        video_draw_text(20, 180, rgb(255, 255, 255), "It appears that C++ is working!");
+        video_draw_debug_text(20, 180, rgb(255, 255, 255), "It appears that C++ is working!");
 
         // Display a liveness counter, but using C++ to track.
-        sprintf(buffer, "Aliveness counter: %d", gCounter.next());
-        video_draw_text(20, 220, rgb(200, 200, 20), buffer);
+        video_draw_debug_text(20, 220, rgb(200, 200, 20), "Aliveness counter: %d", gCounter.next());
         video_wait_for_vblank();
         video_display();
     }
@@ -73,7 +71,7 @@ extern "C" void test()
     while ( 1 )
     {
         video_fill_screen(rgb(48, 48, 48));
-        video_draw_text(320 - 56, 236, rgb(255, 255, 255), "test mode stub");
+        video_draw_debug_text(320 - 56, 236, rgb(255, 255, 255), "test mode stub");
         video_wait_for_vblank();
         video_display();
     }

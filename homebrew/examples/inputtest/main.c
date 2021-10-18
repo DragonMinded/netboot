@@ -15,7 +15,7 @@ void display()
 {
     // Render a simple test console.
     video_fill_screen(rgb(48, 48, 48));
-    video_draw_text(0, 0, rgb(255, 255, 255), console_base);
+    video_draw_debug_text(0, 0, rgb(255, 255, 255), console_base);
     video_wait_for_vblank();
     video_display();
 }
@@ -205,7 +205,7 @@ void test()
     while ( 1 )
     {
         video_fill_screen(rgb(48, 48, 48));
-        video_draw_text(320 - 56, 236, rgb(255, 255, 255), "test mode stub");
+        video_draw_debug_text(320 - 56, 236, rgb(255, 255, 255), "test mode stub");
         video_wait_for_vblank();
         video_display();
     }

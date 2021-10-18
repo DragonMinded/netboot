@@ -1,5 +1,7 @@
+#include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include "naomi/video.h"
 #include "naomi/system.h"
 #include "naomi/dimmcomms.h"
@@ -346,7 +348,7 @@ void video_draw_line(int x0, int y0, int x1, int y1, uint32_t color)
     }
 }
 
-void video_draw_character( int x, int y, uint32_t color, char ch )
+void video_draw_debug_character( int x, int y, uint32_t color, char ch )
 {
     for(int row = y; row < y + 8; row++)
     {
@@ -511,7 +513,7 @@ void video_draw_sprite( int x, int y, int width, int height, void *data )
     }
 }
 
-void video_draw_text( int x, int y, uint32_t color, const char * const msg )
+void __video_draw_debug_text( int x, int y, uint32_t color, const char * const msg )
 {
     if( msg == 0 ) { return; }
 
@@ -535,7 +537,7 @@ void video_draw_text( int x, int y, uint32_t color, const char * const msg )
                 tx += 8 * 5;
                 break;
             default:
-                video_draw_character( tx, ty, color, *text );
+                video_draw_debug_character( tx, ty, color, *text );
                 tx += 8;
                 break;
         }
@@ -547,6 +549,21 @@ void video_draw_text( int x, int y, uint32_t color, const char * const msg )
         }
 
         text++;
+    }
+}
+
+void video_draw_debug_text(int x, int y, uint32_t color, const char * const msg, ...)
+{
+    static char buffer[2048];
+
+    if (msg)
+    {
+        va_list args;
+        va_start(args, msg);
+        vsnprintf(buffer, 2047, msg, args);
+        va_end(args);
+
+        __video_draw_debug_text(x, y, color, buffer);
     }
 }
 

@@ -81,7 +81,7 @@ void main()
     video_init_simple();
 
     video_fill_screen(rgb(0, 0, 0));
-    video_draw_text(X_LOC, Y_LOC, rgb(255, 255, 255), "Checking settings...");
+    video_draw_debug_text(X_LOC, Y_LOC, rgb(255, 255, 255), "Checking settings...");
 
     // Read current EEPROM contents
     uint8_t current_eeprom[EEPROM_SIZE];
@@ -121,11 +121,11 @@ void main()
             eeprom_valid(current_eeprom) == 0
         )
         {
-            video_draw_text(X_LOC, Y_LOC + 12, rgb(255, 255, 255), "Settings need to be written...");
+            video_draw_debug_text(X_LOC, Y_LOC + 12, rgb(255, 255, 255), "Settings need to be written...");
 
             if(maple_request_eeprom_write(requested_eeprom) == 0)
             {
-                video_draw_text(X_LOC, Y_LOC + 24, rgb(0, 255, 0), "Success, your settings are written!");
+                video_draw_debug_text(X_LOC, Y_LOC + 24, rgb(0, 255, 0), "Success, your settings are written!");
 
                 if (settings_chunk[SENTINEL_ENABLED] != 0)
                 {
@@ -136,12 +136,12 @@ void main()
             }
             else
             {
-                video_draw_text(X_LOC, Y_LOC + 24, rgb(255, 0, 0), "Failed, could not write your settings!");
+                video_draw_debug_text(X_LOC, Y_LOC + 24, rgb(255, 0, 0), "Failed, could not write your settings!");
             }
         }
         else
         {
-            video_draw_text(X_LOC, Y_LOC + 12, rgb(255, 255, 255), "Settings have already been written!");
+            video_draw_debug_text(X_LOC, Y_LOC + 12, rgb(255, 255, 255), "Settings have already been written!");
         }
 
         if (VERBOSE_DEBUG_MODE)
@@ -167,7 +167,7 @@ void main()
                 }
             }
 
-            video_draw_text(140, Y_LOC - (8 * 10), rgb(255, 255, 64), eeprom_buf);
+            video_draw_debug_text(140, Y_LOC - (8 * 10), rgb(255, 255, 64), eeprom_buf);
 
             // Debug print the current EEPROM CRC values.
             uint16_t expected = 0;
@@ -227,12 +227,12 @@ void main()
                 );
             }
 
-            video_draw_text(X_LOC, Y_LOC + 36, rgb(255, 255, 255), eeprom_buf);
+            video_draw_debug_text(X_LOC, Y_LOC + 36, rgb(255, 255, 255), eeprom_buf);
         }
     }
     else
     {
-        video_draw_text(X_LOC, Y_LOC + 12, rgb(255, 0, 0), "Failed, could not read current settings!");
+        video_draw_debug_text(X_LOC, Y_LOC + 12, rgb(255, 0, 0), "Failed, could not read current settings!");
     }
 
     if (settings_chunk[DEBUG_ENABLED] != 0)

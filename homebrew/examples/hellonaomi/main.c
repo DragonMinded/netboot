@@ -8,7 +8,6 @@ void main()
     video_init_simple();
     video_set_background_color(rgb(48, 48, 48));
 
-    char buffer[64];
     unsigned int counter = 0;
     double fps_value = 0.0;
     while ( 1 )
@@ -25,16 +24,13 @@ void main()
         video_draw_line(20, 20, 20, 100, rgb(0, 255, 0));
         video_draw_line(100, 20, 100, 100, rgb(0, 255, 0));
         video_draw_line(20, 100, 100, 100, rgb(0, 255, 0));
-        video_draw_text(20, 180, rgb(255, 255, 255), "Hello, world!");
-        video_draw_text(20, 200, rgb(255, 0, 255), "This is a test...");
+        video_draw_debug_text(20, 180, rgb(255, 255, 255), "Hello, world!");
+        video_draw_debug_text(20, 200, rgb(255, 0, 255), "This is a test...");
 
         // Display a liveness counter that goes up 60 times a second.
-        sprintf(buffer, "Aliveness counter: %d", counter++);
-        video_draw_text(20, 220, rgb(200, 200, 20), buffer);
-        sprintf(buffer, "Draw Time in uS: %d", profile_end(draw_time));
-        video_draw_text(20, 240, rgb(200, 200, 20), buffer);
-        sprintf(buffer, "FPS: %.01f, %dx%d", fps_value, video_width(), video_height());
-        video_draw_text(20, 260, rgb(200, 200, 20), buffer);
+        video_draw_debug_text(20, 220, rgb(200, 200, 20), "Aliveness counter: %d", counter++);
+        video_draw_debug_text(20, 240, rgb(200, 200, 20), "Draw Time in uS: %d", profile_end(draw_time));
+        video_draw_debug_text(20, 260, rgb(200, 200, 20), "FPS: %.01f, %dx%d", fps_value, video_width(), video_height());
 
         video_wait_for_vblank();
         video_display();
@@ -52,7 +48,7 @@ void test()
     while ( 1 )
     {
         video_fill_screen(rgb(48, 48, 48));
-        video_draw_text(320 - 56, 236, rgb(255, 255, 255), "test mode stub");
+        video_draw_debug_text(320 - 56, 236, rgb(255, 255, 255), "test mode stub");
         video_wait_for_vblank();
         video_display();
     }
