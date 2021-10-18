@@ -36,10 +36,11 @@ void test()
 {
     video_init_simple();
 
-    video_fill_screen(rgb(48, 48, 48));
-    video_draw_text(320 - 56, 236, rgb(255, 255, 255), "test mode stub");
-    video_wait_for_vblank();
-    video_display();
-
-    while ( 1 ) { ; }
+    while ( 1 )
+    {
+        video_fill_screen(rgb(48, 48, 48));
+        video_draw_text(320 - 56, 236, rgb(255, 255, 255), "test mode stub");
+        video_wait_for_vblank();
+        video_display();
+    }
 }
