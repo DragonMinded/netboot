@@ -8,7 +8,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Utility for calculating build date."
     )
-    args = parser.parse_args()
+    parser.parse_args()
 
     today = datetime.datetime.now()
     print(today.strftime("%Y%m%d"))
