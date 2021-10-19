@@ -6,6 +6,7 @@
 #include "naomi/maple.h"
 #include "naomi/eeprom.h"
 #include "naomi/system.h"
+#include "naomi/timer.h"
 #include "naomi/dimmcomms.h"
 
 #define MAX_OUTSTANDING_PACKETS 268
@@ -716,6 +717,8 @@ int message_recv(uint16_t *type, void ** data, unsigned int *length)
 #define CONFIG_MEMORY_LOCATION 0x0D000000
 #define GAMES_POINTER_LOC 0x0
 #define GAMES_COUNT_LOC 0x4
+#define ENABLE_ANALOG_LOC 0x8
+#define ENABLE_DEBUG_LOC 0xC
 
 typedef struct __attribute__((__packed__))
 {
@@ -734,7 +737,65 @@ games_list_t *get_games_list(unsigned int *count)
     return (games_list_t *)(*((uint32_t *)(config + GAMES_POINTER_LOC)) + CONFIG_MEMORY_LOCATION);
 }
 
+unsigned int analog_enabled()
+{
+    uint32_t config = CONFIG_MEMORY_LOCATION;
+    return *((uint32_t *)(config + ENABLE_ANALOG_LOC));
+}
+
+unsigned int debug_enabled()
+{
+    uint32_t config = CONFIG_MEMORY_LOCATION;
+    return *((uint32_t *)(config + ENABLE_DEBUG_LOC));
+}
+
+unsigned int repeat(unsigned int cur_state, int *repeat_count)
+{
+    // Based on 60fps. A held button will "repeat" itself ~16x a second
+    // after a 0.5 second hold delay.
+    if (*repeat_count < 0)
+    {
+        // If we have never pushed this button, don't try repeating
+        // if it happened to be held.
+        return 0;
+    }
+
+    if (cur_state == 0)
+    {
+        // Button isn't held, no repeats.
+        *repeat_count = 0;
+        return 0;
+    }
+
+    int count = *repeat_count;
+    *repeat_count = count + 1;
+
+    if (count >= 30)
+    {
+        // Repeat every 1/16 second after 0.5 second.
+        return (count % 4) ? 0 : 1;
+    }
+}
+
+void repeat_init(unsigned int pushed_state, int *repeat_count)
+{
+    if (pushed_state == 0)
+    {
+        // Haven't pushed the button yet.
+        return;
+    }
+    if (*repeat_count < 0)
+    {
+        // Mark that we've seen this button pressed.
+        *repeat_count = 0;
+    }
+}
+
 #define MESSAGE_SELECTION 0x1000
+
+#define ANALOG_CENTER 0x80
+#define ANALOG_THRESH_ON 0x30
+#define ANALOG_THRESH_OFF 0x20
 
 void main()
 {
@@ -754,24 +815,149 @@ void main()
     unsigned int top = 0;
     int selection = -1;
     unsigned int count = 0;
+    unsigned int oldaup[2] = { 0 };
+    unsigned int oldadown[2] = { 0 };
+    unsigned int aup[2] = { 0 };
+    unsigned int adown[2] = { 0 };
+    int repeats[4] = { -1, -1, -1, -1 };
     games_list_t *games = get_games_list(&count);
 
     // Leave 24 pixels of padding on top and bottom of the games list.
     // Space out games 16 pixels across.
     unsigned int maxgames = (video_height() - (24 + 16)) / 16;
 
+    // FPS calculation for debugging.
+    double fps_value = 0.0;
+
     while ( 1 )
     {
+        // Get FPS measurements.
+        int fps = profile_start();
+
         // First, poll the buttons and act accordingly.
         maple_poll_buttons();
-        jvs_buttons_t buttons = maple_buttons_pressed();
+        jvs_buttons_t pressed = maple_buttons_pressed();
+        jvs_buttons_t held = maple_buttons_current();
 
-        if (buttons.test || buttons.psw1)
+        // Also calculate analog thresholds so we can emulate joystick with analog.
+        if (analog_enabled())
+        {
+            if (held.player1.analog1 < (ANALOG_CENTER - ANALOG_THRESH_ON))
+            {
+                aup[0] = 1;
+            }
+            else if (held.player1.analog1 > (ANALOG_CENTER - ANALOG_THRESH_OFF))
+            {
+                aup[0] = 0;
+            }
+
+            if (held.player2.analog1 < (ANALOG_CENTER - ANALOG_THRESH_ON))
+            {
+                aup[1] = 1;
+            }
+            else if (held.player2.analog1 > (ANALOG_CENTER - ANALOG_THRESH_OFF))
+            {
+                aup[1] = 0;
+            }
+
+            if (held.player1.analog1 > (ANALOG_CENTER + ANALOG_THRESH_ON))
+            {
+                adown[0] = 1;
+            }
+            else if (held.player1.analog1 < (ANALOG_CENTER + ANALOG_THRESH_OFF))
+            {
+                adown[0] = 0;
+            }
+
+            if (held.player2.analog1 > (ANALOG_CENTER + ANALOG_THRESH_ON))
+            {
+                adown[1] = 1;
+            }
+            else if (held.player2.analog1 < (ANALOG_CENTER + ANALOG_THRESH_OFF))
+            {
+                adown[1] = 0;
+            }
+
+            // Map analogs back onto digitals.
+            if (aup[0])
+            {
+                held.player1.up = 1;
+            }
+            if (aup[1])
+            {
+                held.player2.up = 1;
+            }
+            if (adown[0])
+            {
+                held.player1.down = 1;
+            }
+            if (adown[1])
+            {
+                held.player2.down = 1;
+            }
+            if (aup[0] && !oldaup[0])
+            {
+                pressed.player1.up = 1;
+            }
+            if (aup[1] && !oldaup[1])
+            {
+                pressed.player2.up = 1;
+            }
+            if (adown[0] && !oldadown[0])
+            {
+                pressed.player1.down = 1;
+            }
+            if (adown[1] && !oldadown[1])
+            {
+                pressed.player2.down = 1;
+            }
+
+            memcpy(oldaup, aup, sizeof(aup));
+            memcpy(oldadown, adown, sizeof(adown));
+        }
+
+        // Process buttons and repeats.
+        unsigned int up = 0;
+        unsigned int down = 0;
+
+        if (pressed.test || pressed.psw1)
         {
             // Request to go into system test mode.
             enter_test_mode();
         }
-        if (buttons.player1.up || buttons.player2.up)
+        else if (pressed.player1.start || (settings.system.players >= 2 && pressed.player2.start))
+        {
+            // Made a selection!
+            message_send(MESSAGE_SELECTION, &cursor, 4);
+        }
+        else
+        {
+            if (pressed.player1.up || (settings.system.players >= 2 && pressed.player2.up))
+            {
+                up = 1;
+
+                repeat_init(pressed.player1.up, &repeats[0]);
+                repeat_init(pressed.player2.up, &repeats[1]);
+            }
+            else if (pressed.player1.down || (settings.system.players >= 2 && pressed.player2.down))
+            {
+                down = 1;
+
+                repeat_init(pressed.player1.down, &repeats[2]);
+                repeat_init(pressed.player2.down, &repeats[3]);
+            }
+            if (repeat(held.player1.up, &repeats[0]) || (settings.system.players >= 2 && repeat(held.player2.up, &repeats[1])))
+            {
+                up = 1;
+            }
+            else if (repeat(held.player1.down, &repeats[2]) || (settings.system.players >= 2 && repeat(held.player2.down, &repeats[3])))
+            {
+                down = 1;
+            }
+        }
+
+        // Act on cursor.
+        if (up)
         {
             // Moved cursor up.
             if (cursor > 0)
@@ -783,7 +969,7 @@ void main()
                 top = cursor;
             }
         }
-        else if (buttons.player1.down || buttons.player2.down)
+        else if (down)
         {
             // Moved cursor down.
             if (cursor < (count - 1))
@@ -794,11 +980,6 @@ void main()
             {
                 top = cursor - (maxgames - 1);
             }
-        }
-        else if (buttons.player1.start || buttons.player2.start)
-        {
-            // Made a selection!
-            message_send(MESSAGE_SELECTION, &cursor, 4);
         }
 
         // Now, see if we have a packet to handle.
@@ -831,15 +1012,24 @@ void main()
                 if (game == cursor) {
                     video_draw_debug_text(16, 24 + ((game - top) * 16), rgb(255, 255, 20), ">");
                 }
-                
+
                 // Draw game, highlighted if it is selected.
                 video_draw_debug_text(32, 24 + ((game - top) * 16), game == cursor ? rgb(255, 255, 20) : rgb(255, 255, 255), games[game].name);
             }
         }
 
+        if (debug_enabled())
+        {
+            // Display some debugging info.
+            video_draw_debug_text((video_width() / 2) - (18 * 4), video_height() - 16, rgb(0, 200, 255), "FPS: %.01f, %dx%d", fps_value, video_width(), video_height());
+        }
+
         // Actually draw the buffer.
         video_wait_for_vblank();
         video_display();
+
+        uint32_t uspf = profile_end(fps);
+        fps_value = (1000000.0 / (double)uspf) + 0.01;
     }
 }
 

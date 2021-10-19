@@ -311,6 +311,16 @@ def main() -> int:
         help='The menu executable that we should send to display games on the Naomi. Defaults to %(default)s.',
     )
     parser.add_argument(
+        '--enable-analog',
+        action="store_true",
+        help="Enable analog control inputs.",
+    )
+    parser.add_argument(
+        '--debug-mode',
+        action="store_true",
+        help="Enable extra debugging information on the Naomi.",
+    )
+    parser.add_argument(
         '--verbose',
         action="store_true",
         help="Display verbose debugging information.",
@@ -359,7 +369,7 @@ def main() -> int:
         games.append((filename, name, serial))
 
     # Now, create the settings section.
-    config = struct.pack("<II", 8, len(games))
+    config = struct.pack("<IIII", 16, len(games), 1 if args.enable_analog else 0, 1 if args.debug_mode else 0)
     for index, (_, name, serial) in enumerate(games):
         namebytes = name.encode('ascii')[:127]
         while len(namebytes) < 128:
