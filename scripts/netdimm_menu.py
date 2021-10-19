@@ -368,6 +368,9 @@ def main() -> int:
 
         games.append((filename, name, serial))
 
+    # Alphabetize them.
+    games = sorted(games, key=lambda g: g[1])
+
     # Now, create the settings section.
     gamesconfig = b""
     for index, (_, name, serial) in enumerate(games):

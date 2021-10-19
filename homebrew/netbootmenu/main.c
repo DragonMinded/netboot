@@ -805,6 +805,18 @@ void repeat_init(unsigned int pushed_state, int *repeat_count)
 extern uint8_t *helvetica_ttf_data;
 extern unsigned int helvetica_ttf_len;
 
+extern unsigned int up_png_width;
+extern unsigned int up_png_height;
+extern void *up_png_data;
+
+extern unsigned int dn_png_width;
+extern unsigned int dn_png_height;
+extern void *dn_png_data;
+
+extern unsigned int cursor_png_width;
+extern unsigned int cursor_png_height;
+extern void *cursor_png_data;
+
 void main()
 {
     // Grab the system configuration
@@ -820,7 +832,7 @@ void main()
 
     // Attach our font
     font_t *helvetica = video_font_add(helvetica_ttf_data, helvetica_ttf_len);
-    video_font_set_size(helvetica, 12);
+    video_font_set_size(helvetica, 18);
 
     // Grab our configuration.
     unsigned int cursor = 0;
@@ -836,7 +848,7 @@ void main()
 
     // Leave 24 pixels of padding on top and bottom of the games list.
     // Space out games 16 pixels across.
-    unsigned int maxgames = (video_height() - (24 + 16)) / 16;
+    unsigned int maxgames = (video_height() - (24 + 16)) / 21;
 
     // FPS calculation for debugging.
     double fps_value = 60.0;
@@ -1013,6 +1025,11 @@ void main()
         // Now, render the actual list of games.
         int profile = profile_start();
         {
+            if (top > 0)
+            {
+                video_draw_sprite(video_width() / 2 - 10, 10, up_png_width, up_png_height, up_png_data);
+            }
+
             for (unsigned int game = top; game < top + maxgames; game++)
             {
                 if (game >= count)
@@ -1024,12 +1041,18 @@ void main()
                 // Draw cursor itself.
                 if (game == cursor)
                 {
-                    video_draw_debug_text(16, 23 + ((game - top) * 16), rgb(255, 255, 20), ">");
+                    video_draw_sprite(24, 24 + ((game - top) * 21), cursor_png_width, cursor_png_height, cursor_png_data);
                 }
 
                 // Draw game, highlighted if it is selected.
-                video_draw_text(32, 20 + ((game - top) * 16), helvetica, game == cursor ? rgb(255, 255, 20) : rgb(255, 255, 255), games[game].name);
+                video_draw_text(48, 22 + ((game - top) * 21), helvetica, game == cursor ? rgb(255, 255, 20) : rgb(255, 255, 255), games[game].name);
             }
+
+            if ((top + maxgames) < count)
+            {
+                video_draw_sprite(video_width() / 2 - 10, 24 + (maxgames * 21), dn_png_width, dn_png_height, dn_png_data);
+            }
+
         }
         uint32_t draw_time = profile_end(profile);
 
