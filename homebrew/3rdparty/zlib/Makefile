@@ -14,6 +14,6 @@ CONFIGURE_ARGS = --static
 
 BUILD_TARGET = libz.a
 
-BUILD_HEADERS = zlib.h zconf.h
+INSTALL_HEADERS = zlib.h zconf.h
 
 include ../Makefile.base

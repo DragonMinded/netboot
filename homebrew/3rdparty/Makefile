@@ -1,4 +1,4 @@
-all: zlib libbz2
+all: zlib libbz2 libpng
 
 .PHONY: zlib
 zlib:
@@ -8,7 +8,12 @@ zlib:
 libbz2:
 	$(MAKE) -C libbz2 install
 
+.PHONY: libpng
+libpng:
+	$(MAKE) -C libpng install
+
 .PHONY: clean
 clean:
 	$(MAKE) -C zlib clean
 	$(MAKE) -C libbz2 clean
+	$(MAKE) -C libpng clean

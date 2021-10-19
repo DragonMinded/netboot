@@ -10,6 +10,6 @@ ARTIFACT = bzip2_1.0.8.orig.tar.gz
 # Build arguments
 BUILD_TARGET = libbz2.a
 
-BUILD_HEADERS = bzlib.h
+INSTALL_HEADERS = bzlib.h
 
 include ../Makefile.base

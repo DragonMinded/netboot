@@ -39,10 +39,16 @@ extract: build/${NAME}
 .PHONY: build
 build: build/build.stamp
 
+ifeq ($(INSTALL_LIBS),)
+INSTALL_LIBS = ${BUILD_TARGET}
+endif
+
 .PHONY: install
 install: build/build.stamp
-	cd build/${NAME} ; cp ${BUILD_TARGET} ${NAOMI_SH_BASE}/lib
-	cd build/${NAME} ; cp ${BUILD_HEADERS} ${NAOMI_SH_BASE}/include/${HEADER_INSTALLDIR}
+	mkdir -p ${NAOMI_SH_BASE}/lib
+	cd build/${NAME} ; cp ${INSTALL_LIBS} ${NAOMI_SH_BASE}/lib
+	mkdir -p ${NAOMI_SH_BASE}/include/${HEADER_INSTALLDIR}
+	cd build/${NAME} ; cp ${INSTALL_HEADERS} ${NAOMI_SH_BASE}/include/${HEADER_INSTALLDIR}
 
 .PHONY: clean
 clean:
