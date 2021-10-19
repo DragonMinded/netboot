@@ -42,13 +42,17 @@ build: build/build.stamp
 ifeq ($(INSTALL_LIBS),)
 INSTALL_LIBS = ${BUILD_TARGET}
 endif
-
+.PHONY: install
+install: build/build.stamp
+ifeq ($(NO_INSTALL), 1)
+else
 .PHONY: install
 install: build/build.stamp
 	mkdir -p ${NAOMI_SH_BASE}/lib
 	cd build/${NAME} ; cp ${INSTALL_LIBS} ${NAOMI_SH_BASE}/lib
 	mkdir -p ${NAOMI_SH_BASE}/include/${HEADER_INSTALLDIR}
 	cd build/${NAME} ; cp ${INSTALL_HEADERS} ${NAOMI_SH_BASE}/include/${HEADER_INSTALLDIR}
+endif
 
 .PHONY: clean
 clean:
