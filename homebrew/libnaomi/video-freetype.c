@@ -156,10 +156,12 @@ void __draw_bitmap(int x, int y, unsigned int width, unsigned int height, unsign
                         unsigned int dg;
                         unsigned int db;
 
+                        // Technically it should be divided by 255, but this should
+                        // be much much faster.
                         explodergb(video_get_pixel(x + xp, y + yp), &dr, &dg, &db); 
-                        dr = ((sr * alpha) + (dr * (255 - alpha))) / 255;
-                        dg = ((sg * alpha) + (dg * (255 - alpha))) / 255;
-                        db = ((sb * alpha) + (db * (255 - alpha))) / 255;
+                        dr = ((sr * alpha) + (dr * (255 - alpha))) >> 8;
+                        dg = ((sg * alpha) + (dg * (255 - alpha))) >> 8;
+                        db = ((sb * alpha) + (db * (255 - alpha))) >> 8;
                         video_draw_pixel(x + xp, y + yp, rgb(dr, dg, db));
                     }
                 }

@@ -55,10 +55,7 @@ void video_wait_for_vblank()
         }
     }
     while((videobase[POWERVR2_SYNC_STAT] & 0x01ff)) {
-        if (global_background_fill_start < global_background_fill_end) {
-            hw_memset((void *)global_background_fill_start, global_background_fill_color, 32);
-            global_background_fill_start += 32;
-        }
+        // Don't clear here, as this can cause us to miss the vblank swap period.
     }
 }
 
