@@ -8,10 +8,15 @@ all: hellonaomi.bin
 # one of these files is not found, make will complain about a
 # missing missing `build/naomi.bin' target, so make sure all of
 # these files exist.
-SRCS += main.c
+SRCS += main.c build/sonic.o
 
 # Pick up base makefile rules common to all examples.
 include ../../Makefile.base
+
+build/sonic.o: sonic.png
+	@mkdir -p $(dir $@)
+	${IMG2C} build/sonic.c --depth 2 $<
+	${CC} -c build/sonic.c -o $@
 
 # Provide the top-level ROM creation target for this binary.
 # See scripts.makerom for details about what is customizable.

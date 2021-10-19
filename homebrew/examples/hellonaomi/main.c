@@ -3,6 +3,10 @@
 #include "naomi/video.h"
 #include "naomi/timer.h"
 
+extern unsigned int sonic_png_width;
+extern unsigned int sonic_png_height;
+extern void *sonic_png_data;
+
 void main()
 {
     video_init_simple();
@@ -31,6 +35,9 @@ void main()
         video_draw_debug_text(20, 220, rgb(200, 200, 20), "Aliveness counter: %d", counter++);
         video_draw_debug_text(20, 240, rgb(200, 200, 20), "Draw Time in uS: %d", profile_end(draw_time));
         video_draw_debug_text(20, 260, rgb(200, 200, 20), "FPS: %.01f, %dx%d", fps_value, video_width(), video_height());
+
+        // Display a sample sprite.
+        video_draw_sprite(video_width() - sonic_png_width - 20, 20, sonic_png_width, sonic_png_height, sonic_png_data);
 
         video_wait_for_vblank();
         video_display();
