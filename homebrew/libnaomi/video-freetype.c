@@ -139,14 +139,15 @@ void __draw_bitmap(int x, int y, unsigned int width, unsigned int height, unsign
     {
         for (int yp = 0; yp < height; yp++)
         {
+            unsigned int row = yp * width;
             for(int xp = 0; xp < width; xp++)
             {
                 // Alpha-blend the grayscale image with the destination.
-                unsigned int alpha = buffer[(yp * width) + xp];
+                unsigned int alpha = buffer[row + xp];
 
-                if (alpha)
+                if (alpha != 0)
                 {
-                    if(alpha>= 255)
+                    if(alpha >= 255)
                     {
                         video_draw_pixel(x + xp, y + yp, color);
                     }
@@ -305,8 +306,8 @@ int __video_draw_text( int x, int y, font_t *fontface, uint32_t color, const cha
                              );
                             __cache_add(fontface, entry);
                         }
-                        break;
                     }
+                    break;
                 }
                 default:
                 {
@@ -389,6 +390,7 @@ int __video_draw_text( int x, int y, font_t *fontface, uint32_t color, const cha
         }
 
         free(freeptr);
+        return 0;
     }
     else
     {
@@ -401,20 +403,17 @@ int video_draw_text(int x, int y, font_t *fontface, uint32_t color, const char *
 {
     if (msg)
     {
-        char *buffer = malloc(strlen(msg) + 2048);
+        static char buffer[2048];
 
         if (buffer)
         {
             va_list args;
             va_start(args, msg);
-            vsnprintf(buffer, strlen(msg) + 2047, msg, args);
+            vsnprintf(buffer, 2047, msg, args);
             va_end(args);
 
-            int error = __video_draw_text(x, y, fontface, color, buffer);
-
-            free(buffer);
-
-            return error;
+            int err = __video_draw_text(x, y, fontface, color, buffer);
+            return err;
         }
         else
         {

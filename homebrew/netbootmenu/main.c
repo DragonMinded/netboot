@@ -749,7 +749,7 @@ unsigned int debug_enabled()
     return *((uint32_t *)(config + ENABLE_DEBUG_LOC));
 }
 
-unsigned int repeat(unsigned int cur_state, int *repeat_count)
+unsigned int repeat(unsigned int cur_state, int *repeat_count, double fps)
 {
     // Based on 60fps. A held button will "repeat" itself ~16x a second
     // after a 0.5 second hold delay.
@@ -767,13 +767,18 @@ unsigned int repeat(unsigned int cur_state, int *repeat_count)
         return 0;
     }
 
+    // Calculate repeat values based on current FPS.
     int count = *repeat_count;
+    int thresh = (int)(30.0 * (fps / 60.0));
+    int repeat = thresh / 5;
+
+    // Update our counter.
     *repeat_count = count + 1;
 
-    if (count >= 30)
+    if (count >= thresh)
     {
         // Repeat every 1/16 second after 0.5 second.
-        return (count % 4) ? 0 : 1;
+        return (count % repeat) ? 0 : 1;
     }
 }
 
@@ -834,7 +839,7 @@ void main()
     unsigned int maxgames = (video_height() - (24 + 16)) / 16;
 
     // FPS calculation for debugging.
-    double fps_value = 0.0;
+    double fps_value = 60.0;
 
     while ( 1 )
     {
@@ -953,11 +958,11 @@ void main()
                 repeat_init(pressed.player1.down, &repeats[2]);
                 repeat_init(pressed.player2.down, &repeats[3]);
             }
-            if (repeat(held.player1.up, &repeats[0]) || (settings.system.players >= 2 && repeat(held.player2.up, &repeats[1])))
+            if (repeat(held.player1.up, &repeats[0], fps_value) || (settings.system.players >= 2 && repeat(held.player2.up, &repeats[1], fps_value)))
             {
                 up = 1;
             }
-            else if (repeat(held.player1.down, &repeats[2]) || (settings.system.players >= 2 && repeat(held.player2.down, &repeats[3])))
+            else if (repeat(held.player1.down, &repeats[2], fps_value) || (settings.system.players >= 2 && repeat(held.player2.down, &repeats[3], fps_value)))
             {
                 down = 1;
             }
@@ -1006,6 +1011,7 @@ void main()
         }
 
         // Now, render the actual list of games.
+        int profile = profile_start();
         {
             for (unsigned int game = top; game < top + maxgames; game++)
             {
@@ -1024,11 +1030,13 @@ void main()
                 video_draw_text(32, 20 + ((game - top) * 16), helvetica, game == cursor ? rgb(255, 255, 20) : rgb(255, 255, 255), games[game].name);
             }
         }
+        uint32_t draw_time = profile_end(profile);
 
         if (debug_enabled())
         {
             // Display some debugging info.
             video_draw_debug_text((video_width() / 2) - (18 * 4), video_height() - 16, rgb(0, 200, 255), "FPS: %.01f, %dx%d", fps_value, video_width(), video_height());
+            video_draw_debug_text((video_width() / 2) - (18 * 4), video_height() - 24, rgb(0, 200, 255), "uS full draw: %d", draw_time);
         }
 
         // Actually draw the buffer.
