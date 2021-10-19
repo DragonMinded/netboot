@@ -8,6 +8,10 @@ libnaomi:
 examples:
 	$(MAKE) -C examples
 
+.PHONY: 3rdparty
+3rdparty:
+	$(MAKE) -C 3rdparty
+
 .PHONY: copy
 copy: libnaomi examples
 	$(MAKE) -C examples copy

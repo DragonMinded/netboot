@@ -1,0 +1,32 @@
+include $(dir $(abspath $(lastword $(MAKEFILE_LIST))))../Makefile.base
+
+download/${ARTIFACT}:
+	mkdir -p download
+	wget ${BASE_URL}/${ARTIFACT} -P download
+
+build/${DIRECTORY}: download/${ARTIFACT}
+	mkdir -p build
+	tar -xvzf download/${ARTIFACT} -C build
+
+.PHONY: download
+download: download/${ARTIFACT}
+
+.PHONY: extract
+extract: build/${DIRECTORY}
+
+.PHONY: configure
+configure: build/${DIRECTORY}
+	cd build/${DIRECTORY}/ ; CC=${NAOMI_SH_CC} CFLAGS="${NAOMI_SH_CCFLAGS}" AR=${NAOMI_SH_AR} ./configure ${CONFIGURE_ARGS} --prefix=${NAOMI_SH_BASE}
+
+.PHONY: build
+build: configure
+	cd build/${DIRECTORY}/ ; make ${BUILD_TARGET}
+
+.PHONY: install
+install: configure
+	cd build/${DIRECTORY}/ ; make ${INSTALL_TARGET}
+
+.PHONY: clean
+clean:
+	rm -rf download
+	rm -rf build
