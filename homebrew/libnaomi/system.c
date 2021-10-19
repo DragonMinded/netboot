@@ -34,6 +34,14 @@ extern uint32_t __ctors_end;
 extern uint32_t __dtors;
 extern uint32_t __dtors_end;
 
+/* Provide a weakref to a default test sub for autoconf-purposes. */
+int __test()
+{
+    return 0;
+}
+
+int test() __attribute__((weak, alias ("__test")));
+
 void _exit(int status)
 {
     // Run fini sections.

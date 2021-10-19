@@ -1,6 +1,6 @@
 include $(dir $(abspath $(lastword $(MAKEFILE_LIST))))../Makefile.base
 
-THIRD_PARTY_LIBS = ${BASE_LIBS} ${REQUIRED_LIBS}
+THIRD_PARTY_LIBS = ${LIBS} ${REQUIRED_LIBS}
 
 download/${ARTIFACT}:
 	mkdir -p download
@@ -12,7 +12,7 @@ build/${NAME}: download/${ARTIFACT}
 
 ifeq ($(USES_AUTOCONF), 1)
 build/config.stamp: build/${NAME}
-	cd build/${NAME}/ ; CC="${NAOMI_SH_CC}" CFLAGS="${NAOMI_SH_CCFLAGS}" AR="${NAOMI_SH_AR}" LD="${NAOMI_SH_LD}" LDFLAGS="${NAOMI_SH_LDLIBPATHS} ${THIRD_PARTY_LIBS}" ./configure ${CONFIGURE_ARGS} --prefix=${NAOMI_SH_BASE}
+	cd build/${NAME}/ ; CC="${NAOMI_SH_CC}" CFLAGS="${NAOMI_SH_CCFLAGS}" AR="${NAOMI_SH_AR}" LD="${NAOMI_SH_LD}" LDFLAGS="${NAOMI_SH_LDLIBPATHS}" LIBS="${THIRD_PARTY_LIBS}" ./configure ${CONFIGURE_ARGS} --prefix=${NAOMI_SH_BASE}
 	touch build/config.stamp
 
 build/build.stamp: build/config.stamp
@@ -23,7 +23,7 @@ build/build.stamp: build/config.stamp
 configure: build/config.stamp
 else
 build/build.stamp: build/${NAME}
-	make -C build/${NAME} "${BUILD_TARGET}" CC="${NAOMI_SH_CC}" CFLAGS="${NAOMI_SH_CCFLAGS}" AR="${NAOMI_SH_AR}" LD="${NAOMI_SH_LD}" LDFLAGS="${NAOMI_SH_LDLIBPATHS} ${THIRD_PARTY_LIBS}"
+	make -C build/${NAME} "${BUILD_TARGET}" CC="${NAOMI_SH_CC}" CFLAGS="${NAOMI_SH_CCFLAGS}" AR="${NAOMI_SH_AR}" LD="${NAOMI_SH_LD}" LDFLAGS="${NAOMI_SH_LDLIBPATHS}" LIBS="${THIRD_PARTY_LIBS}"
 	touch build/build.stamp
 
 .PHONY: configure

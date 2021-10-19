@@ -43,7 +43,9 @@ NAOMI_SH_CPPFLAGS += -O2
 CPP  = ${NAOMI_SH_CPP} ${NAOMI_SH_CPPFLAGS}
 
 # Set up the libraries we care about.
-NAOMI_SH_LDLIBPATHS = -L${NAOMI_SH_BASE}/sh-elf/lib/ -L${NAOMI_SH_BASE}/lib/ -L${NAOMI_SH_BASE}/lib/gcc/sh-elf/${NAOMI_SH_GCC_VER}/
+NAOMI_SH_LDLIBPATHS  = -L${NAOMI_SH_BASE}/sh-elf/lib/ -L${NAOMI_SH_BASE}/lib/ -L${NAOMI_SH_BASE}/lib/gcc/sh-elf/${NAOMI_SH_GCC_VER}/
+# Add the path to libnaomi, built in this repository.
+NAOMI_SH_LDLIBPATHS += -L$(dir $(abspath $(lastword $(MAKEFILE_LIST))))libnaomi/
 
 # SH-4 little endian ELF format.
 NAOMI_SH_LDFLAGS  = -mshlelf
@@ -53,8 +55,6 @@ NAOMI_SH_LDFLAGS += -T$(dir $(abspath $(lastword $(MAKEFILE_LIST))))naomi.ld
 NAOMI_SH_LDFLAGS += --gc-sections
 # Add library paths so we can link against newlib-provided system libs.
 NAOMI_SH_LDFLAGS += ${NAOMI_SH_LDLIBPATHS}
-# Add the path to libnaomi, built in this repository.
-NAOMI_SH_LDFLAGS += -L$(dir $(abspath $(lastword $(MAKEFILE_LIST))))libnaomi/
 
 # Set up linker default options for linking the final elf file.
 LD  = ${NAOMI_SH_LD} ${NAOMI_SH_LDFLAGS}
@@ -120,11 +120,8 @@ DATE = python3 $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/date.py
 # A List of source files that should be included.
 SRCS ?=
 
-# A list of base system libraries we should always link again.
-BASE_LIBS = -lc -lm -lgcc -lstdc++
-
 # A list of libraries that should be linked against.
-LIBS ?= -lnaomi ${BASE_LIBS}
+LIBS ?= -lnaomi -lc -lm -lgcc -lstdc++
 
 # The desired start address of the executable. Its totally okay to leave this alone.
 START_ADDR = 0xc021000
