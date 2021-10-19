@@ -52,5 +52,8 @@ install: build/build.stamp
 
 .PHONY: clean
 clean:
-	rm -rf download
 	rm -rf build
+
+.PHONY: allclean
+allclean: clean
+	rm -rf download
