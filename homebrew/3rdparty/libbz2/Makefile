@@ -12,6 +12,4 @@ BUILD_TARGET = libbz2.a
 
 BUILD_HEADERS = bzlib.h
 
-INSTALL_TARGET = install
-
-include ../Makefile.noconfigure.base
+include ../Makefile.base
