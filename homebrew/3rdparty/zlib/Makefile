@@ -1,27 +1,19 @@
 all: build
 
-include ../Makefile.base
-
 # Download arguments
-VERSION = 1.2.11
-
 BASE_URL = http://zlib.net/
 
-DIRECTORY = zlib-${VERSION}
+NAME = zlib-1.2.11
 
-ARTIFACT = ${DIRECTORY}.tar.gz
+ARTIFACT = ${NAME}.tar.gz
 
 # Build arguments
 CONFIGURE_ARGS = --static
 
 BUILD_TARGET = libz.a
 
+BUILD_HEADERS = zlib.h zconf.h
+
 INSTALL_TARGET = install
 
-download/${ARTIFACT}:
-	mkdir -p download
-	wget http://zlib.net/${ARTIFACT} -P download
-
-build/${DIRECTORY}: download/${ARTIFACT}
-	mkdir -p build
-	tar -xvzf download/${ARTIFACT} -C build
+include ../Makefile.configure.base

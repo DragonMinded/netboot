@@ -4,7 +4,7 @@ download/${ARTIFACT}:
 	mkdir -p download
 	wget ${BASE_URL}/${ARTIFACT} -P download
 
-build/${DIRECTORY}: download/${ARTIFACT}
+build/${NAME}: download/${ARTIFACT}
 	mkdir -p build
 	tar -xvzf download/${ARTIFACT} -C build
 
@@ -12,19 +12,15 @@ build/${DIRECTORY}: download/${ARTIFACT}
 download: download/${ARTIFACT}
 
 .PHONY: extract
-extract: build/${DIRECTORY}
-
-.PHONY: configure
-configure: build/${DIRECTORY}
-	cd build/${DIRECTORY}/ ; CC=${NAOMI_SH_CC} CFLAGS="${NAOMI_SH_CCFLAGS}" AR=${NAOMI_SH_AR} ./configure ${CONFIGURE_ARGS} --prefix=${NAOMI_SH_BASE}
+extract: build/${NAME}
 
 .PHONY: build
-build: configure
-	cd build/${DIRECTORY}/ ; make ${BUILD_TARGET}
+build: build/build.stamp
 
 .PHONY: install
-install: configure
-	cd build/${DIRECTORY}/ ; make ${INSTALL_TARGET}
+install: build/build.stamp
+	cd build/${NAME} ; cp ${BUILD_TARGET} ${NAOMI_SH_BASE}/lib
+	cd build/${NAME} ; cp ${BUILD_HEADERS} ${NAOMI_SH_BASE}/include
 
 .PHONY: clean
 clean:

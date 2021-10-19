@@ -1,0 +1,8 @@
+include $(dir $(abspath $(lastword $(MAKEFILE_LIST))))/Makefile.base
+
+build/build.stamp: build/${NAME}
+	make -C build/${NAME} ${BUILD_TARGET} CC=${NAOMI_SH_CC} CFLAGS="${NAOMI_SH_CCFLAGS}" AR=${NAOMI_SH_AR}
+	touch build/build.stamp
+
+.PHONY: configure
+configure:
