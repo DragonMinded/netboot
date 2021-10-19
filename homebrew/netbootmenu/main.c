@@ -817,6 +817,287 @@ extern unsigned int cursor_png_width;
 extern unsigned int cursor_png_height;
 extern void *cursor_png_data;
 
+#define SCREEN_MAIN_MENU 0
+
+typedef struct
+{
+    eeprom_t *settings;
+    double fps;
+    double animation_counter;
+    font_t *font;
+} state_t;
+
+typedef struct
+{
+    uint8_t up;
+    uint8_t down;
+    uint8_t start;
+    uint8_t test;
+} controls_t;
+
+controls_t get_controls(state_t *state, int reinit)
+{
+    static unsigned int oldaup[2] = { 0 };
+    static unsigned int oldadown[2] = { 0 };
+    static unsigned int aup[2] = { 0 };
+    static unsigned int adown[2] = { 0 };
+    static int repeats[4] = { -1, -1, -1, -1 };
+
+    if (reinit)
+    {
+        memset(oldaup, 0, sizeof(unsigned int) * 2);
+        memset(aup, 0, sizeof(unsigned int) * 2);
+        memset(oldadown, 0, sizeof(unsigned int) * 2);
+        memset(adown, 0, sizeof(unsigned int) * 2);
+        
+        for (unsigned int i = 0; i < sizeof(repeats) / sizeof(repeats[0]); i++)
+        {
+            repeats[i] = -1;
+        }
+    }
+
+    // First, poll the buttons and act accordingly.
+    maple_poll_buttons();
+    jvs_buttons_t pressed = maple_buttons_pressed();
+    jvs_buttons_t held = maple_buttons_current();
+
+    // Also calculate analog thresholds so we can emulate joystick with analog.
+    if (analog_enabled())
+    {
+        if (held.player1.analog1 < (ANALOG_CENTER - ANALOG_THRESH_ON))
+        {
+            aup[0] = 1;
+        }
+        else if (held.player1.analog1 > (ANALOG_CENTER - ANALOG_THRESH_OFF))
+        {
+            aup[0] = 0;
+        }
+
+        if (held.player2.analog1 < (ANALOG_CENTER - ANALOG_THRESH_ON))
+        {
+            aup[1] = 1;
+        }
+        else if (held.player2.analog1 > (ANALOG_CENTER - ANALOG_THRESH_OFF))
+        {
+            aup[1] = 0;
+        }
+
+        if (held.player1.analog1 > (ANALOG_CENTER + ANALOG_THRESH_ON))
+        {
+            adown[0] = 1;
+        }
+        else if (held.player1.analog1 < (ANALOG_CENTER + ANALOG_THRESH_OFF))
+        {
+            adown[0] = 0;
+        }
+
+        if (held.player2.analog1 > (ANALOG_CENTER + ANALOG_THRESH_ON))
+        {
+            adown[1] = 1;
+        }
+        else if (held.player2.analog1 < (ANALOG_CENTER + ANALOG_THRESH_OFF))
+        {
+            adown[1] = 0;
+        }
+
+        // Map analogs back onto digitals.
+        if (aup[0])
+        {
+            held.player1.up = 1;
+        }
+        if (aup[1])
+        {
+            held.player2.up = 1;
+        }
+        if (adown[0])
+        {
+            held.player1.down = 1;
+        }
+        if (adown[1])
+        {
+            held.player2.down = 1;
+        }
+        if (aup[0] && !oldaup[0])
+        {
+            pressed.player1.up = 1;
+        }
+        if (aup[1] && !oldaup[1])
+        {
+            pressed.player2.up = 1;
+        }
+        if (adown[0] && !oldadown[0])
+        {
+            pressed.player1.down = 1;
+        }
+        if (adown[1] && !oldadown[1])
+        {
+            pressed.player2.down = 1;
+        }
+
+        memcpy(oldaup, aup, sizeof(aup));
+        memcpy(oldadown, adown, sizeof(adown));
+    }
+
+    // Process buttons and repeats.
+    controls_t controls;
+    controls.up = 0;
+    controls.down = 0;
+    controls.start = 0;
+    controls.test = 0;
+
+    if (pressed.test || pressed.psw1)
+    {
+        // Request to go into system test mode.
+        controls.test = 1;
+    }
+    else
+    {
+        if (pressed.player1.start || (state->settings->system.players >= 2 && pressed.player2.start))
+        {
+            // Made a selection!
+            controls.start = 1;
+        }
+        else
+        {
+            if (pressed.player1.up || (state->settings->system.players >= 2 && pressed.player2.up))
+            {
+                controls.up = 1;
+
+                repeat_init(pressed.player1.up, &repeats[0]);
+                repeat_init(pressed.player2.up, &repeats[1]);
+            }
+            else if (pressed.player1.down || (state->settings->system.players >= 2 && pressed.player2.down))
+            {
+                controls.down = 1;
+
+                repeat_init(pressed.player1.down, &repeats[2]);
+                repeat_init(pressed.player2.down, &repeats[3]);
+            }
+            if (repeat(held.player1.up, &repeats[0], state->fps) || (state->settings->system.players >= 2 && repeat(held.player2.up, &repeats[1], state->fps)))
+            {
+                controls.up = 1;
+            }
+            else if (repeat(held.player1.down, &repeats[2], state->fps) || (state->settings->system.players >= 2 && repeat(held.player2.down, &repeats[3], state->fps)))
+            {
+                controls.down = 1;
+            }
+        }
+    }
+
+    return controls;
+}
+
+unsigned int main_menu(state_t *state, int reinit)
+{
+    // Grab our configuration.
+    static unsigned int count = 0;
+    static games_list_t *games = 0;
+
+    // Leave 24 pixels of padding on top and bottom of the games list.
+    // Space out games 16 pixels across.
+    static unsigned int maxgames = 0;
+
+    // Where we are on the screen for both our cursor and scroll position.
+    static unsigned int cursor = 0;
+    static unsigned int top = 0;
+
+    // Whether we're currently waiting to be rebooted for a game to send to us.
+    static unsigned int booting = 0;
+
+    if (reinit)
+    {
+        games = get_games_list(&count);
+        maxgames = (video_height() - (24 + 16)) / 21;
+        cursor = 0;
+        top = 0;
+        booting = 0;
+    }
+
+    // If we need to switch screens.
+    unsigned int new_screen = SCREEN_MAIN_MENU;
+
+    // Get our controls, including repeats.
+    controls_t controls = get_controls(state, reinit);
+
+    if (controls.test)
+    {
+        // Request to go into system test mode.
+        enter_test_mode();
+    }
+    if (!booting)
+    {
+        if (controls.start)
+        {
+            // Made a selection!
+            booting = 1;
+            message_send(MESSAGE_SELECTION, &cursor, 4);
+        }
+        else
+        {
+            if (controls.up)
+            {
+                // Moved cursor up.
+                if (cursor > 0)
+                {
+                    cursor --;
+                }
+                if (cursor < top)
+                {
+                    top = cursor;
+                }
+            }
+            else if (controls.down)
+            {
+                // Moved cursor down.
+                if (cursor < (count - 1))
+                {
+                    cursor ++;
+                }
+                if (cursor >= (top + maxgames))
+                {
+                    top = cursor - (maxgames - 1);
+                }
+            }
+        }
+    }
+
+    // Now, render the actual list of games.
+    {
+        unsigned int move_amount[4] = { 1, 2, 1, 0 };
+        int scroll_offset = move_amount[((int)(state->animation_counter * 4.0)) & 0x3];
+
+        if (top > 0)
+        {
+            video_draw_sprite(video_width() / 2 - 10, 10 - scroll_offset, up_png_width, up_png_height, up_png_data);
+        }
+
+        for (unsigned int game = top; game < top + maxgames; game++)
+        {
+            if (game >= count)
+            {
+                // Ran out of games to display.
+                break;
+            }
+
+            // Draw cursor itself.
+            if (game == cursor)
+            {
+                video_draw_sprite(24, 24 + ((game - top) * 21), cursor_png_width, cursor_png_height, cursor_png_data);
+            }
+
+            // Draw game, highlighted if it is selected.
+            video_draw_text(48, 22 + ((game - top) * 21), state->font, game == cursor ? rgb(255, 255, 20) : rgb(255, 255, 255), games[game].name);
+        }
+
+        if ((top + maxgames) < count)
+        {
+            video_draw_sprite(video_width() / 2 - 10, 24 + (maxgames * 21) + scroll_offset, dn_png_width, dn_png_height, dn_png_data);
+        }
+    }
+
+    return new_screen;
+}
+
 void main()
 {
     // Grab the system configuration
@@ -830,28 +1111,17 @@ void main()
     video_init_simple();
     video_set_background_color(rgb(0, 0, 0));
 
+    // Create global state for the menu.
+    state_t state;
+    state.settings = &settings;
+
     // Attach our font
-    font_t *helvetica = video_font_add(helvetica_ttf_data, helvetica_ttf_len);
-    video_font_set_size(helvetica, 18);
+    state.font = video_font_add(helvetica_ttf_data, helvetica_ttf_len);
+    video_font_set_size(state.font, 18);
 
-    // Once we've made a selection, don't try to take any more inputs.
-    unsigned int booting = 0;
-
-    // Grab our configuration.
-    unsigned int cursor = 0;
-    unsigned int top = 0;
-    int selection = -1;
-    unsigned int count = 0;
-    unsigned int oldaup[2] = { 0 };
-    unsigned int oldadown[2] = { 0 };
-    unsigned int aup[2] = { 0 };
-    unsigned int adown[2] = { 0 };
-    int repeats[4] = { -1, -1, -1, -1 };
-    games_list_t *games = get_games_list(&count);
-
-    // Leave 24 pixels of padding on top and bottom of the games list.
-    // Space out games 16 pixels across.
-    unsigned int maxgames = (video_height() - (24 + 16)) / 21;
+    // What screen we're on right now.
+    unsigned int curscreen = SCREEN_MAIN_MENU;
+    unsigned int oldscreen = -1;
 
     // FPS calculation for debugging.
     double fps_value = 60.0;
@@ -863,158 +1133,11 @@ void main()
     {
         // Get FPS measurements.
         int fps = profile_start();
+        int newscreen;
 
-        // First, poll the buttons and act accordingly.
-        maple_poll_buttons();
-        jvs_buttons_t pressed = maple_buttons_pressed();
-        jvs_buttons_t held = maple_buttons_current();
-
-        // Also calculate analog thresholds so we can emulate joystick with analog.
-        if (analog_enabled())
-        {
-            if (held.player1.analog1 < (ANALOG_CENTER - ANALOG_THRESH_ON))
-            {
-                aup[0] = 1;
-            }
-            else if (held.player1.analog1 > (ANALOG_CENTER - ANALOG_THRESH_OFF))
-            {
-                aup[0] = 0;
-            }
-
-            if (held.player2.analog1 < (ANALOG_CENTER - ANALOG_THRESH_ON))
-            {
-                aup[1] = 1;
-            }
-            else if (held.player2.analog1 > (ANALOG_CENTER - ANALOG_THRESH_OFF))
-            {
-                aup[1] = 0;
-            }
-
-            if (held.player1.analog1 > (ANALOG_CENTER + ANALOG_THRESH_ON))
-            {
-                adown[0] = 1;
-            }
-            else if (held.player1.analog1 < (ANALOG_CENTER + ANALOG_THRESH_OFF))
-            {
-                adown[0] = 0;
-            }
-
-            if (held.player2.analog1 > (ANALOG_CENTER + ANALOG_THRESH_ON))
-            {
-                adown[1] = 1;
-            }
-            else if (held.player2.analog1 < (ANALOG_CENTER + ANALOG_THRESH_OFF))
-            {
-                adown[1] = 0;
-            }
-
-            // Map analogs back onto digitals.
-            if (aup[0])
-            {
-                held.player1.up = 1;
-            }
-            if (aup[1])
-            {
-                held.player2.up = 1;
-            }
-            if (adown[0])
-            {
-                held.player1.down = 1;
-            }
-            if (adown[1])
-            {
-                held.player2.down = 1;
-            }
-            if (aup[0] && !oldaup[0])
-            {
-                pressed.player1.up = 1;
-            }
-            if (aup[1] && !oldaup[1])
-            {
-                pressed.player2.up = 1;
-            }
-            if (adown[0] && !oldadown[0])
-            {
-                pressed.player1.down = 1;
-            }
-            if (adown[1] && !oldadown[1])
-            {
-                pressed.player2.down = 1;
-            }
-
-            memcpy(oldaup, aup, sizeof(aup));
-            memcpy(oldadown, adown, sizeof(adown));
-        }
-
-        // Process buttons and repeats.
-        unsigned int up = 0;
-        unsigned int down = 0;
-
-        if (pressed.test || pressed.psw1)
-        {
-            // Request to go into system test mode.
-            enter_test_mode();
-        }
-        if (!booting)
-        {
-            if (pressed.player1.start || (settings.system.players >= 2 && pressed.player2.start))
-            {
-                // Made a selection!
-                booting = 1;
-                message_send(MESSAGE_SELECTION, &cursor, 4);
-            }
-            else
-            {
-                if (pressed.player1.up || (settings.system.players >= 2 && pressed.player2.up))
-                {
-                    up = 1;
-
-                    repeat_init(pressed.player1.up, &repeats[0]);
-                    repeat_init(pressed.player2.up, &repeats[1]);
-                }
-                else if (pressed.player1.down || (settings.system.players >= 2 && pressed.player2.down))
-                {
-                    down = 1;
-
-                    repeat_init(pressed.player1.down, &repeats[2]);
-                    repeat_init(pressed.player2.down, &repeats[3]);
-                }
-                if (repeat(held.player1.up, &repeats[0], fps_value) || (settings.system.players >= 2 && repeat(held.player2.up, &repeats[1], fps_value)))
-                {
-                    up = 1;
-                }
-                else if (repeat(held.player1.down, &repeats[2], fps_value) || (settings.system.players >= 2 && repeat(held.player2.down, &repeats[3], fps_value)))
-                {
-                    down = 1;
-                }
-            }
-        }
-
-        // Act on cursor.
-        if (up)
-        {
-            // Moved cursor up.
-            if (cursor > 0)
-            {
-                cursor --;
-            }
-            if (cursor < top)
-            {
-                top = cursor;
-            }
-        }
-        else if (down)
-        {
-            // Moved cursor down.
-            if (cursor < (count - 1))
-            {
-                cursor ++;
-            }
-            if (cursor >= (top + maxgames))
-            {
-                top = cursor - (maxgames - 1);
-            }
-        }
+        // Set up the global state for any draw screen.
+        state.fps = fps_value;
+        state.animation_counter = animation_counter;
 
         // Now, see if we have a packet to handle.
         {
@@ -1024,7 +1147,6 @@ void main()
             if (message_recv(&type, (void *)&data, &length) == 0)
             {
                 // Respond to packets here.
-
                 if (data != 0)
                 {
                     free(data);
@@ -1032,42 +1154,23 @@ void main()
             }
         }
 
-        // Now, render the actual list of games.
+        // Now, draw the current screen.
         int profile = profile_start();
+        switch(curscreen)
         {
-            unsigned int move_amount[4] = { 1, 2, 1, 0 };
-            int scroll_offset = move_amount[((int)(animation_counter * 4.0)) & 0x3];
-
-            if (top > 0)
-            {
-                video_draw_sprite(video_width() / 2 - 10, 10 - scroll_offset, up_png_width, up_png_height, up_png_data);
-            }
-
-            for (unsigned int game = top; game < top + maxgames; game++)
-            {
-                if (game >= count)
-                {
-                    // Ran out of games to display.
-                    break;
-                }
-
-                // Draw cursor itself.
-                if (game == cursor)
-                {
-                    video_draw_sprite(24, 24 + ((game - top) * 21), cursor_png_width, cursor_png_height, cursor_png_data);
-                }
-
-                // Draw game, highlighted if it is selected.
-                video_draw_text(48, 22 + ((game - top) * 21), helvetica, game == cursor ? rgb(255, 255, 20) : rgb(255, 255, 255), games[game].name);
-            }
-
-            if ((top + maxgames) < count)
-            {
-                video_draw_sprite(video_width() / 2 - 10, 24 + (maxgames * 21) + scroll_offset, dn_png_width, dn_png_height, dn_png_data);
-            }
-
+            case 0:
+                newscreen = main_menu(&state, curscreen != oldscreen);
+                break;
+            default:
+                newscreen = curscreen;
+                break;
         }
         uint32_t draw_time = profile_end(profile);
+
+        // Track what screen we are versus what we were so we know when we
+        // switch screens.
+        oldscreen = curscreen;
+        curscreen = newscreen;
 
         if (debug_enabled())
         {
