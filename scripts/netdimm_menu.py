@@ -369,12 +369,14 @@ def main() -> int:
         games.append((filename, name, serial))
 
     # Now, create the settings section.
-    config = struct.pack("<IIII", 16, len(games), 1 if args.enable_analog else 0, 1 if args.debug_mode else 0)
+    gamesconfig = b""
     for index, (_, name, serial) in enumerate(games):
         namebytes = name.encode('ascii')[:127]
         while len(namebytes) < 128:
             namebytes = namebytes + b"\0"
-        config += namebytes + serial + struct.pack("<I", index)
+        gamesconfig += namebytes + serial + struct.pack("<I", index)
+
+    config = struct.pack("<IIII", 16, len(games), 1 if args.enable_analog else 0, 1 if args.debug_mode else 0) + gamesconfig
 
     # Now, load up the menu ROM and append the settings to it.
     with open(args.exe, "rb") as fp:

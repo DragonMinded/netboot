@@ -34,6 +34,10 @@ void hw_memset(void *addr, uint32_t value, unsigned int amount);
 // Syscalls that request the BIOS do something.
 void enter_test_mode();
 
+// UTF-8 handling for unicode text.
+unsigned int utf8_strlen(const char * const str);
+uint32_t *utf8_convert(const char * const str);
+
 #ifdef __cplusplus
 }
 #endif

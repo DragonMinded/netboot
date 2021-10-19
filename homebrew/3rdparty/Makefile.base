@@ -1,6 +1,6 @@
 include $(dir $(abspath $(lastword $(MAKEFILE_LIST))))../Makefile.base
 
-THIRD_PARTY_LIBS = ${LIBS} ${REQUIRED_LIBS}
+THIRD_PARTY_LIBS = -lnaomi ${BASELIBS} ${REQUIRED_LIBS}
 
 download/${ARTIFACT}:
 	mkdir -p download

@@ -715,10 +715,10 @@ int message_recv(uint16_t *type, void ** data, unsigned int *length)
 }
 
 #define CONFIG_MEMORY_LOCATION 0x0D000000
-#define GAMES_POINTER_LOC 0x0
-#define GAMES_COUNT_LOC 0x4
-#define ENABLE_ANALOG_LOC 0x8
-#define ENABLE_DEBUG_LOC 0xC
+#define GAMES_POINTER_LOC 0
+#define GAMES_COUNT_LOC 4
+#define ENABLE_ANALOG_LOC 8
+#define ENABLE_DEBUG_LOC 12
 
 typedef struct __attribute__((__packed__))
 {
@@ -797,6 +797,9 @@ void repeat_init(unsigned int pushed_state, int *repeat_count)
 #define ANALOG_THRESH_ON 0x30
 #define ANALOG_THRESH_OFF 0x20
 
+extern uint8_t *helvetica_ttf_data;
+extern unsigned int helvetica_ttf_len;
+
 void main()
 {
     // Grab the system configuration
@@ -809,6 +812,10 @@ void main()
     // Init the screen for a simple 640x480 framebuffer.
     video_init_simple();
     video_set_background_color(rgb(0, 0, 0));
+
+    // Attach our font
+    font_t *helvetica = video_font_add(helvetica_ttf_data, helvetica_ttf_len);
+    video_font_set_size(helvetica, 14);
 
     // Grab our configuration.
     unsigned int cursor = 0;
@@ -1014,7 +1021,7 @@ void main()
                 }
 
                 // Draw game, highlighted if it is selected.
-                video_draw_debug_text(32, 24 + ((game - top) * 16), game == cursor ? rgb(255, 255, 20) : rgb(255, 255, 255), games[game].name);
+                video_draw_text(32, 20 + ((game - top) * 16), helvetica, game == cursor ? rgb(255, 255, 20) : rgb(255, 255, 255), games[game].name);
             }
         }
 

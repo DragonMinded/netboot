@@ -1,3 +1,8 @@
+# Set up common library path definitions.
+NAOMI_SH_INCLUDEPATHS  = -I$(dir $(abspath $(lastword $(MAKEFILE_LIST))))libnaomi/ -I${NAOMI_SH_BASE}/include -I${NAOMI_SH_BASE}/sh-elf/include
+# For some reason, freetype expects to be special and different.
+NAOMI_SH_INCLUDEPATHS += -I${NAOMI_SH_BASE}/include/freetype2
+
 # Little-endian SH-4.
 NAOMI_SH_CCFLAGS  = -ml
 # Don't use the system standard library (We supply our own newlib-one with -lc in the link step).
@@ -13,7 +18,7 @@ NAOMI_SH_CCFLAGS += -fomit-frame-pointer
 # Put every object in its own section so the linker can trim dead code.
 NAOMI_SH_CCFLAGS += -ffunction-sections -fdata-sections
 # Add libnaomi to include path.
-NAOMI_SH_CCFLAGS += -I$(dir $(abspath $(lastword $(MAKEFILE_LIST))))libnaomi/ -I${NAOMI_SH_BASE}/include -I${NAOMI_SH_BASE}/sh-elf/include
+NAOMI_SH_CCFLAGS += ${NAOMI_SH_INCLUDEPATHS}
 # Make sure we compile optimized
 NAOMI_SH_CCFLAGS += -O2
 
@@ -35,7 +40,7 @@ NAOMI_SH_CPPFLAGS += -fomit-frame-pointer
 # Put every object in its own section so the linker can trim dead code.
 NAOMI_SH_CPPFLAGS += -ffunction-sections -fdata-sections
 # Add libnaomi to include path.
-NAOMI_SH_CPPFLAGS += -I$(dir $(abspath $(lastword $(MAKEFILE_LIST))))libnaomi/ -I${NAOMI_SH_BASE}/include -I${NAOMI_SH_BASE}/sh-elf/include
+NAOMI_SH_CPPFLAGS += ${NAOMI_SH_INCLUDEPATHS}
 # Make sure we compile optimized
 NAOMI_SH_CPPFLAGS += -O2
 
@@ -100,7 +105,10 @@ ARMLD += -L$(dir $(abspath $(lastword $(MAKEFILE_LIST))))libnaomi/
 ARMLD += -L${NAOMI_ARM_BASE}/arm-eabi/lib/ -L${NAOMI_ARM_BASE}/lib/gcc/arm-eabi/${NAOMI_ARM_GCC_VER}/
 
 # We don't have many libraries for ARM.
-ARMLIBS ?= -lgcc
+ARMLIBS ?=
+
+# A list of base libraries that should always link against ARM.
+ARMBASELIBS = -lgcc
 
 # Set up default options for objcopy, used for extracting the raw binary from the linked elf file.
 ARMOBJCOPY = ${NAOMI_ARM_OBJCOPY}
@@ -121,7 +129,10 @@ DATE = python3 $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/date.py
 SRCS ?=
 
 # A list of libraries that should be linked against.
-LIBS ?= -lnaomi -lc -lm -lgcc -lstdc++
+LIBS ?=
+
+# A list of base libraries that always get included.
+BASELIBS = -lc -lm -lgcc -lstdc++
 
 # The desired start address of the executable. Its totally okay to leave this alone.
 START_ADDR = 0xc021000
@@ -150,7 +161,7 @@ build/%.bin: build/%.elf
 # A rule for how we go about building the elf file from objects.
 build/%.elf: ${OBJS}
 	@mkdir -p $(dir $@)
-	${LD} -defsym START_ADDR=${START_ADDR} -o $@ $^ ${LIBS}
+	${LD} -defsym START_ADDR=${START_ADDR} -o $@ $^ -lnaomi ${LIBS} ${BASELIBS}
 
 # A rule for how to build assembly files. Depends on the build dir being created.
 # This runs the C preprocessor for convenience, so you can #define registers and

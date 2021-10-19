@@ -8,13 +8,21 @@ all: netbootmenu.bin
 # one of these files is not found, make will complain about a
 # missing missing `build/naomi.bin' target, so make sure all of
 # these files exist.
-SRCS += main.c
+SRCS += main.c build/font.o
+
+# Libraries we need to link against.
+LIBS += -lfreetype -lbz2 -lz -lpng16
 
 # Override the default serial so this program has its own settings.
 SERIAL = BRP0
 
 # Pick up base makefile rules common to all examples.
 include ../Makefile.base
+
+build/font.o: helvetica.ttf
+	@mkdir -p $(dir $@)
+	${BIN2C} build/font.c $<
+	${CC} -c build/font.c -o $@
 
 # Provide the top-level ROM creation target for this binary.
 # See scripts.makerom for details about what is customizable.

@@ -9,6 +9,7 @@ SRCS += system.c
 SRCS += timer.c
 SRCS += dimmcomms.c
 SRCS += video.c
+SRCS += video-freetype.c
 SRCS += maple.c
 SRCS += eeprom.c
 SRCS += audio.c
@@ -31,7 +32,7 @@ build/arm/aica.o: aica.c
 
 build/arm/aica.elf: build/arm/base.o build/arm/aica.o build/arm/success.o
 	@mkdir -p $(dir $@)
-	${ARMLD} -o $@ $^ ${ARMLIBS}
+	${ARMLD} -o $@ $^ ${ARMLIBS} ${ARMBASELIBS}
 
 build/aica.bin: build/arm/aica.elf
 	@mkdir -p $(dir $@)

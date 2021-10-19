@@ -89,6 +89,11 @@ unsigned int video_is_vertical();
 uint32_t rgb(unsigned int r, unsigned int g, unsigned int b);
 uint32_t rgba(unsigned int r, unsigned int g, unsigned int b, unsigned int a);
 
+// Ungenerates a rgb or rgba set from a color uint32 that was made with
+// the above functions or retrieved using video_get_pixel.
+void explodergb(uint32_t color, unsigned int *r, unsigned int *g, unsigned int *b);
+void explodergba(uint32_t color, unsigned int *r, unsigned int *g, unsigned int *b, unsigned int *a);
+
 // Fill the entire framebuffer with one color. Note that this is about
 // 3x faster than doing it yourself as it uses hardware features to do so.
 void video_fill_screen(uint32_t color);
@@ -100,6 +105,11 @@ void video_fill_box(int x0, int y0, int x1, int y1, uint32_t color);
 // Given an x, y position and a color, colors that particular pixel with
 // that particular color. This is orientation-aware.
 void video_draw_pixel(int x, int y, uint32_t color);
+
+// Given an x, y position, returns the color at that particular pixel. This
+// returned color is suitable for passing into any function that requests
+// a color parameter. This is orientation-aware.
+uint32_t video_get_pixel(int x, int y);
 
 // Given a starting and ending x and y coordinate, draws a line of a certain
 // color between that starting and ending point. This is orientation-aware.
@@ -115,9 +125,11 @@ void video_draw_sprite( int x, int y, int width, int height, void *data);
 // the screen. This uses a built-in 8x8 fixed-width font and is always
 // available regardless of other fonts or libraries. This is orientation aware.
 // Also, video_draw_debug_text() takes a standard printf-formatted string with
-// additional arguments.
+// additional arguments. Note that this only supports ASCII printable characters.
 void video_draw_debug_character(int x, int y, uint32_t color, char ch);
 void video_draw_debug_text(int x, int y, uint32_t color, const char * const msg, ...);
+
+#include "video-freetype.h"
 
 #ifdef __cplusplus
 }

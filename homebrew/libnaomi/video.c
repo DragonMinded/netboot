@@ -216,6 +216,56 @@ uint32_t rgba(unsigned int r, unsigned int g, unsigned int b, unsigned int a)
     }
 }
 
+void explodergb(uint32_t color, unsigned int *r, unsigned int *g, unsigned int *b)
+{
+    if(global_video_depth == 2)
+    {
+        unsigned int bint = color & 0x1F;
+        unsigned int gint = (color >> 5) & 0x1F;
+        unsigned int rint = (color >> 10) & 0x1F;
+
+        // Convert back to 8-bit values, setting the lower 3 bits to the high
+        // bits so that values closer to 255 will be brighter and values closer
+        // to 0 will be darker.
+        *r = (rint << 3) | (rint >> 2);
+        *g = (gint << 3) | (gint >> 2);
+        *b = (bint << 3) | (bint >> 2);
+    }
+    else
+    {
+        // TODO
+        *r = 0;
+        *g = 0;
+        *b = 0;
+    }
+}
+
+void explodergba(uint32_t color, unsigned int *r, unsigned int *g, unsigned int *b, unsigned int *a)
+{
+    if(global_video_depth == 2)
+    {
+        unsigned int bint = color & 0x1F;
+        unsigned int gint = (color >> 5) & 0x1F;
+        unsigned int rint = (color >> 10) & 0x1F;
+
+        // Convert back to 8-bit values, setting the lower 3 bits to the high
+        // bits so that values closer to 255 will be brighter and values closer
+        // to 0 will be darker.
+        *r = (rint << 3) | (rint >> 2);
+        *g = (gint << 3) | (gint >> 2);
+        *b = (bint << 3) | (bint >> 2);
+        *a = (color & 0x8000) ? 255 : 0;
+    }
+    else
+    {
+        // TODO
+        *r = 0;
+        *g = 0;
+        *b = 0;
+        *a = 0;
+    }
+}
+
 void video_fill_screen(uint32_t color)
 {
     if(global_video_depth == 2)
@@ -286,6 +336,26 @@ void video_draw_pixel(int x, int y, uint32_t color)
     }
 }
 
+uint32_t video_get_pixel(int x, int y)
+{
+    if (global_video_depth == 2)
+    {
+        if (global_video_vertical)
+        {
+            return ((uint16_t *)buffer_base)[(global_video_width - y) + (x * global_video_width)];
+        }
+        else
+        {
+            return ((uint16_t *)buffer_base)[x + (y * global_video_width)];
+        }
+    }
+    else
+    {
+        // TODO
+        return 0;
+    }
+}
+
 void video_draw_line(int x0, int y0, int x1, int y1, uint32_t color)
 {
     int dy = y1 - y0;
@@ -350,6 +420,11 @@ void video_draw_line(int x0, int y0, int x1, int y1, uint32_t color)
 
 void video_draw_debug_character( int x, int y, uint32_t color, char ch )
 {
+    if (ch < 0x20 || ch > 0x7F)
+    {
+        return;
+    }
+
     for(int row = y; row < y + 8; row++)
     {
         uint8_t c = __font_data[(ch * 8) + (row - y)];
