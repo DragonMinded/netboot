@@ -834,6 +834,9 @@ void main()
     font_t *helvetica = video_font_add(helvetica_ttf_data, helvetica_ttf_len);
     video_font_set_size(helvetica, 18);
 
+    // Once we've made a selection, don't try to take any more inputs.
+    unsigned int booting = 0;
+
     // Grab our configuration.
     unsigned int cursor = 0;
     unsigned int top = 0;
@@ -852,6 +855,9 @@ void main()
 
     // FPS calculation for debugging.
     double fps_value = 60.0;
+
+    // Simple animations for the screen.
+    double animation_counter = 0.0;
 
     while ( 1 )
     {
@@ -949,34 +955,38 @@ void main()
             // Request to go into system test mode.
             enter_test_mode();
         }
-        else if (pressed.player1.start || (settings.system.players >= 2 && pressed.player2.start))
+        if (!booting)
         {
-            // Made a selection!
-            message_send(MESSAGE_SELECTION, &cursor, 4);
-        }
-        else
-        {
-            if (pressed.player1.up || (settings.system.players >= 2 && pressed.player2.up))
+            if (pressed.player1.start || (settings.system.players >= 2 && pressed.player2.start))
             {
-                up = 1;
+                // Made a selection!
+                booting = 1;
+                message_send(MESSAGE_SELECTION, &cursor, 4);
+            }
+            else
+            {
+                if (pressed.player1.up || (settings.system.players >= 2 && pressed.player2.up))
+                {
+                    up = 1;
 
-                repeat_init(pressed.player1.up, &repeats[0]);
-                repeat_init(pressed.player2.up, &repeats[1]);
-            }
-            else if (pressed.player1.down || (settings.system.players >= 2 && pressed.player2.down))
-            {
-                down = 1;
+                    repeat_init(pressed.player1.up, &repeats[0]);
+                    repeat_init(pressed.player2.up, &repeats[1]);
+                }
+                else if (pressed.player1.down || (settings.system.players >= 2 && pressed.player2.down))
+                {
+                    down = 1;
 
-                repeat_init(pressed.player1.down, &repeats[2]);
-                repeat_init(pressed.player2.down, &repeats[3]);
-            }
-            if (repeat(held.player1.up, &repeats[0], fps_value) || (settings.system.players >= 2 && repeat(held.player2.up, &repeats[1], fps_value)))
-            {
-                up = 1;
-            }
-            else if (repeat(held.player1.down, &repeats[2], fps_value) || (settings.system.players >= 2 && repeat(held.player2.down, &repeats[3], fps_value)))
-            {
-                down = 1;
+                    repeat_init(pressed.player1.down, &repeats[2]);
+                    repeat_init(pressed.player2.down, &repeats[3]);
+                }
+                if (repeat(held.player1.up, &repeats[0], fps_value) || (settings.system.players >= 2 && repeat(held.player2.up, &repeats[1], fps_value)))
+                {
+                    up = 1;
+                }
+                else if (repeat(held.player1.down, &repeats[2], fps_value) || (settings.system.players >= 2 && repeat(held.player2.down, &repeats[3], fps_value)))
+                {
+                    down = 1;
+                }
             }
         }
 
@@ -1025,9 +1035,12 @@ void main()
         // Now, render the actual list of games.
         int profile = profile_start();
         {
+            unsigned int move_amount[4] = { 1, 2, 1, 0 };
+            int scroll_offset = move_amount[((int)(animation_counter * 4.0)) & 0x3];
+
             if (top > 0)
             {
-                video_draw_sprite(video_width() / 2 - 10, 10, up_png_width, up_png_height, up_png_data);
+                video_draw_sprite(video_width() / 2 - 10, 10 - scroll_offset, up_png_width, up_png_height, up_png_data);
             }
 
             for (unsigned int game = top; game < top + maxgames; game++)
@@ -1050,7 +1063,7 @@ void main()
 
             if ((top + maxgames) < count)
             {
-                video_draw_sprite(video_width() / 2 - 10, 24 + (maxgames * 21), dn_png_width, dn_png_height, dn_png_data);
+                video_draw_sprite(video_width() / 2 - 10, 24 + (maxgames * 21) + scroll_offset, dn_png_width, dn_png_height, dn_png_data);
             }
 
         }
@@ -1069,6 +1082,7 @@ void main()
 
         uint32_t uspf = profile_end(fps);
         fps_value = (1000000.0 / (double)uspf) + 0.01;
+        animation_counter += (double)uspf / 1000000.0;
     }
 }
 
