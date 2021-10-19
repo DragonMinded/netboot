@@ -820,7 +820,7 @@ void main()
 
     // Attach our font
     font_t *helvetica = video_font_add(helvetica_ttf_data, helvetica_ttf_len);
-    video_font_set_size(helvetica, 14);
+    video_font_set_size(helvetica, 12);
 
     // Grab our configuration.
     unsigned int cursor = 0;
@@ -1022,8 +1022,9 @@ void main()
                 }
 
                 // Draw cursor itself.
-                if (game == cursor) {
-                    video_draw_debug_text(16, 24 + ((game - top) * 16), rgb(255, 255, 20), ">");
+                if (game == cursor)
+                {
+                    video_draw_debug_text(16, 23 + ((game - top) * 16), rgb(255, 255, 20), ">");
                 }
 
                 // Draw game, highlighted if it is selected.
