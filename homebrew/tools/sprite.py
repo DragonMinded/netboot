@@ -6,7 +6,8 @@ import os.path
 import struct
 import sys
 import textwrap
-from PIL import Image
+from PIL import Image  # type: ignore
+from typing import List
 
 
 def main() -> int:
