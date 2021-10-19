@@ -143,7 +143,7 @@ void __draw_bitmap(int x, int y, unsigned int width, unsigned int height, unsign
             for(int xp = 0; xp < width; xp++)
             {
                 // Alpha-blend the grayscale image with the destination.
-                unsigned int alpha = buffer[row + xp];
+                uint8_t alpha = buffer[row + xp];
 
                 if (alpha != 0)
                 {
@@ -160,9 +160,9 @@ void __draw_bitmap(int x, int y, unsigned int width, unsigned int height, unsign
                         // Technically it should be divided by 255, but this should
                         // be much much faster.
                         explodergb(video_get_pixel(x + xp, y + yp), &dr, &dg, &db); 
-                        dr = ((sr * alpha) + (dr * (255 - alpha))) >> 8;
-                        dg = ((sg * alpha) + (dg * (255 - alpha))) >> 8;
-                        db = ((sb * alpha) + (db * (255 - alpha))) >> 8;
+                        dr = ((sr * alpha) + (dr * (~alpha))) >> 8;
+                        dg = ((sg * alpha) + (dg * (~alpha))) >> 8;
+                        db = ((sb * alpha) + (db * (~alpha))) >> 8;
                         video_draw_pixel(x + xp, y + yp, rgb(dr, dg, db));
                     }
                 }
