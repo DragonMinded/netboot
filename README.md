@@ -73,6 +73,14 @@ This script creates a simple menu ROM given a directory containing Naomi ROM fil
 ./netdimm_menu --help
 ```
 
+### netdimm_peekpoke
+
+This script connects to a net dimm and requests it to peek at system RAM or poke a value into system RAM at a specified address. This is mostly provided as a curiosity as there are not many uses for such a utility. Invoke the script like so to see options:
+
+```
+./netdimm_peekpoke --help
+```
+
 ### binary_patch
 
 This script can either diff two same-length binaries and produce a patch similar to the files found in `patches/` or it can take a binary and one or more patch files and produce a new binary with the patches applied. Note that this is just a frontend to the same utility that lives in <https://github.com/DragonMinded/arcadeutils> and as such all documentation there applies here as well. The patches that this produces in diff mode can also be applied on-the-fly when using `netdimm_send` or `netdimm_ensure` by using the `--patch` argument to either tool. See either of the tools above for more information. Invoke the script like so to see options:
