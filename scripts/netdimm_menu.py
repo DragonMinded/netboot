@@ -100,7 +100,7 @@ def receive_packet(netdimm: NetDimm) -> Optional[bytes]:
         # Now, grab and assemble the data itself.
         data: List[Optional[int]] = [None] * length
         tries: int = 0
-        while any([d is None for d in data]):
+        while any(d is None for d in data):
             chunk = netdimm.peek(MENU_DATA_REGISTER, PeekPokeTypeEnum.TYPE_LONG)
             if ((chunk & 0xFF000000) >> 24) in {0x00, 0xFF}:
                 tries += 1
