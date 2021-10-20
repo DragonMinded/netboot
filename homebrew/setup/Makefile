@@ -49,10 +49,9 @@ verbose=1
 makejobs=-j$(shell echo "processor" | cat /proc/cpuinfo - | grep processor | wc -l)
 
 # Set the languages to build for pass 2 of building gcc for sh-elf. The default
-# here is to build C, C++, Objective C, and Objective C++. You may want to take
-# out the latter two if you're not worried about them and/or you're short on
-# hard drive space.
-pass2_languages=c,c++,objc,obj-c++
+# here is to build C and C++. For some reason at least on the current toolchain,
+# Objective C, and Objective C++ fail to configure, so they are disabled by default.
+pass2_languages=c,c++
 
 # Change this if you don't have Bash installed in /bin
 SHELL = /bin/bash
@@ -138,7 +137,7 @@ $(build_gcc_pass1): logdir
 	@echo "+++ Building $(src_dir) to $(build) (pass 1)..."
 	-mkdir -p $(build)
 	> $(log)
-	cd $(build);  ../$(src_dir)/configure --target=$(target) --prefix=$(prefix) --without-headers --with-newlib --enable-languages=c --disable-libssp --disable-tls $(extra_configure_args) CXX=$(CXX) $(to_log)
+	cd $(build);  ../$(src_dir)/configure --target=$(target) --prefix=$(prefix) --without-headers --with-newlib --enable-languages=c --enable-libssp=no --enable-tls=no $(extra_configure_args) CXX=$(CXX) $(to_log)
 	$(MAKE) $(makejobs) -C $(build) DESTDIR=$(DESTDIR) $(to_log)
 	$(MAKE) -C $(build) install-strip DESTDIR=$(DESTDIR) $(to_log)
 
@@ -160,7 +159,7 @@ $(build_gcc_pass2): logdir
 	@echo "+++ Building $(src_dir) to $(build) (pass 2)..."
 	-mkdir -p $(build)
 	> $(log)
-	cd $(build);  ../$(src_dir)/configure --target=$(target) --prefix=$(prefix) --with-newlib --disable-libssp --disable-tls \
+	cd $(build);  ../$(src_dir)/configure --target=$(target) --prefix=$(prefix) --with-newlib --enable-libssp=no --enable-tls=no \
 	   --enable-threads=$(thread_model) --enable-languages=$(pass2_languages) $(extra_configure_args) CXX=$(CXX) $(to_log)
 	$(MAKE) $(makejobs) -C $(build) DESTDIR=$(DESTDIR) $(to_log)
 	$(MAKE) -C $(build) install-strip DESTDIR=$(DESTDIR) $(to_log)

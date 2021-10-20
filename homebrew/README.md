@@ -6,6 +6,8 @@ The next thing you will need to do is build libnaomi, the system support library
 
 To build any examples that are included, first activate the Naomi enviornment by running `source /opt/toolchains/naomi/env.sh`, and then running `make` in the directory of the example you want to run. The resulting binary file can be loaded in Demul or netbooted to a Naomi with a netdimm.
 
+For convenience, libnaomi and the examples will all be built if you run `make` in the `homebrew/` directory. Note that by default, there are no 3rd party libraries installed and thus libnaomi support for things like freetype is disabled. To enable them, first run `make 3rdparty` in the `homebrew/` directory which will fetch, configure, make and install all of the 3rd party libraries. Then, run `make clean` and then re-run `make` at the top level.
+
 If you are looking for a great resource for programming, the first thing I would recommend is https://github.com/Kochise/dreamcast-docs which is mostly relevant to the Naomi. For memory maps and general low-level stuff, Mame's https://github.com/mamedev/mame/blob/master/src/mame/drivers/naomi.cpp is extremely valuable.
 
 TODOs

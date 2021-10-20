@@ -1,3 +1,7 @@
+#if __has_include(<ft2build.h>)
+// Only build this stuff if freetype is installed. Otherwise just don't do anything with it.
+// This is so that stage 1 libnaomi.a can be built, and then freetype built against it, before
+// libnaomi is built again.
 #include <stdint.h>
 #include <stdarg.h>
 #include <ft2build.h>
@@ -425,3 +429,4 @@ int video_draw_text(int x, int y, font_t *fontface, uint32_t color, const char *
         return 0;
     }
 }
+#endif
