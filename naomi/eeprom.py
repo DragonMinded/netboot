@@ -241,9 +241,13 @@ class NaomiEEPRom(Generic[BytesLike]):
         return struct.pack("<H", final_crc)
 
     @staticmethod
-    def validate(data: Union[bytes, FileBytes], *, only_system: bool = False) -> bool:
+    def validate(data: Union[bytes, FileBytes], *, serial: Optional[bytes] = None, only_system: bool = False) -> bool:
         # First, make sure its the right length.
         if len(data) != 128:
+            return False
+
+        # Now, before even checking CRCs (slow), check the serial section.
+        if serial is not None and data[3:7] != serial:
             return False
 
         if not NaomiEEPRom.__validate_system(data):

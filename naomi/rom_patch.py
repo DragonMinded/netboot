@@ -490,7 +490,7 @@ class NaomiSettingsPatcher(Generic[BytesLike]):
                     # Returns the requested EEPRom settings that should be written prior
                     # to the game starting.
                     for i in range(sec.offset, sec.offset + sec.length - (self.EEPROM_SIZE - 1)):
-                        if NaomiEEPRom.validate(self.__data[i:(i + self.EEPROM_SIZE)]):
+                        if NaomiEEPRom.validate(self.__data[i:(i + self.EEPROM_SIZE)], serial=naomi.serial):
                             if self.__type is None:
                                 self.__type = NaomiSettingsTypeEnum.TYPE_EEPROM
                             elif self.__type != NaomiSettingsTypeEnum.TYPE_EEPROM:
