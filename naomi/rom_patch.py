@@ -2,8 +2,9 @@
 import os
 import struct
 from enum import Enum
-from typing import Optional, Tuple
+from typing import Generic, Optional, Tuple, TypeVar, Union, cast, overload
 
+from arcadeutils import FileBytes
 from naomi import NaomiRom, NaomiRomSection, NaomiEEPRom
 
 
@@ -19,6 +20,7 @@ def get_default_trojan() -> bytes:
         return bfp.read()
 
 
+@overload
 def add_or_update_section(
     data: bytes,
     location: int,
@@ -26,8 +28,31 @@ def add_or_update_section(
     header: Optional[NaomiRom] = None,
     verbose: bool = False,
 ) -> bytes:
+    ...
+
+
+@overload
+def add_or_update_section(
+    data: FileBytes,
+    location: int,
+    newsection: bytes,
+    header: Optional[NaomiRom] = None,
+    verbose: bool = False,
+) -> FileBytes:
+    ...
+
+
+def add_or_update_section(
+    data: Union[bytes, FileBytes],
+    location: int,
+    newsection: bytes,
+    header: Optional[NaomiRom] = None,
+    verbose: bool = False,
+) -> Union[bytes, FileBytes]:
     # Note that if an external header is supplied, it will be modified to match the updated
     # data.
+    if isinstance(data, FileBytes):
+        data = data.clone()
     if header is None:
         header = NaomiRom(data)
 
@@ -43,7 +68,12 @@ def add_or_update_section(
                 print("Overwriting old section in existing ROM section.")
 
             # We can just update the data to overwrite this section
-            data = data[:section.offset] + newsection + data[(section.offset + section.length):]
+            if isinstance(data, bytes):
+                data = data[:section.offset] + newsection + data[(section.offset + section.length):]
+            elif isinstance(data, FileBytes):
+                data[section.offset:(section.offset + section.length)] = newsection
+            else:
+                raise Exception("Logic error!")
             break
     else:
         # We need to add an init section to the ROM
@@ -65,51 +95,123 @@ def add_or_update_section(
         header.main_executable = executable
 
         # Now, just append it to the end of the file
-        data = header.data + data[header.HEADER_LENGTH:] + newsection
+        if isinstance(data, bytes):
+            data = header.data + data[header.HEADER_LENGTH:] + newsection
+        elif isinstance(data, FileBytes):
+            data[:header.HEADER_LENGTH] = header.data
+            data.append(newsection)
+        else:
+            raise Exception("Logic error!")
 
     # Return the updated data.
     return data
 
 
-def get_config(data: bytes) -> Tuple[int, int, bool, bool, Tuple[int, int, int]]:
+def __is_config(data: Union[bytes, FileBytes], index: int) -> bool:
+    if all(x == 0xEE for x in data[index:(index + 4)]) and all(x == 0xEE for x in data[(index + 24):(index + 28)]):
+        _, _, sentinel, debug, _ = struct.unpack("<IIIII", data[(index + 4):(index + 24)])
+        if sentinel not in {0, 1, 0xCFCFCFCF} or debug not in {0, 1, 0xDDDDDDDD}:
+            return False
+        return True
+    return False
+
+
+def __extract_config(data: Union[bytes, FileBytes], index: int) -> Tuple[int, int, bool, bool, Tuple[int, int, int]]:
+    original_start, trojan_start, sentinel, debug, date = struct.unpack("<IIIII", data[(index + 4):(index + 24)])
+
+    day = date % 100
+    month = (date // 100) % 100
+    year = (date // 10000)
+
+    return (
+        original_start,
+        trojan_start,
+        sentinel != 0,
+        debug != 0,
+        (year, month, day),
+    )
+
+
+def get_config(data: Union[bytes, FileBytes], *, start: Optional[int] = None, end: Optional[int] = None) -> Tuple[int, int, bool, bool, Tuple[int, int, int]]:
     # Returns a tuple consisting of the original EXE start address and
     # the desired trojan start address, whether sentinel mode is enabled
     # and whether debug printing is enabled, and the date string of the
     # trojan we're using.
-    for i in range(len(data) - 28):
-        if all(x == 0xEE for x in data[i:(i + 4)]) and all(x == 0xEE for x in data[(i + 24):(i + 28)]):
-            original_start, trojan_start, sentinel, debug, date = struct.unpack("<IIIII", data[(i + 4):(i + 24)])
-            if sentinel not in {0, 1, 0xCFCFCFCF} or debug not in {0, 1, 0xDDDDDDDD}:
-                continue
+    if isinstance(data, bytes):
+        for i in range(start or 0, (end or len(data)) - (28 - 1)):
+            if __is_config(data, i):
+                return __extract_config(data, i)
 
-            day = date % 100
-            month = (date // 100) % 100
-            year = (date // 10000)
+    elif isinstance(data, FileBytes):
+        start = start or 0
+        end = end or len(data)
 
-            return (
-                original_start,
-                trojan_start,
-                sentinel != 0,
-                debug != 0,
-                (year, month, day),
-            )
+        while start < end:
+            location = data.search(b"\xEE" * 4, start=start, end=end)
+            if location is None:
+                break
+
+            if __is_config(data, location):
+                return __extract_config(data, location)
+            start = location + 1
+
+    else:
+        raise Exception("Logic error!")
 
     raise NaomiSettingsPatcherException("Couldn't find config in executable!")
 
 
+@overload
 def change(binfile: bytes, tochange: bytes, loc: int) -> bytes:
-    return binfile[:loc] + tochange + binfile[(loc + len(tochange)):]
+    ...
 
 
+@overload
+def change(binfile: FileBytes, tochange: bytes, loc: int) -> FileBytes:
+    ...
+
+
+def change(binfile: Union[bytes, FileBytes], tochange: bytes, loc: int) -> Union[bytes, FileBytes]:
+    if isinstance(binfile, bytes):
+        return binfile[:loc] + tochange + binfile[(loc + len(tochange)):]
+    elif isinstance(binfile, FileBytes):
+        binfile[loc:(loc + len(tochange))] = tochange
+        return binfile
+    else:
+        raise Exception("Logic error!")
+
+
+@overload
 def patch_bytesequence(data: bytes, sentinel: int, replacement: bytes) -> bytes:
-    length = len(replacement)
-    for i in range(len(data) - length + 1):
-        if all(x == sentinel for x in data[i:(i + length)]):
-            return change(data, replacement, i)
-
-    raise NaomiSettingsPatcherException("Couldn't find spot to patch in data!")
+    ...
 
 
+@overload
+def patch_bytesequence(data: FileBytes, sentinel: int, replacement: bytes) -> FileBytes:
+    ...
+
+
+def patch_bytesequence(data: Union[bytes, FileBytes], sentinel: int, replacement: bytes) -> Union[bytes, FileBytes]:
+    if isinstance(data, bytes):
+        length = len(replacement)
+        for i in range(len(data) - (length - 1)):
+            if all(x == sentinel for x in data[i:(i + length)]):
+                return change(data, replacement, i)
+
+        raise NaomiSettingsPatcherException("Couldn't find spot to patch in data!")
+
+    elif isinstance(data, FileBytes):
+        replace_loc = data.search(bytes(sentinel) * len(replacement))
+        if replace_loc is not None:
+            return change(data, replacement, replace_loc)
+
+        raise NaomiSettingsPatcherException("Couldn't find spot to patch in data!")
+
+    else:
+        raise Exception("Logic error!")
+
+
+@overload
 def add_or_update_trojan(
     data: bytes,
     trojan: bytes,
@@ -119,8 +221,35 @@ def add_or_update_trojan(
     header: Optional[NaomiRom] = None,
     verbose: bool = False,
 ) -> bytes:
+    ...
+
+
+@overload
+def add_or_update_trojan(
+    data: FileBytes,
+    trojan: bytes,
+    debug: int,
+    options: int,
+    datachunk: Optional[bytes] = None,
+    header: Optional[NaomiRom] = None,
+    verbose: bool = False,
+) -> FileBytes:
+    ...
+
+
+def add_or_update_trojan(
+    data: Union[bytes, FileBytes],
+    trojan: bytes,
+    debug: int,
+    options: int,
+    datachunk: Optional[bytes] = None,
+    header: Optional[NaomiRom] = None,
+    verbose: bool = False,
+) -> Union[bytes, FileBytes]:
     # Note that if an external header is supplied, it will be modified to match the updated
     # data.
+    if isinstance(data, FileBytes):
+        data = data.clone()
     if header is None:
         header = NaomiRom(data)
 
@@ -133,7 +262,7 @@ def add_or_update_trojan(
         if sec.load_address == location:
             # Grab the old entrypoint from the existing modification since the ROM header
             # entrypoint will be the old trojan EXE.
-            entrypoint, _, _, _, _ = get_config(data[sec.offset:(sec.offset + sec.length)])
+            entrypoint, _, _, _, _ = get_config(data, start=sec.offset, end=sec.offset + sec.length)
             exe = patch_bytesequence(exe, 0xAA, struct.pack("<I", entrypoint))
             if datachunk:
                 exe = patch_bytesequence(exe, 0xBB, datachunk)
@@ -147,7 +276,13 @@ def add_or_update_trojan(
                     print("Overwriting old section in existing ROM section.")
 
                 # Cut off the old section, add our new section, make sure the length is correct.
-                data = data[:sec.offset] + exe
+                if isinstance(data, bytes):
+                    data = data[:sec.offset] + exe
+                elif isinstance(data, FileBytes):
+                    data.truncate(sec.offset)
+                    data.append(exe)
+                else:
+                    raise Exception("Logic error!")
                 sec.length = len(exe)
             else:
                 # It is somewhere in the middle of an executable, zero it out and
@@ -157,10 +292,14 @@ def add_or_update_trojan(
 
                 # Patch the executable with the correct settings and entrypoint.
                 data = change(data, b"\0" * sec.length, sec.offset)
+
+                # Repoint the section at the new section
                 sec.offset = len(data)
                 sec.length = len(exe)
                 sec.load_address = location
-                data += exe
+
+                # Add the section to the end of the ROM.
+                data = data + exe
             break
     else:
         if len(executable.sections) >= 8:
@@ -184,14 +323,20 @@ def add_or_update_trojan(
             exe = patch_bytesequence(exe, 0xBB, datachunk)
         exe = patch_bytesequence(exe, 0xCF, struct.pack("<I", options))
         exe = patch_bytesequence(exe, 0xDD, struct.pack("<I", debug))
-        data += exe
+        data = data + exe
 
     # Generate new header and attach executable to end of data.
     executable.entrypoint = location
     header.main_executable = executable
 
     # Now, return the updated ROM with the new header and appended data.
-    return header.data + data[header.HEADER_LENGTH:]
+    if isinstance(data, bytes):
+        return header.data + data[header.HEADER_LENGTH:]
+    elif isinstance(data, FileBytes):
+        data[:header.HEADER_LENGTH] = header.data
+        return data
+    else:
+        raise Exception("Logic error!")
 
 
 class NaomiSettingsPatcherException(Exception):
@@ -218,7 +363,10 @@ class NaomiSettingsTypeEnum(Enum):
     TYPE_SRAM = 2
 
 
-class NaomiSettingsPatcher:
+BytesLike = TypeVar("BytesLike", bound=Union[bytes, FileBytes])
+
+
+class NaomiSettingsPatcher(Generic[BytesLike]):
     SRAM_LOCATION = 0x200000
     SRAM_SIZE = 32768
 
@@ -226,8 +374,14 @@ class NaomiSettingsPatcher:
 
     MAX_TROJAN_SIZE = 512 * 1024
 
-    def __init__(self, rom: bytes, trojan: Optional[bytes]) -> None:
-        self.data: bytes = rom
+    def __init__(self, rom: BytesLike, trojan: Optional[bytes]) -> None:
+        self.__data: Union[bytes, FileBytes]
+        if isinstance(rom, FileBytes):
+            self.__data = rom.clone()
+        elif isinstance(rom, bytes):
+            self.__data = rom
+        else:
+            raise Exception("Logic error!")
         self.__trojan: Optional[bytes] = trojan
         if trojan is not None and len(trojan) > NaomiSettingsPatcher.MAX_TROJAN_SIZE:
             raise Exception("Logic error! Adjust the max trojan size to match the compiled tojan!")
@@ -235,9 +389,13 @@ class NaomiSettingsPatcher:
         self.__type: Optional[NaomiSettingsTypeEnum] = None
 
     @property
+    def data(self) -> BytesLike:
+        return cast(BytesLike, self.__data)
+
+    @property
     def serial(self) -> bytes:
         # Parse the ROM header so we can grab the game serial code.
-        naomi = self.__rom or NaomiRom(self.data)
+        naomi = self.__rom or NaomiRom(self.__data)
         self.__rom = naomi
 
         return naomi.serial
@@ -245,7 +403,7 @@ class NaomiSettingsPatcher:
     @property
     def rom(self) -> NaomiRom:
         # Grab the entire rom as a parsed structure.
-        naomi = self.__rom or NaomiRom(self.data)
+        naomi = self.__rom or NaomiRom(self.__data)
         self.__rom = naomi
 
         return naomi
@@ -254,7 +412,7 @@ class NaomiSettingsPatcher:
     def type(self) -> NaomiSettingsTypeEnum:
         if self.__type is None:
             # First, try looking at the start address of any executable sections.
-            naomi = self.__rom or NaomiRom(self.data)
+            naomi = self.__rom or NaomiRom(self.__data)
             self.__rom = naomi
 
             for section in naomi.main_executable.sections:
@@ -278,7 +436,7 @@ class NaomiSettingsPatcher:
     @property
     def info(self) -> Optional[NaomiSettingsInfo]:
         # Parse the ROM header so we can narrow our search.
-        naomi = self.__rom or NaomiRom(self.data)
+        naomi = self.__rom or NaomiRom(self.__data)
         self.__rom = naomi
 
         # Only look at main executables.
@@ -293,8 +451,7 @@ class NaomiSettingsPatcher:
                 try:
                     # Grab the old entrypoint from the existing modification since the ROM header
                     # entrypoint will be the old trojan EXE.
-                    data = self.data[sec.offset:(sec.offset + sec.length)]
-                    _, _, sentinel, debug, date = get_config(data)
+                    _, _, sentinel, debug, date = get_config(self.__data, start=sec.offset, end=sec.offset + sec.length)
 
                     return NaomiSettingsInfo(sentinel, debug, date)
                 except Exception:
@@ -304,7 +461,7 @@ class NaomiSettingsPatcher:
 
     def get_settings(self) -> Optional[bytes]:
         # Parse the ROM header so we can narrow our search.
-        naomi = self.__rom or NaomiRom(self.data)
+        naomi = self.__rom or NaomiRom(self.__data)
         self.__rom = naomi
 
         # Only look at main executables.
@@ -317,7 +474,7 @@ class NaomiSettingsPatcher:
                     self.__type = NaomiSettingsTypeEnum.TYPE_SRAM
                 elif self.__type != NaomiSettingsTypeEnum.TYPE_SRAM:
                     raise Exception("Logic error!")
-                return self.data[sec.offset:(sec.offset + sec.length)]
+                return self.__data[sec.offset:(sec.offset + sec.length)]
 
             # Constrain the search to the section that we jump to, since that will always
             # be where our trojan is.
@@ -328,18 +485,17 @@ class NaomiSettingsPatcher:
                 try:
                     # Grab the old entrypoint from the existing modification since the ROM header
                     # entrypoint will be the old trojan EXE.
-                    data = self.data[sec.offset:(sec.offset + sec.length)]
-                    get_config(data)
+                    get_config(self.__data, start=sec.offset, end=sec.offset + sec.length)
 
                     # Returns the requested EEPRom settings that should be written prior
                     # to the game starting.
-                    for i in range(len(data) - self.EEPROM_SIZE):
-                        if NaomiEEPRom.validate(data[i:(i + self.EEPROM_SIZE)]):
+                    for i in range(sec.offset, sec.offset + sec.length - (self.EEPROM_SIZE - 1)):
+                        if NaomiEEPRom.validate(self.__data[i:(i + self.EEPROM_SIZE)]):
                             if self.__type is None:
                                 self.__type = NaomiSettingsTypeEnum.TYPE_EEPROM
                             elif self.__type != NaomiSettingsTypeEnum.TYPE_EEPROM:
                                 raise Exception("Logic error!")
-                            return data[i:(i + self.EEPROM_SIZE)]
+                            return self.__data[i:(i + self.EEPROM_SIZE)]
                 except Exception:
                     pass
 
@@ -352,7 +508,7 @@ class NaomiSettingsPatcher:
 
     def put_settings(self, settings: bytes, *, enable_sentinel: bool = False, enable_debugging: bool = False, verbose: bool = False) -> None:
         # First, parse the ROM we were given.
-        naomi = self.__rom or NaomiRom(self.data)
+        naomi = self.__rom or NaomiRom(self.__data)
 
         # Now, determine the type of the settings.
         if len(settings) == self.EEPROM_SIZE:
@@ -385,8 +541,8 @@ class NaomiSettingsPatcher:
                 raise NaomiSettingsPatcherException("Cannot have an empty trojan when attaching EEPROM settings!")
 
             # Patch the trojan onto the ROM, updating the settings in the trojan accordingly.
-            self.data = add_or_update_trojan(
-                self.data,
+            self.__data = add_or_update_trojan(
+                self.__data,
                 self.__trojan,
                 1 if enable_debugging else 0,
                 1 if enable_sentinel else 0,
@@ -397,7 +553,7 @@ class NaomiSettingsPatcher:
 
         elif self.__type == NaomiSettingsTypeEnum.TYPE_SRAM:
             # Patch the section directly onto the ROM.
-            self.data = add_or_update_section(self.data, self.SRAM_LOCATION, settings, header=naomi, verbose=verbose)
+            self.__data = add_or_update_section(self.__data, self.SRAM_LOCATION, settings, header=naomi, verbose=verbose)
 
         # Also, write back the new ROM.
         self.__rom = naomi

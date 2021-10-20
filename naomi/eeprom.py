@@ -1,6 +1,7 @@
 import struct
-from typing import Callable, Optional, Union, cast, overload
+from typing import Any, Callable, Generic, Optional, TypeVar, Union, cast, overload
 
+from arcadeutils import FileBytes
 from naomi.rom import NaomiEEPROMDefaults
 
 
@@ -8,8 +9,11 @@ class NaomiEEPRomException(Exception):
     pass
 
 
+BytesLike = TypeVar("BytesLike", bound=Union[bytes, FileBytes])
+
+
 class ArrayBridge:
-    def __init__(self, parent: "NaomiEEPRom", valid_callback: Callable[[bytes], bool], name: str, length: int, offset1: int, offset2: int) -> None:
+    def __init__(self, parent: "NaomiEEPRom[Any]", valid_callback: Callable[[Union[bytes, FileBytes]], bool], name: str, length: int, offset1: int, offset2: int) -> None:
         self.name = name
         self.__callback = valid_callback
         self.__length = length
@@ -60,11 +64,22 @@ class ArrayBridge:
             else:
                 stop = self.__offset1 + key.stop
 
+            if key.step not in {None, 1}:
+                raise NaomiEEPRomException(f"Cannot get bytes with stride != 1 for {self.name} EEPRom section!")
+
             # Arbitrarily choose the first section.
-            return self.__parent._data[slice(start, stop, key.step)]
+            return self.__parent._data[start:stop]
 
         else:
             raise NotImplementedError("Not implemented!")
+
+    @overload
+    def __setitem__(self, key: int, val: int) -> None:
+        ...
+
+    @overload
+    def __setitem__(self, key: slice, val: bytes) -> None:
+        ...
 
     def __setitem__(self, key: Union[int, slice], val: Union[int, bytes]) -> None:
         if isinstance(key, int):
@@ -78,7 +93,12 @@ class ArrayBridge:
 
             # Make sure we set both bytes in each section.
             for realkey in [key + self.__offset1, key + self.__offset2]:
-                self.__parent._data = self.__parent._data[:realkey] + val + self.__parent._data[realkey + 1:]
+                if isinstance(self.__parent._data, bytes):
+                    self.__parent._data = self.__parent._data[:realkey] + val + self.__parent._data[realkey + 1:]
+                elif isinstance(self.__parent._data, FileBytes):
+                    self.__parent._data[realkey:(realkey + 1)] = val
+                else:
+                    raise Exception("Logic error!")
 
             # Sanity check what we did here.
             if len(self.__parent._data) != 128:
@@ -116,16 +136,21 @@ class ArrayBridge:
                 (start + self.__offset1, stop + self.__offset1),
                 (start + self.__offset2, stop + self.__offset2),
             ]:
-                self.__parent._data = self.__parent._data[:realstart] + val + self.__parent._data[realstop:]
+                if isinstance(self.__parent._data, bytes):
+                    self.__parent._data = self.__parent._data[:realstart] + val + self.__parent._data[realstop:]
+                elif isinstance(self.__parent._data, FileBytes):
+                    self.__parent._data[realstart:realstop] = val
+                else:
+                    raise Exception("Logic error!")
 
             if len(self.__parent._data) != 128:
                 raise Exception("Logic error!")
 
 
-class NaomiEEPRom:
+class NaomiEEPRom(Generic[BytesLike]):
 
     @staticmethod
-    def default(serial: bytes, system_defaults: Optional[NaomiEEPROMDefaults] = None, game_defaults: Optional[bytes] = None) -> "NaomiEEPRom":
+    def default(serial: bytes, system_defaults: Optional[NaomiEEPROMDefaults] = None, game_defaults: Optional[bytes] = None) -> "NaomiEEPRom[bytes]":
         if len(serial) != 4:
             raise NaomiEEPRomException("Invalid game serial!")
 
@@ -171,10 +196,17 @@ class NaomiEEPRom:
         system_crc = NaomiEEPRom.crc(system)
         return NaomiEEPRom(system_crc + system + system_crc + system + game_settings)
 
-    def __init__(self, data: bytes) -> None:
+    def __init__(self, data: BytesLike) -> None:
+        if len(data) != 128:
+            raise NaomiEEPRomException("Invalid EEPROM length!")
         if not self.validate(data, only_system=True):
             raise NaomiEEPRomException("Invalid EEPROM CRC!")
-        self._data = data
+
+        self._data: Union[bytes, FileBytes]
+        if isinstance(data, FileBytes):
+            self._data = data.clone()
+        elif isinstance(data, bytes):
+            self._data = data
 
     @staticmethod
     def __cap_32(val: int) -> int:
@@ -209,7 +241,7 @@ class NaomiEEPRom:
         return struct.pack("<H", final_crc)
 
     @staticmethod
-    def validate(data: bytes, *, only_system: bool = False) -> bool:
+    def validate(data: Union[bytes, FileBytes], *, only_system: bool = False) -> bool:
         # First, make sure its the right length.
         if len(data) != 128:
             return False
@@ -221,7 +253,7 @@ class NaomiEEPRom:
         return NaomiEEPRom.__validate_game(data)
 
     @staticmethod
-    def __validate_system(data: bytes) -> bool:
+    def __validate_system(data: Union[bytes, FileBytes]) -> bool:
         # Returns whether the settings chunk passes CRC.
         sys_section1 = data[2:18]
         sys_section2 = data[20:36]
@@ -237,7 +269,7 @@ class NaomiEEPRom:
         return True
 
     @staticmethod
-    def __validate_game(data: bytes) -> bool:
+    def __validate_game(data: Union[bytes, FileBytes]) -> bool:
         game_size1, game_size2 = struct.unpack("<BB", data[38:40])
         if game_size1 != game_size2:
             # These numbers should always match.
@@ -262,40 +294,54 @@ class NaomiEEPRom:
         return True
 
     def __fix_crc(self) -> None:
-        # Grab a local reference.
-        data = self._data
-
         # First fix the system CRCs.
-        sys_section1 = data[2:18]
-        sys_section2 = data[20:36]
-        data = NaomiEEPRom.crc(sys_section1) + data[2:18] + NaomiEEPRom.crc(sys_section2) + data[20:]
+        sys_section1 = self._data[2:18]
+        sys_section2 = self._data[20:36]
+
+        if isinstance(self._data, bytes):
+            self._data = NaomiEEPRom.crc(sys_section1) + self._data[2:18] + NaomiEEPRom.crc(sys_section2) + self._data[20:]
+        elif isinstance(self._data, FileBytes):
+            self._data[0:2] = NaomiEEPRom.crc(sys_section1)
+            self._data[18:20] = NaomiEEPRom.crc(sys_section2)
+        else:
+            raise Exception("Logic error!")
 
         # Now, fix game CRCs.
-        game_size1, game_size2 = struct.unpack("<BB", data[38:40])
+        game_size1, game_size2 = struct.unpack("<BB", self._data[38:40])
         if game_size1 != game_size2:
             # These numbers should always match. Skip fixing the CRCs if they don't.
             return
-        game_size3, game_size4 = struct.unpack("<BB", data[42:44])
+        game_size3, game_size4 = struct.unpack("<BB", self._data[42:44])
         if game_size3 != game_size4:
             # These numbers should always match. Skip fixing the CRCs if they don't.
             return
 
         if game_size1 != 0xFF and game_size1 != 0x0:
-            game_section1 = data[44:(44 + game_size1)]
-            data = data[:36] + NaomiEEPRom.crc(game_section1) + data[38:]
+            game_section1 = self._data[44:(44 + game_size1)]
+
+            if isinstance(self._data, bytes):
+                self._data = self._data[:36] + NaomiEEPRom.crc(game_section1) + self._data[38:]
+            elif isinstance(self._data, FileBytes):
+                self._data[36:38] = NaomiEEPRom.crc(game_section1)
+            else:
+                raise Exception("Logic error!")
 
             if game_size3 != 0xFF and game_size3 != 0x0:
-                game_section2 = data[(44 + game_size1):(44 + game_size1 + game_size3)]
-                data = data[:40] + NaomiEEPRom.crc(game_section2) + data[42:]
+                game_section2 = self._data[(44 + game_size1):(44 + game_size1 + game_size3)]
+                if isinstance(self._data, bytes):
+                    self._data = self._data[:40] + NaomiEEPRom.crc(game_section2) + self._data[42:]
+                elif isinstance(self._data, FileBytes):
+                    self._data[40:42] = NaomiEEPRom.crc(game_section2)
+                else:
+                    raise Exception("Logic error!")
 
-        if len(data) != 128:
+        if len(self._data) != 128:
             raise Exception("Logic error!")
-        self._data = data
 
     @property
-    def data(self) -> bytes:
+    def data(self) -> BytesLike:
         self.__fix_crc()
-        return self._data
+        return cast(BytesLike, self._data)
 
     @property
     def serial(self) -> bytes:
@@ -318,7 +364,14 @@ class NaomiEEPRom:
         if newval < 0 or newval > 42:
             raise NaomiEEPRomException("Game section length invalid!")
         lengthbytes = struct.pack("<BB", newval, newval)
-        self._data = self._data[:38] + lengthbytes + self._data[40:42] + lengthbytes + self._data[44:]
+        if isinstance(self._data, bytes):
+            self._data = self._data[:38] + lengthbytes + self._data[40:42] + lengthbytes + self._data[44:]
+        elif isinstance(self._data, FileBytes):
+            self._data[38:40] = lengthbytes
+            self._data[42:44] = lengthbytes
+        else:
+            raise Exception("Logic error!")
+
         if len(self._data) != 128:
             raise Exception("Logic error!")
 
@@ -365,10 +418,21 @@ class NaomiEEPRom:
             else:
                 stop = key.stop
 
-            return self._data[slice(start, stop, key.step)]
+            if key.step not in {None, 1}:
+                raise NaomiEEPRomException("Cannot get bytes with stride != 1 for 128-byte EEPROM!")
+
+            return self._data[start:stop]
 
         else:
             raise NotImplementedError("Not implemented!")
+
+    @overload
+    def __setitem__(self, key: int, val: int) -> None:
+        ...
+
+    @overload
+    def __setitem__(self, key: slice, val: bytes) -> None:
+        ...
 
     def __setitem__(self, key: Union[int, slice], val: Union[int, bytes]) -> None:
         if isinstance(key, int):
@@ -379,7 +443,13 @@ class NaomiEEPRom:
             if isinstance(val, int):
                 val = bytes([val])
 
-            self._data = self._data[:key] + val + self._data[key + 1:]
+            if isinstance(self._data, bytes):
+                self._data = self._data[:key] + val + self._data[key + 1:]
+            elif isinstance(self._data, FileBytes):
+                self._data[key:(key + 1)] = val
+            else:
+                raise Exception("Logic error!")
+
             if len(self._data) != 128:
                 raise Exception("Logic error!")
 
@@ -414,7 +484,12 @@ class NaomiEEPRom:
                     raise NaomiEEPRomException("Cannot manually set CRC bytes!")
 
             # Now, set the bytes.
-            self._data = self._data[:start] + val + self._data[stop:]
+            if isinstance(self._data, bytes):
+                self._data = self._data[:start] + val + self._data[stop:]
+            elif isinstance(self._data, FileBytes):
+                self._data[start:stop] = val
+            else:
+                raise Exception("Logic error!")
 
             if len(self._data) != 128:
                 raise Exception("Logic error!")

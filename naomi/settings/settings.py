@@ -5,6 +5,7 @@ import struct
 from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from arcadeutils import FileBytes
 from naomi.eeprom import NaomiEEPRom, NaomiEEPRomException
 from naomi.rom import NaomiRom, NaomiRomRegionEnum
 
@@ -356,7 +357,7 @@ class Settings:
         self.type = type
 
     @staticmethod
-    def from_config(type: SettingType, config: "SettingsConfig", eeprom: NaomiEEPRom) -> "Settings":
+    def from_config(type: SettingType, config: "SettingsConfig", eeprom: NaomiEEPRom[Any]) -> "Settings":
         # Keep track of how many bytes into the EEPROM we are.
         location = 0
         halves = 0
@@ -1055,7 +1056,7 @@ class SettingsManager:
     def files_for_rom(self, rom: NaomiRom) -> Dict[str, str]:
         return self.files_for_serial(rom.serial)
 
-    def files_for_eeprom(self, data: bytes) -> Dict[str, str]:
+    def files_for_eeprom(self, data: Union[bytes, FileBytes]) -> Dict[str, str]:
         eeprom = NaomiEEPRom(data)
         return self.files_for_serial(eeprom.serial)
 
@@ -1093,7 +1094,7 @@ class SettingsManager:
         # Create a default EEPROM based on both of the above.
         return self.from_eeprom(NaomiEEPRom.default(serial, system_defaults=system_defaults, game_defaults=game_defaults).data)
 
-    def from_eeprom(self, data: bytes) -> SettingsWrapper:
+    def from_eeprom(self, data: Union[bytes, FileBytes]) -> SettingsWrapper:
         # First grab the parsed EEPRom so we can get the serial.
         eeprom = NaomiEEPRom(data)
 

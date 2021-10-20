@@ -1,7 +1,9 @@
 import datetime
 import struct
 from enum import Enum
-from typing import Dict, List, cast
+from typing import Dict, List, Union, cast
+
+from arcadeutils import FileBytes
 
 
 class NaomiRomException(Exception):
@@ -84,7 +86,7 @@ class NaomiRom:
 
     HEADER_LENGTH = 0x500
 
-    def __init__(self, data: bytes) -> None:
+    def __init__(self, data: Union[bytes, FileBytes]) -> None:
         self.data = data[:NaomiRom.HEADER_LENGTH]
         self.data = self.data + (b'\0' * (NaomiRom.HEADER_LENGTH - len(self.data)))
 
