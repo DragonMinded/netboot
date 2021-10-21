@@ -719,6 +719,7 @@ int message_recv(uint16_t *type, void ** data, unsigned int *length)
 #define GAMES_COUNT_LOC 4
 #define ENABLE_ANALOG_LOC 8
 #define ENABLE_DEBUG_LOC 12
+#define DEFAULT_SELECTION_LOC 16
 
 typedef struct __attribute__((__packed__))
 {
@@ -747,6 +748,12 @@ unsigned int debug_enabled()
 {
     uint32_t config = CONFIG_MEMORY_LOCATION;
     return *((uint32_t *)(config + ENABLE_DEBUG_LOC));
+}
+
+unsigned int get_default_selection()
+{
+    uint32_t config = CONFIG_MEMORY_LOCATION;
+    return *((uint32_t *)(config + DEFAULT_SELECTION_LOC));
 }
 
 unsigned int repeat(unsigned int cur_state, int *repeat_count, double fps)
@@ -816,6 +823,8 @@ extern void *dn_png_data;
 extern unsigned int cursor_png_width;
 extern unsigned int cursor_png_height;
 extern void *cursor_png_data;
+
+unsigned int default_game;
 
 #define SCREEN_MAIN_MENU 0
 
@@ -1008,8 +1017,12 @@ unsigned int main_menu(state_t *state, int reinit)
     {
         games = get_games_list(&count);
         maxgames = (video_height() - (24 + 16)) / 21;
-        cursor = 0;
+        cursor = default_game;
         top = 0;
+        if (cursor >= (top + maxgames))
+        {
+            top = cursor - (maxgames - 1);
+        }
         booting = 0;
     }
 
@@ -1103,6 +1116,7 @@ void main()
     // Grab the system configuration
     eeprom_t settings;
     eeprom_read(&settings);
+    default_game = get_default_selection();
 
     // Attach our communication handler for packet sending/receiving.
     packetlib_init();

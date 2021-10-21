@@ -15,5 +15,6 @@ sdist/
 wheels/
 *.egg-info/
 *.egg
+.netdimm_menu_settings.yaml
 MANIFEST
 homebrew/examples/*/*.bin

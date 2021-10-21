@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# Triforce Netfirm Toolbox, put into the public domain.
-# Please attribute properly, but only if you want.
 import argparse
 import os
 import platform
@@ -8,6 +6,7 @@ import struct
 import subprocess
 import sys
 import time
+import yaml
 from typing import Dict, List, Optional, Tuple
 
 from arcadeutils import FileBytes
@@ -282,6 +281,57 @@ def receive_message(netdimm: NetDimm) -> Optional[Message]:
     return Message(msgid, msgdata)
 
 
+class Settings:
+    def __init__(
+        self,
+        last_game_file: Optional[str],
+        enable_analog: bool,
+    ):
+        self.last_game_file = last_game_file
+        self.enable_analog = enable_analog
+
+
+def settings_load(settings_file: str, ip: str) -> Settings:
+    try:
+        with open(settings_file, "r") as fp:
+            data = yaml.safe_load(fp)
+    except FileNotFoundError:
+        data = {}
+
+    settings = Settings(
+        last_game_file=None,
+        enable_analog=False,
+    )
+
+    if isinstance(data, dict):
+        if ip in data:
+            data = data[ip]
+
+            if isinstance(data, dict):
+                if 'enable_analog' in data:
+                    settings.enable_analog = bool(data['enable_analog'])
+                if 'last_game_file' in data:
+                    settings.last_game_file = str(data['last_game_file']) if data['last_game_file'] is not None else None
+
+    return settings
+
+
+def settings_save(settings_file: str, ip: str, settings: Settings) -> None:
+    try:
+        with open(settings_file, "r") as fp:
+            data = yaml.safe_load(fp)
+    except FileNotFoundError:
+        data = {}
+
+    data[ip] = {
+        'enable_analog': settings.enable_analog,
+        'last_game_file': settings.last_game_file,
+    }
+
+    with open(settings_file, "w") as fp:
+        yaml.dump(data, fp)
+
+
 MESSAGE_SELECTION: int = 0x1000
 
 
@@ -314,9 +364,16 @@ def main() -> int:
         help='The menu executable that we should send to display games on the Naomi. Defaults to %(default)s.',
     )
     parser.add_argument(
-        '--enable-analog',
+        '--menu-settings-file',
+        metavar='SETTINGS',
+        type=str,
+        default=os.path.join(root, '.netdimm_menu_settings.yaml'),
+        help='The settings file we will use to store persistent settings. Defaults to %(default)s.',
+    )
+    parser.add_argument(
+        '--force-analog',
         action="store_true",
-        help="Enable analog control inputs.",
+        help="Force-enable analog control inputs. Use this if you have no digital controls and cannot set up analog options in the test menu.",
     )
     parser.add_argument(
         '--persistent',
@@ -344,6 +401,14 @@ def main() -> int:
         "korea": NaomiRomRegionEnum.REGION_KOREA,
         "australia": NaomiRomRegionEnum.REGION_AUSTRALIA,
     }.get(args.region, NaomiRomRegionEnum.REGION_JAPAN)
+
+    # Load the settings file
+    settings = settings_load(args.menu_settings_file, args.ip)
+
+    if args.force_analog:
+        # Force the setting on, as a safeguard against cabinets that have no digital controls.
+        settings.enable_analog = True
+        settings_save(args.menu_settings_file, args.ip, settings)
 
     # Intentionally rebuild the menu every loop if we are in persistent mode, so that
     # changes to the ROM directory can be reflected on subsequent menu sends.
@@ -378,20 +443,23 @@ def main() -> int:
                 if verbose:
                     print(f"Added {name} with serial {serial.decode('ascii')} to ROM list.")
 
-                games.append((filename, name, serial))
+                games.append((os.path.join(romdir, filename), name, serial))
 
         # Alphabetize them.
         games = sorted(games, key=lambda g: g[1])
 
         # Now, create the settings section.
+        last_game_id: int = 0
         gamesconfig = b""
-        for index, (_, name, serial) in enumerate(games):
+        for index, (filename, name, serial) in enumerate(games):
             namebytes = name.encode('ascii')[:127]
             while len(namebytes) < 128:
                 namebytes = namebytes + b"\0"
             gamesconfig += namebytes + serial + struct.pack("<I", index)
+            if filename == settings.last_game_file:
+                last_game_id = index
 
-        config = struct.pack("<IIII", 16, len(games), 1 if args.enable_analog else 0, 1 if args.debug_mode else 0) + gamesconfig
+        config = struct.pack("<IIIII", 20, len(games), 1 if settings.enable_analog else 0, 1 if args.debug_mode else 0, last_game_id) + gamesconfig
 
         # Now, load up the menu ROM and append the settings to it.
         if success:
@@ -428,8 +496,12 @@ def main() -> int:
                             print(f"Received type: {hex(msg.id)}, length: {len(msg.data)}")
                         if msg.id == MESSAGE_SELECTION:
                             index = struct.unpack("<I", msg.data)[0]
-                            filename = os.path.join(romdir, games[index][0])
+                            filename = games[index][0]
                             print(f"Requested {games[index][1]} be loaded...")
+
+                            # Save the menu position.
+                            settings.last_game_file = filename
+                            settings_save(args.menu_settings_file, args.ip, settings)
 
                             with open(filename, "rb") as fp:
                                 gamedata = FileBytes(fp)
