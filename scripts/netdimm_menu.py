@@ -333,6 +333,8 @@ def settings_save(settings_file: str, ip: str, settings: Settings) -> None:
 
 
 MESSAGE_SELECTION: int = 0x1000
+MESSAGE_LOAD_SETTINGS: int = 0x1001
+MESSAGE_LOAD_SETTINGS_ACK: int = 0x1002
 
 
 def main() -> int:
@@ -494,6 +496,7 @@ def main() -> int:
                     if msg:
                         if verbose:
                             print(f"Received type: {hex(msg.id)}, length: {len(msg.data)}")
+
                         if msg.id == MESSAGE_SELECTION:
                             index = struct.unpack("<I", msg.data)[0]
                             filename = games[index][0]
@@ -508,6 +511,13 @@ def main() -> int:
                                 netdimm.send(gamedata, disable_crc_check=True)
                                 netdimm.reboot()
                             break
+
+                        elif msg.id == MESSAGE_LOAD_SETTINGS:
+                            index = struct.unpack("<I", msg.data)[0]
+                            filename = games[index][0]
+                            print(f"Requested settings for {games[index][1]}...")
+                            send_message(netdimm, Message(MESSAGE_LOAD_SETTINGS_ACK, msg.data))
+
             except NetDimmException:
                 # Mark failure so we don't try to wait for power down below.
                 success = False

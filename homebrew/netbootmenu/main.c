@@ -804,6 +804,8 @@ void repeat_init(unsigned int pushed_state, int *repeat_count)
 }
 
 #define MESSAGE_SELECTION 0x1000
+#define MESSAGE_LOAD_SETTINGS 0x1001
+#define MESSAGE_LOAD_SETTINGS_ACK 0x1002
 
 #define ANALOG_CENTER 0x80
 #define ANALOG_THRESH_ON 0x30
@@ -824,24 +826,32 @@ extern unsigned int cursor_png_width;
 extern unsigned int cursor_png_height;
 extern void *cursor_png_data;
 
-unsigned int default_game;
+unsigned int selected_game;
 
 #define SCREEN_MAIN_MENU 0
+#define SCREEN_COMM_ERROR 1
+#define SCREEN_GAME_SETTINGS_LOAD 2
+#define SCREEN_GAME_SETTINGS 3
 
 typedef struct
 {
     eeprom_t *settings;
     double fps;
     double animation_counter;
-    font_t *font;
+    font_t *font_18pt;
+    font_t *font_12pt;
 } state_t;
 
 typedef struct
 {
-    uint8_t up;
-    uint8_t down;
-    uint8_t start;
-    uint8_t test;
+    // The following controls only ever need a pressed event.
+    uint8_t up_pressed;
+    uint8_t down_pressed;
+    uint8_t test_pressed;
+
+    // The following controls need pressed and released events to detect holds.
+    uint8_t start_pressed;
+    uint8_t start_released;
 } controls_t;
 
 controls_t get_controls(state_t *state, int reinit)
@@ -869,6 +879,7 @@ controls_t get_controls(state_t *state, int reinit)
     maple_poll_buttons();
     jvs_buttons_t pressed = maple_buttons_pressed();
     jvs_buttons_t held = maple_buttons_current();
+    jvs_buttons_t released = maple_buttons_released();
 
     // Also calculate analog thresholds so we can emulate joystick with analog.
     if (analog_enabled())
@@ -949,46 +960,49 @@ controls_t get_controls(state_t *state, int reinit)
 
     // Process buttons and repeats.
     controls_t controls;
-    controls.up = 0;
-    controls.down = 0;
-    controls.start = 0;
-    controls.test = 0;
+    controls.up_pressed = 0;
+    controls.down_pressed = 0;
+    controls.start_pressed = 0;
+    controls.start_released = 0;
+    controls.test_pressed = 0;
 
     if (pressed.test || pressed.psw1)
     {
-        // Request to go into system test mode.
-        controls.test = 1;
+        controls.test_pressed = 1;
     }
     else
     {
         if (pressed.player1.start || (state->settings->system.players >= 2 && pressed.player2.start))
         {
-            // Made a selection!
-            controls.start = 1;
+            controls.start_pressed = 1;
+        }
+        else if (released.player1.start || (state->settings->system.players >= 2 && released.player2.start))
+        {
+            controls.start_released = 1;
         }
         else
         {
             if (pressed.player1.up || (state->settings->system.players >= 2 && pressed.player2.up))
             {
-                controls.up = 1;
+                controls.up_pressed = 1;
 
                 repeat_init(pressed.player1.up, &repeats[0]);
                 repeat_init(pressed.player2.up, &repeats[1]);
             }
             else if (pressed.player1.down || (state->settings->system.players >= 2 && pressed.player2.down))
             {
-                controls.down = 1;
+                controls.down_pressed = 1;
 
                 repeat_init(pressed.player1.down, &repeats[2]);
                 repeat_init(pressed.player2.down, &repeats[3]);
             }
             if (repeat(held.player1.up, &repeats[0], state->fps) || (state->settings->system.players >= 2 && repeat(held.player2.up, &repeats[1], state->fps)))
             {
-                controls.up = 1;
+                controls.up_pressed = 1;
             }
             else if (repeat(held.player1.down, &repeats[2], state->fps) || (state->settings->system.players >= 2 && repeat(held.player2.down, &repeats[3], state->fps)))
             {
-                controls.down = 1;
+                controls.down_pressed = 1;
             }
         }
     }
@@ -1012,18 +1026,26 @@ unsigned int main_menu(state_t *state, int reinit)
 
     // Whether we're currently waiting to be rebooted for a game to send to us.
     static unsigned int controls_locked = 0;
+    static unsigned int booting = 0;
+    static double booting_animation = 0.0;
+    static unsigned int holding = 0;
+    static double holding_animation = 0.0;
 
     if (reinit)
     {
         games = get_games_list(&count);
         maxgames = (video_height() - (24 + 16)) / 21;
-        cursor = default_game;
+        cursor = selected_game;
         top = 0;
         if (cursor >= (top + maxgames))
         {
             top = cursor - (maxgames - 1);
         }
         controls_locked = 0;
+        booting = 0;
+        booting_animation = 0.0;
+        holding = 0;
+        holding_animation = 0.0;
     }
 
     // If we need to switch screens.
@@ -1032,52 +1054,107 @@ unsigned int main_menu(state_t *state, int reinit)
     // Get our controls, including repeats.
     controls_t controls = get_controls(state, reinit);
 
-    if (controls.test)
+    if (controls.test_pressed)
     {
         // Request to go into system test mode.
         enter_test_mode();
     }
-    if (!controls_locked)
+    if (controls.start_pressed)
     {
-        if (controls.start)
+        // Possibly long-pressing to get into game settings menu.
+        if (!controls_locked)
+        {
+            controls_locked = 1;
+            if (booting == 0 && holding == 0)
+            {
+                holding = 1;
+                holding_animation = state->animation_counter;
+            }
+        }
+    }
+    if (controls.start_released)
+    {
+        if (booting == 0 && holding == 1)
         {
             // Made a selection!
-            controls_locked = 1;
+            booting = 1;
+            holding = 0;
+            booting_animation = state->animation_counter;
             message_send(MESSAGE_SELECTION, &cursor, 4);
+        }
+        else if(booting == 1)
+        {
+            // Ignore everything, we're waiting to boot at this point.
         }
         else
         {
-            if (controls.up)
+            // Somehow got here, maybe start held on another screen?
+            booting = 0;
+            holding = 0;
+            controls_locked = 0;
+        }
+    }
+    if (!controls_locked)
+    {
+        if (controls.up_pressed)
+        {
+            // Moved cursor up.
+            if (cursor > 0)
             {
-                // Moved cursor up.
-                if (cursor > 0)
-                {
-                    cursor --;
-                }
-                if (cursor < top)
-                {
-                    top = cursor;
-                }
+                cursor --;
             }
-            else if (controls.down)
+            if (cursor < top)
             {
-                // Moved cursor down.
-                if (cursor < (count - 1))
-                {
-                    cursor ++;
-                }
-                if (cursor >= (top + maxgames))
-                {
-                    top = cursor - (maxgames - 1);
-                }
+                top = cursor;
+            }
+        }
+        else if (controls.down_pressed)
+        {
+            // Moved cursor down.
+            if (cursor < (count - 1))
+            {
+                cursor ++;
+            }
+            if (cursor >= (top + maxgames))
+            {
+                top = cursor - (maxgames - 1);
             }
         }
     }
 
     // Now, render the actual list of games.
     {
-        unsigned int move_amount[4] = { 1, 2, 1, 0 };
-        int scroll_offset = move_amount[((int)(state->animation_counter * 4.0)) & 0x3];
+        unsigned int scroll_indicator_move_amount[4] = { 1, 2, 1, 0 };
+        int scroll_offset = scroll_indicator_move_amount[((int)(state->animation_counter * 4.0)) & 0x3];
+        int cursor_offset = 0;
+        int boot_animation_offset = 0;
+
+        if (holding)
+        {
+            unsigned int cursor_move_amount[10] = {0, 0, 1, 2, 3, 4, 5, 6, 7, 8};
+            unsigned int which = (int)((state->animation_counter - holding_animation) * 10.0);
+            if (which >= 10)
+            {
+                // Held for 1 second, so lets go to game settings.
+                selected_game = cursor;
+                new_screen = SCREEN_GAME_SETTINGS_LOAD;
+                which = 9;
+            }
+            cursor_offset = cursor_move_amount[which];
+        }
+
+        if (booting)
+        {
+            unsigned int which = (int)((state->animation_counter - holding_animation) * 20.0);
+            if (which >= 40)
+            {
+                // We failed to boot, display an error.
+                new_screen = SCREEN_COMM_ERROR;
+                which = 39;
+            }
+
+            boot_animation_offset = which;
+        }
 
         if (top > 0)
         {
@@ -1093,13 +1170,39 @@ unsigned int main_menu(state_t *state, int reinit)
             }
 
             // Draw cursor itself.
-            if (game == cursor)
+            if (game == cursor && (!booting))
             {
-                video_draw_sprite(24, 24 + ((game - top) * 21), cursor_png_width, cursor_png_height, cursor_png_data);
+                video_draw_sprite(24 + cursor_offset, 24 + ((game - top) * 21), cursor_png_width, cursor_png_height, cursor_png_data);
+            }
+
+            unsigned int away = abs(game - cursor);
+            int horizontal_offset = 0;
+            if (away > 0 && boot_animation_offset > 0)
+            {
+                int slide_location = boot_animation_offset - (away - 1);
+                if (slide_location < 0)
+                {
+                    slide_location = 0;
+                }
+
+                int slide_positions[20] = {
+                    0, 20, 40, 50, 55,
+                    57, 58, 58, 57, 55,
+                    50, 40, 20, -20, -100,
+                    -260, -580, -900, -1540, -2000,
+                };
+                if (slide_location >= 20)
+                {
+                    horizontal_offset = -2000;
+                }
+                else
+                {
+                    horizontal_offset = slide_positions[slide_location];
+                }
             }
 
             // Draw game, highlighted if it is selected.
-            video_draw_text(48, 22 + ((game - top) * 21), state->font, game == cursor ? rgb(255, 255, 20) : rgb(255, 255, 255), games[game].name);
+            video_draw_text(48 + horizontal_offset, 22 + ((game - top) * 21), state->font_18pt, game == cursor ? rgb(255, 255, 20) : rgb(255, 255, 255), games[game].name);
         }
 
         if ((top + maxgames) < count)
@@ -1111,12 +1214,106 @@ unsigned int main_menu(state_t *state, int reinit)
     return new_screen;
 }
 
+unsigned int game_settings_load(state_t *state, int reinit)
+{
+    static double load_start = 0.0;
+    static unsigned int ack_received = 0;
+
+    if (reinit)
+    {
+        // Attempt to fetch the game settings for this game.
+        uint32_t which_game = selected_game;
+        message_send(MESSAGE_LOAD_SETTINGS, &which_game, 4);
+        load_start = state->animation_counter;
+        ack_received = 0;
+    }
+
+    // If we need to switch screens.
+    unsigned int new_screen = SCREEN_GAME_SETTINGS_LOAD;
+
+    // Check to see if we got a response in time.
+    {
+        uint16_t type = 0;
+        uint8_t *data = 0;
+        unsigned int length = 0;
+        if (message_recv(&type, (void *)&data, &length) == 0)
+        {
+            if (type == MESSAGE_LOAD_SETTINGS_ACK && length == 4)
+            {
+                uint32_t which_game;
+                memcpy(&which_game, data, 4);
+
+                if (which_game == selected_game)
+                {
+                    // Menu got our request, it should be gathering and sending settings
+                    // to us at the moment.
+                    ack_received = 1;
+                }
+            }
+
+            // Wipe any data that we need.
+            if (data != 0)
+            {
+                free(data);
+            }
+        }
+
+        if ((!ack_received) && ((state->animation_counter - load_start) >= 2.0))
+        {
+            // Uh oh, no ack.
+            new_screen = SCREEN_COMM_ERROR;
+        }
+    }
+
+    video_draw_text(video_width() / 2 - 100, 100, state->font_18pt, rgb(0, 255, 0), "Fetching game settings...");
+
+    return new_screen;
+}
+
+unsigned int game_settings(state_t *state, int reinit)
+{
+    if (reinit)
+    {
+        // TODO
+    }
+
+    // If we need to switch screens.
+    unsigned int new_screen = SCREEN_GAME_SETTINGS;
+
+    video_draw_text(video_width() / 2 - 100, 100, state->font_18pt, rgb(255, 255, 0), "TODO...");
+
+    return new_screen;
+}
+
+unsigned int comm_error(state_t *state, int reinit)
+{
+    if (reinit)
+    {
+        // Nothing to re-init, this screen is stuck. If we get here it means
+        // the menu software on the other side is gone so there is no point in
+        // trying to do anything.
+    }
+
+    video_draw_text(video_width() / 2 - 50, 100, state->font_18pt, rgb(255, 0, 0), "Comm Error!");
+    video_draw_text(
+        video_width() / 2 - 130,
+        130,
+        state->font_12pt,
+        rgb(255, 255, 255),
+        "We seem to have lost communication with the\n"
+        "controlling software! Cycle your cabinet power\n"
+        "and run the menu software to try again!"
+    );
+
+    return SCREEN_COMM_ERROR;
+}
+
 void main()
 {
     // Grab the system configuration
     eeprom_t settings;
     eeprom_read(&settings);
-    default_game = get_default_selection();
+    selected_game = get_default_selection();
 
     // Attach our communication handler for packet sending/receiving.
     packetlib_init();
@@ -1129,9 +1326,11 @@ void main()
     state_t state;
     state.settings = &settings;
 
-    // Attach our font
-    state.font = video_font_add(helvetica_ttf_data, helvetica_ttf_len);
-    video_font_set_size(state.font, 18);
+    // Attach our fonts
+    state.font_18pt = video_font_add(helvetica_ttf_data, helvetica_ttf_len);
+    video_font_set_size(state.font_18pt, 18);
+    state.font_12pt = video_font_add(helvetica_ttf_data, helvetica_ttf_len);
+    video_font_set_size(state.font_12pt, 12);
 
     // What screen we're on right now.
     unsigned int curscreen = SCREEN_MAIN_MENU;
@@ -1153,27 +1352,21 @@ void main()
         state.fps = fps_value;
         state.animation_counter = animation_counter;
 
-        // Now, see if we have a packet to handle.
-        {
-            uint16_t type = 0;
-            uint8_t *data = 0;
-            unsigned int length = 0;
-            if (message_recv(&type, (void *)&data, &length) == 0)
-            {
-                // Respond to packets here.
-                if (data != 0)
-                {
-                    free(data);
-                }
-            }
-        }
-
         // Now, draw the current screen.
         int profile = profile_start();
         switch(curscreen)
         {
-            case 0:
+            case SCREEN_MAIN_MENU:
                 newscreen = main_menu(&state, curscreen != oldscreen);
+                break;
+            case SCREEN_GAME_SETTINGS_LOAD:
+                newscreen = game_settings_load(&state, curscreen != oldscreen);
+                break;
+            case SCREEN_GAME_SETTINGS:
+                newscreen = game_settings(&state, curscreen != oldscreen);
+                break;
+            case SCREEN_COMM_ERROR:
+                newscreen = comm_error(&state, curscreen != oldscreen);
                 break;
             default:
                 newscreen = curscreen;
