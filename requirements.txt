@@ -6,4 +6,4 @@ pycryptodome
 pyyaml
 pillow
 arcadeutils
-git+https://github.com/DragonMinded/dragoncurses.git@trunk#egg=dragoncurses
+dragoncurses

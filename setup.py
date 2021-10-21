@@ -2,23 +2,12 @@ import os
 from setuptools import setup
 
 
-VERSION = "0.2.3"
+VERSION = "0.2.4"
 
 
 if 'FULL_INSTALLATION' in os.environ:
     # We want to install this entire repo as an installation, so that we can
     # use it to run a netboot server.
-    def requires(req: str) -> str:
-        if "git+" not in req:
-            return req
-        if "#egg" not in req:
-            raise Exception(f"Unknown egg package for {req}!")
-        _, egg = req.split("#egg", 1)
-        egg = egg.strip()
-        if egg.startswith("="):
-            egg = egg[1:].strip()
-        return egg
-
     setup(
         name='netboot',
         version=VERSION,
@@ -27,6 +16,7 @@ if 'FULL_INSTALLATION' in os.environ:
         license='Public Domain',
         packages=[
             # Core packages.
+            'netdimm',
             'naomi',
             'naomi.settings',
             # Include default trojan.
@@ -38,7 +28,7 @@ if 'FULL_INSTALLATION' in os.environ:
             'netboot.web.templates',
         ],
         install_requires=[
-            requires(req) for req in open('requirements.txt').read().split('\n') if len(req) > 0
+            req for req in open('requirements.txt').read().split('\n') if len(req) > 0
         ],
         package_data={
             # Make sure to actually include the trojan data.
@@ -46,9 +36,10 @@ if 'FULL_INSTALLATION' in os.environ:
             "netboot.web.static": ["*.js", "*.css"],
             "netboot.web.templates": ["*.html"],
         },
+        python_requires=">=3.6",
     )
-else:
-    # We want to install only the parts of this repo useful as a third-party
+elif 'NAOMI_INSTALLATION' in os.environ:
+    # We want to install only the naomi parts of this repo useful as a third-party
     # package so that other code can depend on us.
     with open(os.path.join("naomi", "README.md"), "r", encoding="utf-8") as fh:
         long_description = fh.read()
@@ -87,5 +78,65 @@ else:
             # Make sure to actually include the trojan data.
             "homebrew.settingstrojan": ["settingstrojan.bin"],
         },
+        install_requires=[
+            'arcadeutils',
+            'dragoncurses',
+        ],
         python_requires=">=3.6",
+    )
+elif 'NETDIMM_INSTALLATION' in os.environ:
+    # We want to install only the netdimm parts of this repo useful as a third-party
+    # package so that other code can depend on us.
+    with open(os.path.join("netdimm", "README.md"), "r", encoding="utf-8") as fh:
+        long_description = fh.read()
+
+    setup(
+        name='netdimmutils',
+        version=VERSION,
+        description='Code libraries for working with a SEGA Net Dimm',
+        long_description=long_description,
+        long_description_content_type="text/markdown",
+        author='DragonMinded',
+        author_email='dragonminded@dragonminded.com',
+        license='Public Domain',
+        url='https://github.com/DragonMinded/netboot',
+        packages=[
+            # Package for 3rd party.
+            'netdimm',
+        ],
+        package_data={
+            # Make sure mypy sees us as typed.
+            "netdimm": ["py.typed", "README.md"],
+        },
+        install_requires=[
+            'pycryptodome',
+            'arcadeutils',
+        ],
+        python_requires=">=3.6",
+    )
+else:
+    # We want to install the 3rdparty parts of this repo (netdimm and naomi) together
+    # as a set of packages to depend on.
+    setup(
+        version=VERSION,
+        description='Code and utilities for netbooting a Naomi/Triforce/Chihiro.',
+        author='DragonMinded',
+        license='Public Domain',
+        packages=[
+            # Core packages.
+            'netdimm',
+            'naomi',
+            'naomi.settings',
+            # Include default trojan.
+            'homebrew.settingstrojan',
+        ],
+        install_requires=[
+            'pycryptodome',
+            'arcadeutils',
+            'dragoncurses',
+        ],
+        package_data={
+            # Make sure to actually include the trojan data.
+            "homebrew.settingstrojan": ["settingstrojan.bin"],
+        },
     )

@@ -10,7 +10,8 @@ from werkzeug.routing import PathConverter
 from arcadeutils import FileBytes, BinaryDiff, BinaryDiffException
 from naomi import NaomiRom, NaomiSettingsPatcher, NaomiRomRegionEnum
 from naomi.settings import SettingsWrapper, SettingsManager
-from netboot import Cabinet, CabinetRegionEnum, CabinetManager, DirectoryManager, PatchManager, TargetEnum, NetDimmVersionEnum
+from netdimm import NetDimmVersionEnum
+from netboot import Cabinet, CabinetRegionEnum, CabinetManager, DirectoryManager, PatchManager, TargetEnum
 
 
 current_directory: str = os.path.abspath(os.path.dirname(__file__))

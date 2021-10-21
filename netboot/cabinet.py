@@ -7,7 +7,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from naomi import NaomiSettingsPatcher
-from netboot.netboot import NetDimmInfo, NetDimmVersionEnum, CRCStatusEnum
+from netdimm import NetDimmInfo, NetDimmVersionEnum, CRCStatusEnum
 from netboot.hostutils import Host, HostStatusEnum, TargetEnum
 from netboot.log import log
 

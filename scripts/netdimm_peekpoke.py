@@ -4,7 +4,7 @@
 import argparse
 import sys
 
-from netboot.netboot import NetDimm, PeekPokeTypeEnum
+from netdimm import NetDimm, PeekPokeTypeEnum
 
 
 def main() -> int:

@@ -4,7 +4,7 @@
 import argparse
 import enum
 import sys
-from netboot import NetDimm, CRCStatusEnum
+from netdimm import NetDimm, CRCStatusEnum
 from typing import Any
 
 

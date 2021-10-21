@@ -4,7 +4,8 @@
 import argparse
 import enum
 import sys
-from netboot import NetDimm, TargetEnum, NetDimmVersionEnum
+from netboot import TargetEnum
+from netdimm import NetDimm, NetDimmVersionEnum
 from typing import Any
 
 

@@ -12,7 +12,7 @@ from typing import Any, Optional, Sequence, Tuple, Union, overload
 
 from arcadeutils import FileBytes, BinaryDiff
 from netboot.log import log
-from netboot.netboot import NetDimm, NetDimmInfo, NetDimmException, NetDimmVersionEnum
+from netdimm import NetDimm, NetDimmInfo, NetDimmException, NetDimmVersionEnum
 from naomi import NaomiSettingsPatcher, get_default_trojan as get_default_naomi_trojan
 
 
@@ -67,7 +67,7 @@ def _send_file_to_host(
         progress_queue.put(("progress", (sent, total)))
 
     try:
-        netdimm = NetDimm(host, version=version, quiet=True)
+        netdimm = NetDimm(host, version=version)
 
         # Grab the image itself
         with open(filename, "rb") as fp:
@@ -165,7 +165,7 @@ class Host:
             if self.__proc is not None:
                 raise HostException("Cannot reboot host mid-transfer.")
 
-            netdimm = NetDimm(self.ip, version=self.version, quiet=True)
+            netdimm = NetDimm(self.ip, version=self.version)
             try:
                 netdimm.reboot()
                 return True
@@ -278,7 +278,7 @@ class Host:
                 return None
 
             try:
-                netdimm = NetDimm(self.ip, version=self.version, quiet=True)
+                netdimm = NetDimm(self.ip, version=self.version)
                 return netdimm.info()
             except NetDimmException:
                 return None

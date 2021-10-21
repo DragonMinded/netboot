@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 # Triforce Netfirm Toolbox, put into the public domain.
 # Please attribute properly, but only if you want.
+import os
 import socket
 import struct
 import zlib
 from Crypto.Cipher import DES
 from contextlib import contextmanager
 from enum import Enum
-from typing import Callable, Generator, List, Optional, Union, cast
+from typing import Any, Callable, Generator, List, Optional, Union, cast
 
 from arcadeutils import FileBytes
-from netboot.log import log
 
 
 class NetDimmException(Exception):
@@ -92,10 +92,15 @@ class NetDimm:
             raise Exception("Logic error!")
         return (~crc) & 0xFFFFFFFF
 
-    def __init__(self, ip: str, version: Optional[NetDimmVersionEnum] = None, quiet: bool = False) -> None:
+    def __init__(
+        self,
+        ip: str,
+        version: Optional[NetDimmVersionEnum] = None,
+        log: Optional[Callable[..., Any]] = None,
+    ) -> None:
         self.ip: str = ip
         self.sock: Optional[socket.socket] = None
-        self.quiet: bool = quiet
+        self.log: Optional[Callable[..., Any]] = log
         self.version: NetDimmVersionEnum = version or NetDimmVersionEnum.VERSION_UNKNOWN
 
     def __repr__(self) -> str:
@@ -190,8 +195,11 @@ class NetDimm:
             self.__host_poke(addr, data, type)
 
     def __print(self, string: str, newline: bool = True) -> None:
-        if not self.quiet:
-            log(string, newline=newline)
+        if self.log is not None:
+            try:
+                self.log(string, newline=newline)
+            except TypeError:
+                self.log(string, end=os.linesep if newline else "")
 
     def __read(self, num: int) -> bytes:
         if self.sock is None:

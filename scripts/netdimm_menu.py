@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Tuple
 
 from arcadeutils import FileBytes
 from naomi import NaomiRom, NaomiRomRegionEnum, add_or_update_section
-from netboot import NetDimm, PeekPokeTypeEnum
+from netdimm import NetDimm, PeekPokeTypeEnum
 
 
 # The root of the repo.
@@ -388,7 +388,7 @@ def main() -> int:
 
         # Now, connect to the net dimm, send the menu and then start communicating with it.
         print("Connecting to net dimm...")
-        netdimm = NetDimm(args.ip, quiet=not verbose)
+        netdimm = NetDimm(args.ip, log=print if verbose else None)
         print("Sending menu to net dimm...")
         netdimm.send(menudata, disable_crc_check=True)
         netdimm.reboot()

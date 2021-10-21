@@ -5,7 +5,8 @@ import argparse
 import sys
 import time
 import enum
-from netboot import Cabinet, CabinetStateEnum, CabinetRegionEnum, TargetEnum, NetDimmVersionEnum
+from netboot import Cabinet, CabinetStateEnum, CabinetRegionEnum, TargetEnum
+from netdimm import NetDimmVersionEnum
 from typing import Any, Optional
 
 

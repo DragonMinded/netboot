@@ -5,7 +5,8 @@ import argparse
 import enum
 import sys
 from arcadeutils import FileBytes, BinaryDiff
-from netboot import NetDimm, TargetEnum, NetDimmVersionEnum
+from netboot import TargetEnum
+from netdimm import NetDimm, NetDimmVersionEnum
 from naomi import NaomiSettingsPatcher, get_default_trojan as get_default_naomi_trojan
 from typing import Any, Optional
 
