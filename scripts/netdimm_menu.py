@@ -3,14 +3,16 @@
 # Please attribute properly, but only if you want.
 import argparse
 import os
+import platform
 import struct
+import subprocess
 import sys
 import time
 from typing import Dict, List, Optional, Tuple
 
 from arcadeutils import FileBytes
 from naomi import NaomiRom, NaomiRomRegionEnum, add_or_update_section
-from netdimm import NetDimm, PeekPokeTypeEnum
+from netdimm import NetDimm, NetDimmException, PeekPokeTypeEnum
 
 
 # The root of the repo.
@@ -317,6 +319,11 @@ def main() -> int:
         help="Enable analog control inputs.",
     )
     parser.add_argument(
+        '--persistent',
+        action="store_true",
+        help="Don't exit after successfully booting game. Instead, wait for power cycle and then send the menu again.",
+    )
+    parser.add_argument(
         '--debug-mode',
         action="store_true",
         help="Enable extra debugging information on the Naomi.",
@@ -338,77 +345,154 @@ def main() -> int:
         "australia": NaomiRomRegionEnum.REGION_AUSTRALIA,
     }.get(args.region, NaomiRomRegionEnum.REGION_JAPAN)
 
-    # First, load the rom directory, list out the contents and figure out which ones are naomi games.
-    games: List[Tuple[str, str, bytes]] = []
-    romdir = os.path.abspath(args.romdir)
-    for filename in [f for f in os.listdir(romdir) if os.path.isfile(os.path.join(romdir, f))]:
-        # Grab the header so we can parse it.
-        with open(os.path.join(romdir, filename), "rb") as fp:
-            data = FileBytes(fp)
-
-            if verbose:
-                print(f"Discovered file {filename}.")
-
-            # Validate that it is a Naomi ROM.
-            if len(data) < NaomiRom.HEADER_LENGTH:
-                if verbose:
-                    print("Not long enough to be a ROM!")
-                continue
-            rom = NaomiRom(data)
-            if not rom.valid:
-                if verbose:
-                    print("Not a Naomi ROM!")
-                continue
-
-            # Get the name of the game.
-            name = rom.names[region]
-            serial = rom.serial
-
-            if verbose:
-                print(f"Added {name} with serial {serial.decode('ascii')} to ROM list.")
-
-            games.append((filename, name, serial))
-
-    # Alphabetize them.
-    games = sorted(games, key=lambda g: g[1])
-
-    # Now, create the settings section.
-    gamesconfig = b""
-    for index, (_, name, serial) in enumerate(games):
-        namebytes = name.encode('ascii')[:127]
-        while len(namebytes) < 128:
-            namebytes = namebytes + b"\0"
-        gamesconfig += namebytes + serial + struct.pack("<I", index)
-
-    config = struct.pack("<IIII", 16, len(games), 1 if args.enable_analog else 0, 1 if args.debug_mode else 0) + gamesconfig
-
-    # Now, load up the menu ROM and append the settings to it.
-    with open(args.exe, "rb") as fp:
-        menudata = add_or_update_section(FileBytes(fp), 0x0D000000, config, verbose=verbose)
-
-        # Now, connect to the net dimm, send the menu and then start communicating with it.
-        print("Connecting to net dimm...")
-        netdimm = NetDimm(args.ip, log=print if verbose else None)
-        print("Sending menu to net dimm...")
-        netdimm.send(menudata, disable_crc_check=True)
-        netdimm.reboot()
-
-    print("Talking to net dimm to wait for ROM selection...")
+    # Intentionally rebuild the menu every loop if we are in persistent mode, so that
+    # changes to the ROM directory can be reflected on subsequent menu sends.
     while True:
-        msg = receive_message(netdimm)
-        if msg:
-            if verbose:
-                print(f"Received type: {hex(msg.id)}, length: {len(msg.data)}")
-            if msg.id == MESSAGE_SELECTION:
-                index = struct.unpack("<I", msg.data)[0]
-                filename = os.path.join(romdir, games[index][0])
-                print(f"Requested {games[index][1]} be loaded...")
+        # First, load the rom directory, list out the contents and figure out which ones are naomi games.
+        games: List[Tuple[str, str, bytes]] = []
+        romdir = os.path.abspath(args.romdir)
+        success: bool = True
+        for filename in [f for f in os.listdir(romdir) if os.path.isfile(os.path.join(romdir, f))]:
+            # Grab the header so we can parse it.
+            with open(os.path.join(romdir, filename), "rb") as fp:
+                data = FileBytes(fp)
 
-                with open(filename, "rb") as fp:
-                    gamedata = FileBytes(fp)
-                    netdimm.send(gamedata, disable_crc_check=True)
+                if verbose:
+                    print(f"Discovered file {filename}.")
+
+                # Validate that it is a Naomi ROM.
+                if len(data) < NaomiRom.HEADER_LENGTH:
+                    if verbose:
+                        print("Not long enough to be a ROM!")
+                    continue
+                rom = NaomiRom(data)
+                if not rom.valid:
+                    if verbose:
+                        print("Not a Naomi ROM!")
+                    continue
+
+                # Get the name of the game.
+                name = rom.names[region]
+                serial = rom.serial
+
+                if verbose:
+                    print(f"Added {name} with serial {serial.decode('ascii')} to ROM list.")
+
+                games.append((filename, name, serial))
+
+        # Alphabetize them.
+        games = sorted(games, key=lambda g: g[1])
+
+        # Now, create the settings section.
+        gamesconfig = b""
+        for index, (_, name, serial) in enumerate(games):
+            namebytes = name.encode('ascii')[:127]
+            while len(namebytes) < 128:
+                namebytes = namebytes + b"\0"
+            gamesconfig += namebytes + serial + struct.pack("<I", index)
+
+        config = struct.pack("<IIII", 16, len(games), 1 if args.enable_analog else 0, 1 if args.debug_mode else 0) + gamesconfig
+
+        # Now, load up the menu ROM and append the settings to it.
+        if success:
+            with open(args.exe, "rb") as fp:
+                menudata = add_or_update_section(FileBytes(fp), 0x0D000000, config, verbose=verbose)
+
+                try:
+                    # Now, connect to the net dimm, send the menu and then start communicating with it.
+                    print("Connecting to net dimm...")
+                    netdimm = NetDimm(args.ip, log=print if verbose else None)
+                    print("Sending menu to net dimm...")
+                    netdimm.send(menudata, disable_crc_check=True)
                     netdimm.reboot()
-                break
+                except NetDimmException:
+                    # Mark failure so we don't try to communicate below.
+                    success = False
+
+                    if args.persistent:
+                        print("Sending failed, will try again...")
+                    else:
+                        print("Sending failed...")
+
+        # Now, talk to the net dimm and exchange packets to handle settings and game selection.
+        if success:
+            print("Talking to net dimm to wait for ROM selection...")
+
+            try:
+                # Always show game send progress.
+                netdimm = NetDimm(args.ip, log=print)
+                while True:
+                    msg = receive_message(netdimm)
+                    if msg:
+                        if verbose:
+                            print(f"Received type: {hex(msg.id)}, length: {len(msg.data)}")
+                        if msg.id == MESSAGE_SELECTION:
+                            index = struct.unpack("<I", msg.data)[0]
+                            filename = os.path.join(romdir, games[index][0])
+                            print(f"Requested {games[index][1]} be loaded...")
+
+                            with open(filename, "rb") as fp:
+                                gamedata = FileBytes(fp)
+                                netdimm.send(gamedata, disable_crc_check=True)
+                                netdimm.reboot()
+                            break
+            except NetDimmException:
+                # Mark failure so we don't try to wait for power down below.
+                success = False
+
+                if args.persistent:
+                    print("Communicating failed, will try again...")
+                else:
+                    print("Communicating failed...")
+
+        if args.persistent:
+            if success:
+                # Wait for cabinet to disappear again before we start the process over.
+                print("Waiting for cabinet to be power cycled to resend menu...")
+                failure_count: int = 0
+                on_windows: bool = platform.system() == "Windows"
+
+                while True:
+                    # Constantly ping the net dimm to see if it is still alive.
+                    with open(os.devnull, 'w') as DEVNULL:
+                        try:
+                            if on_windows:
+                                call = ["ping", "-n", "1", "-w", "1", args.ip]
+                            else:
+                                call = ["ping", "-c1", "-W1", args.ip]
+                            subprocess.check_call(call, stdout=DEVNULL, stderr=DEVNULL)
+                            alive = True
+                        except subprocess.CalledProcessError:
+                            alive = False
+
+                    # We start with the understanding that the host is up, but if we
+                    # miss a ping its not that big of a deal. We just want to know that
+                    # we missed multiple pings as that tells us the host is truly gone.
+                    if alive:
+                        failure_count = 0
+                    else:
+                        failure_count += 1
+                        if failure_count >= 5:
+                            # We failed 5 pings in a row, so let's assume the host is
+                            # dead.
+                            break
+
+                    time.sleep(2 if failure_count == 0 else 1)
+
+            # Now, wait for the cabinet to come back so we can send the menu again.
+            print("Waiting for cabinet to be ready to receive the menu...")
+            while True:
+                try:
+                    netdimm = NetDimm(args.ip, log=print if verbose else None)
+                    info = netdimm.info()
+                    if info is not None:
+                        break
+                except NetDimmException:
+                    # Failed to talk to the net dimm, its still down.
+                    pass
+        else:
+            # We sent the game, now exit!
+            break
 
     return 0
 
