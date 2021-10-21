@@ -87,7 +87,7 @@ class NetDimm:
         elif isinstance(data, FileBytes):
             # Do this in chunks so we don't accidentally load the whole file.
             for offset in range(0, len(data), 0x8000):
-                crc = zlib.crc32(data[offset:(offset + 0x8000)])
+                crc = zlib.crc32(data[offset:(offset + 0x8000)], crc)
         else:
             raise Exception("Logic error!")
         return (~crc) & 0xFFFFFFFF
@@ -516,6 +516,9 @@ class NetDimm:
 
         # Now, query the size of the game loaded in bytes.
         game_size = self.__get_game_size()
+        if game_size == 0 and crc == 0 and crc_status == CRCStatusEnum.STATUS_VALID:
+            # We stamped this with an invalid setup and the next transfer was interrupted.
+            crc_status = CRCStatusEnum.STATUS_INVALID
 
         return NetDimmInfo(
             current_game_crc=crc,
@@ -552,7 +555,13 @@ class NetDimm:
                 return chunk
             return des.encrypt(chunk[::-1])[::-1]
 
-        sequence = 1
+        # Make sure that if this is interrupted, but the CRC was marked as valid
+        # at one point, when we resync we don't accidentally think we're running a game.
+        # Wipe out the game section including the CRC over the section at 0xffff0028
+        # to ensure the net dimm doesn't think anything is valid.
+        self.__upload(1, 0xffff0000, b"\0" * 32, False)
+
+        sequence = 2
         while addr < total:
             self.__print("%08x %d%%\r" % (addr, int(float(addr * 100) / float(total))), newline=False)
             if progress_callback:
