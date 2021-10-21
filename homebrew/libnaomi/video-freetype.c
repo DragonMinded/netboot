@@ -141,13 +141,58 @@ void __draw_bitmap(int x, int y, unsigned int width, unsigned int height, unsign
 
     if (mode == FT_PIXEL_MODE_GRAY)
     {
-        for (int yp = 0; yp < height; yp++)
+        unsigned int low_x = 0;
+        unsigned int high_x = width;
+        unsigned int low_y = 0;
+        unsigned int high_y = height;
+
+        if (x < 0)
         {
-            unsigned int row = yp * width;
-            for(int xp = 0; xp < width; xp++)
+            if (x + width <= 0)
+            {
+                return;
+            }
+
+            low_x = -x;
+        }
+        if (y < 0)
+        {
+            if (y + height <= 0)
+            {
+                return;
+            }
+
+            low_y = -y;
+        }
+
+        unsigned int vw = video_width();
+        if ((x + width) >= vw)
+        {
+            if (x >= vw)
+            {
+                return;
+            }
+
+            high_x = vw - x;
+        }
+
+        unsigned int vh = video_height();
+        if (y + height >= vh)
+        {
+            if (y >= vh)
+            {
+                return;
+            }
+
+            high_y = vh - y;
+        }
+
+        for (int yp = low_y; yp < high_y; yp++)
+        {
+            for(int xp = low_x; xp < high_x; xp++)
             {
                 // Alpha-blend the grayscale image with the destination.
-                uint8_t alpha = buffer[row + xp];
+                uint8_t alpha = buffer[(yp * width) + xp];
 
                 if (alpha != 0)
                 {
@@ -269,12 +314,6 @@ int __video_draw_text( int x, int y, font_t *fontface, uint32_t color, const cha
                     {
                         tx += entry->advancex * 5;
                         tx += entry->advancey * 5;
-
-                        if (tx >= video_width())
-                        {
-                            tx = 0;
-                            ty += lineheight;
-                        }
                     }
                     else
                     {
@@ -287,12 +326,6 @@ int __video_draw_text( int x, int y, font_t *fontface, uint32_t color, const cha
                         FT_GlyphSlot slot = (*face)->glyph;
                         tx += (slot->advance.x >> 6) * 5;
                         ty += (slot->advance.y >> 6) * 5;
-
-                        if (tx >= video_width())
-                        {
-                            tx = 0;
-                            ty += lineheight;
-                        }
 
                         // Add it to the cache so we can render faster next time.
                         if (fontface->cacheloc < fontface->cachesize)
@@ -318,13 +351,6 @@ int __video_draw_text( int x, int y, font_t *fontface, uint32_t color, const cha
                     font_cache_entry_t *entry = __cache_lookup(fontface, *text);
                     if (entry)
                     {
-                        // Make sure we wrap if we hit the end.
-                        if ((tx + entry->advancex) >= video_width())
-                        {
-                            tx = 0;
-                            ty += lineheight;
-                        }
-
                         __draw_bitmap(tx + entry->bitmap_left, ty + lineheight - entry->bitmap_top, entry->width, entry->height, entry->mode, entry->buffer, color);
 
                         // Advance the pen based on this glyph.
@@ -345,13 +371,6 @@ int __video_draw_text( int x, int y, font_t *fontface, uint32_t color, const cha
 
                         // Copy it out onto our buffer.
                         FT_GlyphSlot slot = (*face)->glyph;
-
-                        // Make sure we wrap if we hit the end.
-                        if ((tx + (slot->advance.x >> 6)) >= video_width())
-                        {
-                            tx = 0;
-                            ty += lineheight;
-                        }
 
                         // Alpha-composite the grayscale bitmap, treating it as an
                         // alpha map.
