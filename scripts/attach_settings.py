@@ -3,6 +3,7 @@ import argparse
 import os
 import sys
 
+from arcadeutils import FileBytes
 from naomi import NaomiRomRegionEnum, NaomiSettingsPatcher, NaomiSettingsTypeEnum
 from naomi.settings import SettingsEditor, SettingsManager, ReadOnlyCondition, SettingsParseException, SettingsSaveException
 
@@ -149,119 +150,101 @@ def main() -> int:
 
     if args.action == "attach":
         # Grab the rom, parse it.
-        with open(args.rom, "rb") as fp:
-            data = fp.read()
+        with open(args.rom, "rb" if args.output_file else "rb+") as fp:
+            data = FileBytes(fp)  # type: ignore
 
-        # Grab the attachment. This should be the specific settingstrojan binary blob as compiled
-        # out of the homebrew/settingstrojan directory.
-        with open(args.exe, "rb") as fp:
-            exe = fp.read()
+            # Grab the attachment. This should be the specific settingstrojan binary blob as compiled
+            # out of the homebrew/settingstrojan directory.
+            with open(args.exe, "rb") as fp:
+                exe = fp.read()
 
-        # First, we need to modiffy the settings trojan with this ROM's load address and
-        # the EEPROM we want to add.
-        with open(args.eeprom, "rb") as fp:
-            eeprom = fp.read()
+            # First, we need to modiffy the settings trojan with this ROM's load address and
+            # the EEPROM we want to add.
+            with open(args.eeprom, "rb") as fp:
+                eeprom = fp.read()
 
-        # Check some bounds.
-        if len(eeprom) != NaomiSettingsPatcher.EEPROM_SIZE:
-            print("EEPROM is the wrong size! Perhaps you meant to use \"attach_sram\"?", file=sys.stderr)
-            return 1
+            # Check some bounds.
+            if len(eeprom) != NaomiSettingsPatcher.EEPROM_SIZE:
+                print("EEPROM is the wrong size! Perhaps you meant to use \"attach_sram\"?", file=sys.stderr)
+                return 1
 
-        # Now, patch it onto the data.
-        patcher = NaomiSettingsPatcher(data, exe)
-        if patcher.type != NaomiSettingsTypeEnum.TYPE_NONE and patcher.type != NaomiSettingsTypeEnum.TYPE_EEPROM:
-            print("Attached settings are not an EEPROM settings file! Perhaps you meant to use \"attach_sram\"?", file=sys.stderr)
-            return 1
-        patcher.put_settings(eeprom, enable_sentinel=args.enable_sentinel, enable_debugging=args.enable_debugging, verbose=True)
+            # Now, patch it onto the data.
+            patcher = NaomiSettingsPatcher(data, exe)
+            if patcher.type != NaomiSettingsTypeEnum.TYPE_NONE and patcher.type != NaomiSettingsTypeEnum.TYPE_EEPROM:
+                print("Attached settings are not an EEPROM settings file! Perhaps you meant to use \"attach_sram\"?", file=sys.stderr)
+                return 1
+            patcher.put_settings(eeprom, enable_sentinel=args.enable_sentinel, enable_debugging=args.enable_debugging, verbose=True)
 
-        if args.output_file:
-            print(f"Added EEPROM settings to {args.output_file}.")
-            with open(args.output_file, "wb") as fp:
-                fp.write(patcher.data)
-        else:
-            print(f"Added EEPROM settings to {args.rom}.")
-            with open(args.rom, "wb") as fp:
-                fp.write(patcher.data)
+            if args.output_file:
+                print(f"Added EEPROM settings to {args.output_file}.")
+                with open(args.output_file, "wb") as fp:
+                    patcher.data.write_changes(fp)
+            else:
+                print(f"Added EEPROM settings to {args.rom}.")
+                patcher.data.write_changes()
 
     elif args.action == "extract":
         # Grab the rom, parse it.
         with open(args.rom, "rb") as fp:
-            data = fp.read()
+            data = FileBytes(fp)
 
-        # Now, search for the settings.
-        patcher = NaomiSettingsPatcher(data, None)
-        settings = patcher.get_settings()
+            # Now, search for the settings.
+            patcher = NaomiSettingsPatcher(data, None)
+            settings = patcher.get_settings()
 
-        if settings is None:
-            print("ROM does not have any EEPROM settings attached!", file=sys.stderr)
-            return 1
+            if settings is None:
+                print("ROM does not have any EEPROM settings attached!", file=sys.stderr)
+                return 1
 
-        if len(settings) != NaomiSettingsPatcher.EEPROM_SIZE:
-            print("EEPROM is the wrong size! Perhaps you meant to use \"attach_sram\"?", file=sys.stderr)
-            return 1
+            if len(settings) != NaomiSettingsPatcher.EEPROM_SIZE:
+                print("EEPROM is the wrong size! Perhaps you meant to use \"attach_sram\"?", file=sys.stderr)
+                return 1
 
-        print(f"Wrote EEPROM settings to {args.eeprom}.")
-        with open(args.eeprom, "wb") as fp:
-            fp.write(settings)
+            print(f"Wrote EEPROM settings to {args.eeprom}.")
+            with open(args.eeprom, "wb") as fp:
+                fp.write(settings)
 
     elif args.action == "info":
         # Grab the rom, parse it.
         with open(args.rom, "rb") as fp:
-            data = fp.read()
+            data = FileBytes(fp)
 
-        # Now, search for the settings.
-        patcher = NaomiSettingsPatcher(data, None)
-        if patcher.type != NaomiSettingsTypeEnum.TYPE_NONE and patcher.type != NaomiSettingsTypeEnum.TYPE_EEPROM:
-            print("Attached settings are not an EEPROM settings file! Perhaps you meant to use \"attach_sram\"?", file=sys.stderr)
-            return 1
-        info = patcher.info
+            # Now, search for the settings.
+            patcher = NaomiSettingsPatcher(data, None)
+            if patcher.type != NaomiSettingsTypeEnum.TYPE_NONE and patcher.type != NaomiSettingsTypeEnum.TYPE_EEPROM:
+                print("Attached settings are not an EEPROM settings file! Perhaps you meant to use \"attach_sram\"?", file=sys.stderr)
+                return 1
+            info = patcher.info
 
-        if info is None:
-            print("ROM does not have any EEPROM settings attached!")
-        else:
-            print(f"ROM has EEPROM settings attached, with trojan version {info.date.year:04}-{info.date.month:02}-{info.date.day:02}!")
-            print(f"Settings change sentinel is {'enabled' if info.enable_sentinel else 'disabled'}.")
-            print(f"Debug printing is {'enabled' if info.enable_debugging else 'disabled'}.")
+            if info is None:
+                print("ROM does not have any EEPROM settings attached!")
+            else:
+                print(f"ROM has EEPROM settings attached, with trojan version {info.date.year:04}-{info.date.month:02}-{info.date.day:02}!")
+                print(f"Settings change sentinel is {'enabled' if info.enable_sentinel else 'disabled'}.")
+                print(f"Debug printing is {'enabled' if info.enable_debugging else 'disabled'}.")
 
-            # Grab the actual EEPRom so we can print the settings within.
-            manager = SettingsManager(args.settings_directory)
-            eepromdata = patcher.get_settings()
-            config = None
+                # Grab the actual EEPRom so we can print the settings within.
+                manager = SettingsManager(args.settings_directory)
+                eepromdata = patcher.get_settings()
+                config = None
 
-            try:
-                if eepromdata is not None:
-                    try:
-                        config = manager.from_eeprom(eepromdata)
-                    except FileNotFoundError:
-                        # We don't have the directory configured, so skip this.
-                        pass
+                try:
+                    if eepromdata is not None:
+                        try:
+                            config = manager.from_eeprom(eepromdata)
+                        except FileNotFoundError:
+                            # We don't have the directory configured, so skip this.
+                            pass
 
-                if config is not None:
-                    print("System Settings:")
+                    if config is not None:
+                        print("System Settings:")
 
-                    for setting in config.system.settings:
-                        # Don't show read-only settints.
-                        if setting.read_only is True:
-                            continue
-                        if isinstance(setting.read_only, ReadOnlyCondition):
-                            if setting.read_only.evaluate(config.system.settings):
-                                continue
-
-                        # This shouldn't happen, but make mypy happy.
-                        if setting.current is None:
-                            continue
-
-                        print(f"  {setting.name}: {setting.values[setting.current]}")
-
-                    print("Game Settings:")
-
-                    if config.game.settings:
-                        for setting in config.game.settings:
+                        for setting in config.system.settings:
                             # Don't show read-only settints.
                             if setting.read_only is True:
                                 continue
                             if isinstance(setting.read_only, ReadOnlyCondition):
-                                if setting.read_only.evaluate(config.game.settings):
+                                if setting.read_only.evaluate(config.system.settings):
                                     continue
 
                             # This shouldn't happen, but make mypy happy.
@@ -269,65 +252,81 @@ def main() -> int:
                                 continue
 
                             print(f"  {setting.name}: {setting.values[setting.current]}")
-                    else:
-                        print("  No game settings, game will use its own defaults.")
-            except (SettingsParseException, SettingsSaveException) as e:
-                print(f"Error in \"{e.filename}\":", str(e), file=sys.stderr)
-                return 1
+
+                        print("Game Settings:")
+
+                        if config.game.settings:
+                            for setting in config.game.settings:
+                                # Don't show read-only settints.
+                                if setting.read_only is True:
+                                    continue
+                                if isinstance(setting.read_only, ReadOnlyCondition):
+                                    if setting.read_only.evaluate(config.game.settings):
+                                        continue
+
+                                # This shouldn't happen, but make mypy happy.
+                                if setting.current is None:
+                                    continue
+
+                                print(f"  {setting.name}: {setting.values[setting.current]}")
+                        else:
+                            print("  No game settings, game will use its own defaults.")
+                except (SettingsParseException, SettingsSaveException) as e:
+                    print(f"Error in \"{e.filename}\":", str(e), file=sys.stderr)
+                    return 1
 
     elif args.action == "edit":
         # Grab the rom, parse it.
-        with open(args.rom, "rb") as fp:
-            data = fp.read()
+        with open(args.rom, "rb" if args.output_file else "rb+") as fp:
+            data = FileBytes(fp)  # type: ignore
 
-        # Grab the attachment. This should be the specific settingstrojan binary blob as compiled
-        # out of the homebrew/settingstrojan directory.
-        with open(args.exe, "rb") as fp:
-            exe = fp.read()
+            # Grab the attachment. This should be the specific settingstrojan binary blob as compiled
+            # out of the homebrew/settingstrojan directory.
+            with open(args.exe, "rb") as fp:
+                exe = fp.read()
 
-        # First, try to extract existing eeprom for editing.
-        patcher = NaomiSettingsPatcher(data, exe)
-        if patcher.type != NaomiSettingsTypeEnum.TYPE_NONE and patcher.type != NaomiSettingsTypeEnum.TYPE_EEPROM:
-            print("Attached settings are not an EEPROM settings file! Perhaps you meant to use \"attach_sram\"?", file=sys.stderr)
-            return 1
-        eepromdata = patcher.get_settings()
+            # First, try to extract existing eeprom for editing.
+            patcher = NaomiSettingsPatcher(data, exe)
+            if patcher.type != NaomiSettingsTypeEnum.TYPE_NONE and patcher.type != NaomiSettingsTypeEnum.TYPE_EEPROM:
+                print("Attached settings are not an EEPROM settings file! Perhaps you meant to use \"attach_sram\"?", file=sys.stderr)
+                return 1
+            eepromdata = patcher.get_settings()
 
-        manager = SettingsManager(args.settings_directory)
-        if eepromdata is None:
-            # We need to make them up from scratch.
-            region = {
-                "japan": NaomiRomRegionEnum.REGION_JAPAN,
-                "usa": NaomiRomRegionEnum.REGION_USA,
-                "export": NaomiRomRegionEnum.REGION_EXPORT,
-                "korea": NaomiRomRegionEnum.REGION_KOREA,
-                "australia": NaomiRomRegionEnum.REGION_AUSTRALIA,
-            }.get(args.region, NaomiRomRegionEnum.REGION_JAPAN)
-            parsedsettings = manager.from_rom(patcher.rom, region=region)
-        else:
-            # We have an eeprom to edit.
-            parsedsettings = manager.from_eeprom(eepromdata)
-
-        # Now, edit those created or extracted settings.
-        editor = SettingsEditor(parsedsettings)
-        if editor.run():
-            # If the editor signals to us that the user wanted to save the settings
-            # then we should patch them into the binary.
-            eepromdata = manager.to_eeprom(parsedsettings)
-            patcher.put_settings(
-                eepromdata,
-                enable_sentinel=args.enable_sentinel,
-                enable_debugging=args.enable_debugging,
-                verbose=True,
-            )
-
-            if args.output_file:
-                print(f"Added EEPROM settings to {args.output_file}.")
-                with open(args.output_file, "wb") as fp:
-                    fp.write(patcher.data)
+            manager = SettingsManager(args.settings_directory)
+            if eepromdata is None:
+                # We need to make them up from scratch.
+                region = {
+                    "japan": NaomiRomRegionEnum.REGION_JAPAN,
+                    "usa": NaomiRomRegionEnum.REGION_USA,
+                    "export": NaomiRomRegionEnum.REGION_EXPORT,
+                    "korea": NaomiRomRegionEnum.REGION_KOREA,
+                    "australia": NaomiRomRegionEnum.REGION_AUSTRALIA,
+                }.get(args.region, NaomiRomRegionEnum.REGION_JAPAN)
+                parsedsettings = manager.from_rom(patcher.rom, region=region)
             else:
-                print(f"Added EEPROM settings to {args.rom}.")
-                with open(args.rom, "wb") as fp:
-                    fp.write(patcher.data)
+                # We have an eeprom to edit.
+                parsedsettings = manager.from_eeprom(eepromdata)
+
+            # Now, edit those created or extracted settings.
+            editor = SettingsEditor(parsedsettings)
+            if editor.run():
+                # If the editor signals to us that the user wanted to save the settings
+                # then we should patch them into the binary.
+                eepromdata = manager.to_eeprom(parsedsettings)
+                patcher.put_settings(
+                    eepromdata,
+                    enable_sentinel=args.enable_sentinel,
+                    enable_debugging=args.enable_debugging,
+                    verbose=True,
+                )
+
+                if args.output_file:
+                    print(f"Added EEPROM settings to {args.output_file}.")
+                    with open(args.output_file, "wb") as fp:
+                        patcher.data.write_changes(fp)
+                else:
+                    print(f"Added EEPROM settings to {args.rom}.")
+                    patcher.data.write_changes()
 
     else:
         print(f"Invalid action {args.action}!", file=sys.stderr)

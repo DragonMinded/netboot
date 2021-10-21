@@ -2,6 +2,7 @@
 import argparse
 import sys
 
+from arcadeutils import FileBytes
 from naomi import NaomiSettingsPatcher, NaomiSettingsTypeEnum
 
 
@@ -63,52 +64,51 @@ def main() -> int:
 
     if args.action == "attach":
         # Grab the rom, parse it
-        with open(args.bin, "rb") as fp:
-            data = fp.read()
+        with open(args.bin, "rb" if args.output_file else "rb+") as fp:
+            data = FileBytes(fp)  # type: ignore
 
-        with open(args.sram, "rb") as fp:
-            sram = fp.read()
+            with open(args.sram, "rb") as fp:
+                sram = fp.read()
 
-        if len(sram) != NaomiSettingsPatcher.SRAM_SIZE:
-            print(f"SRAM file is not the right size, should be {NaomiSettingsPatcher.SRAM_SIZE} bytes!", file=sys.stderr)
-            return 1
+            if len(sram) != NaomiSettingsPatcher.SRAM_SIZE:
+                print(f"SRAM file is not the right size, should be {NaomiSettingsPatcher.SRAM_SIZE} bytes!", file=sys.stderr)
+                return 1
 
-        patcher = NaomiSettingsPatcher(data, None)
-        if patcher.type != NaomiSettingsTypeEnum.TYPE_NONE and patcher.type != NaomiSettingsTypeEnum.TYPE_SRAM:
-            print("Attached settings are not an SRAM settings file! Perhaps you meant to use \"attach_settings\"?", file=sys.stderr)
-            return 1
+            patcher = NaomiSettingsPatcher(data, None)
+            if patcher.type != NaomiSettingsTypeEnum.TYPE_NONE and patcher.type != NaomiSettingsTypeEnum.TYPE_SRAM:
+                print("Attached settings are not an SRAM settings file! Perhaps you meant to use \"attach_settings\"?", file=sys.stderr)
+                return 1
 
-        patcher.put_settings(sram, verbose=True)
+            patcher.put_settings(sram, verbose=True)
 
-        if args.output_file:
-            print(f"Added SRAM init to the end of {args.output_file}.", file=sys.stderr)
-            with open(args.output_file, "wb") as fp:
-                fp.write(patcher.data)
-        else:
-            print(f"Added SRAM init to the end of {args.bin}.", file=sys.stderr)
-            with open(args.bin, "wb") as fp:
-                fp.write(patcher.data)
+            if args.output_file:
+                print(f"Added SRAM init to the end of {args.output_file}.", file=sys.stderr)
+                with open(args.output_file, "wb") as fp:
+                    patcher.data.write_changes(fp)
+            else:
+                print(f"Added SRAM init to the end of {args.bin}.", file=sys.stderr)
+                patcher.data.write_changes()
 
     elif args.action == "extract":
         # Grab the rom, parse it.
         with open(args.bin, "rb") as fp:
-            data = fp.read()
+            data = FileBytes(fp)
 
-        # Now, search for the settings.
-        patcher = NaomiSettingsPatcher(data, None)
-        settings = patcher.get_settings()
+            # Now, search for the settings.
+            patcher = NaomiSettingsPatcher(data, None)
+            settings = patcher.get_settings()
 
-        if settings is None:
-            print("ROM does not have any SRAM settings attached!", file=sys.stderr)
-            return 1
+            if settings is None:
+                print("ROM does not have any SRAM settings attached!", file=sys.stderr)
+                return 1
 
-        if len(settings) != NaomiSettingsPatcher.SRAM_SIZE:
-            print("SRAM is the wrong size! Perhaps you meant to use \"attach_settings\"?", file=sys.stderr)
-            return 1
+            if len(settings) != NaomiSettingsPatcher.SRAM_SIZE:
+                print("SRAM is the wrong size! Perhaps you meant to use \"attach_settings\"?", file=sys.stderr)
+                return 1
 
-        print(f"Wrote SRAM settings to {args.sram}.")
-        with open(args.sram, "wb") as fp:
-            fp.write(settings)
+            print(f"Wrote SRAM settings to {args.sram}.")
+            with open(args.sram, "wb") as fp:
+                fp.write(settings)
 
     return 0
 
