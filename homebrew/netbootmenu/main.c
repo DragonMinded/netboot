@@ -1011,7 +1011,7 @@ unsigned int main_menu(state_t *state, int reinit)
     static unsigned int top = 0;
 
     // Whether we're currently waiting to be rebooted for a game to send to us.
-    static unsigned int booting = 0;
+    static unsigned int controls_locked = 0;
 
     if (reinit)
     {
@@ -1023,7 +1023,7 @@ unsigned int main_menu(state_t *state, int reinit)
         {
             top = cursor - (maxgames - 1);
         }
-        booting = 0;
+        controls_locked = 0;
     }
 
     // If we need to switch screens.
@@ -1037,12 +1037,12 @@ unsigned int main_menu(state_t *state, int reinit)
         // Request to go into system test mode.
         enter_test_mode();
     }
-    if (!booting)
+    if (!controls_locked)
     {
         if (controls.start)
         {
             // Made a selection!
-            booting = 1;
+            controls_locked = 1;
             message_send(MESSAGE_SELECTION, &cursor, 4);
         }
         else
