@@ -7,7 +7,7 @@ from typing import Callable, Dict, List, Any, Optional, cast
 
 from flask import Flask, Response, request, render_template, make_response, jsonify as flask_jsonify
 from werkzeug.routing import PathConverter
-from arcadeutils.binary import BinaryDiff, BinaryDiffException
+from arcadeutils import FileBytes, BinaryDiff, BinaryDiffException
 from naomi import NaomiRom, NaomiSettingsPatcher, NaomiRomRegionEnum
 from naomi.settings import SettingsWrapper, SettingsManager
 from netboot import Cabinet, CabinetRegionEnum, CabinetManager, DirectoryManager, PatchManager, TargetEnum, NetDimmVersionEnum
@@ -242,22 +242,28 @@ def applicablepatches(filename: str) -> Dict[str, Any]:
 @app.route('/settings/<filename:filename>')
 @jsonify
 def applicablesettings(filename: str) -> Dict[str, Any]:
+    manager = SettingsManager(app.config['settings_directory'])
     settings: List[Dict[str, Any]] = []
+
+    # TODO: This should be a general manager, not Naomi-specific
     try:
         with open(filename, "rb") as fp:
-            data = fp.read(0x1000)
+            data = FileBytes(fp)
+            rom = NaomiRom(data)
+            if rom.valid:
+                settings = [
+                    {'name': app.config['settings_directory'], 'files': sorted([f for f, _ in manager.files_for_rom(rom).items()])}
+                ]
     except FileNotFoundError:
         if not filename.startswith('/'):
             filename = "/" + filename
         with open(filename, "rb") as fp:
-            data = fp.read(0x1000)
-    rom = NaomiRom(data)
-    if rom.valid:
-        # TODO: This should be a general manager, not Naomi-specific
-        manager = SettingsManager(app.config['settings_directory'])
-        settings = [
-            {'name': app.config['settings_directory'], 'files': sorted([f for f, _ in manager.files_for_rom(rom).items()])}
-        ]
+            data = FileBytes(fp)
+            rom = NaomiRom(data)
+            if rom.valid:
+                settings = [
+                    {'name': app.config['settings_directory'], 'files': sorted([f for f, _ in manager.files_for_rom(rom).items()])}
+                ]
 
     return {
         'settings': sorted(settings, key=lambda setting: cast(str, setting['name'])),
@@ -443,31 +449,31 @@ def romsforcabinet(ip: str) -> Dict[str, Any]:
                     settings = manager.from_eeprom(settingsdata)
                 else:
                     with open(full_filename, "rb") as fp:
-                        data = fp.read(0x1000)
+                        data = FileBytes(fp)
 
-                    # First, attempt to patch with any patches that fit in the first
-                    # chunk, so the defaults we get below match any force settings
-                    # patches we did to the header.
-                    for patch in cabinet.patches.get(full_filename, []):
-                        with open(patch, "r") as pp:
-                            differences = pp.readlines()
-                        differences = [d.strip() for d in differences if d.strip()]
-                        try:
-                            data = BinaryDiff.patch(data, differences, ignore_size_differences=True)
-                        except BinaryDiffException:
-                            # Patch was for something not in the header.
-                            pass
+                        # First, attempt to patch with any patches that fit in the first
+                        # chunk, so the defaults we get below match any force settings
+                        # patches we did to the header.
+                        for patch in cabinet.patches.get(full_filename, []):
+                            with open(patch, "r") as pp:
+                                differences = pp.readlines()
+                            differences = [d.strip() for d in differences if d.strip()]
+                            try:
+                                data = BinaryDiff.patch(data, differences, ignore_size_differences=True)
+                            except BinaryDiffException:
+                                # Patch was for something not in the header.
+                                pass
 
-                    rom = NaomiRom(data)
-                    if rom.valid:
-                        naomi_region = {
-                            CabinetRegionEnum.REGION_JAPAN: NaomiRomRegionEnum.REGION_JAPAN,
-                            CabinetRegionEnum.REGION_USA: NaomiRomRegionEnum.REGION_USA,
-                            CabinetRegionEnum.REGION_EXPORT: NaomiRomRegionEnum.REGION_EXPORT,
-                            CabinetRegionEnum.REGION_KOREA: NaomiRomRegionEnum.REGION_KOREA,
-                            CabinetRegionEnum.REGION_AUSTRALIA: NaomiRomRegionEnum.REGION_AUSTRALIA,
-                        }.get(cabinet.region, NaomiRomRegionEnum.REGION_JAPAN)
-                        settings = manager.from_rom(rom, naomi_region)
+                        rom = NaomiRom(data)
+                        if rom.valid:
+                            naomi_region = {
+                                CabinetRegionEnum.REGION_JAPAN: NaomiRomRegionEnum.REGION_JAPAN,
+                                CabinetRegionEnum.REGION_USA: NaomiRomRegionEnum.REGION_USA,
+                                CabinetRegionEnum.REGION_EXPORT: NaomiRomRegionEnum.REGION_EXPORT,
+                                CabinetRegionEnum.REGION_KOREA: NaomiRomRegionEnum.REGION_KOREA,
+                                CabinetRegionEnum.REGION_AUSTRALIA: NaomiRomRegionEnum.REGION_AUSTRALIA,
+                            }.get(cabinet.region, NaomiRomRegionEnum.REGION_JAPAN)
+                            settings = manager.from_rom(rom, naomi_region)
 
                 if settings is not None:
                     # TODO: If we ever support editing SRAM from the frontend, this

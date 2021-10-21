@@ -3,7 +3,7 @@ import os.path
 import threading
 
 from typing import Dict, List, Optional, Sequence
-from arcadeutils.binary import BinaryDiff
+from arcadeutils import FileBytes, BinaryDiff
 
 
 class PatchException(Exception):
@@ -50,9 +50,7 @@ class PatchManager:
 
             with open(filename, "rb") as fp:
                 # First, grab the file size, see if there are any patches at all for this file.
-                length: int = os.fstat(fp.fileno()).st_size
-                loaded: int = 0
-                data: bytes = b""
+                data = FileBytes(fp)
 
                 # Grab currently known patches
                 patches: List[str] = []
@@ -68,16 +66,7 @@ class PatchManager:
                     except Exception:
                         continue
                     size = BinaryDiff.size(patchlines)
-                    if size is None or size == length:
-                        # Only read the file itself if there's one or more patches that we
-                        # need to actually compare against. Also, only read the number of
-                        # bytes needed to calculate if the patch matches.
-                        needed_amount = BinaryDiff.needed_amount(patchlines)
-                        if loaded < needed_amount:
-                            rest = needed_amount - loaded
-                            data = data + fp.read(rest)
-                            loaded += rest
-
+                    if size is None or size == len(data):
                         if BinaryDiff.can_patch(data, patchlines, ignore_size_differences=True)[0]:
                             valid_patches.append(patch)
 

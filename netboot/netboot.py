@@ -7,8 +7,9 @@ import zlib
 from Crypto.Cipher import DES
 from contextlib import contextmanager
 from enum import Enum
-from typing import Callable, Generator, List, Optional, cast
+from typing import Callable, Generator, List, Optional, Union, cast
 
+from arcadeutils import FileBytes
 from netboot.log import log
 
 
@@ -79,9 +80,16 @@ class NetDimmPacket:
 
 class NetDimm:
     @staticmethod
-    def crc(data: bytes) -> int:
+    def crc(data: Union[bytes, FileBytes]) -> int:
         crc: int = 0
-        crc = zlib.crc32(data, crc)
+        if isinstance(data, bytes):
+            crc = zlib.crc32(data, crc)
+        elif isinstance(data, FileBytes):
+            # Do this in chunks so we don't accidentally load the whole file.
+            for offset in range(0, len(data), 0x8000):
+                crc = zlib.crc32(data[offset:(offset + 0x8000)])
+        else:
+            raise Exception("Logic error!")
         return (~crc) & 0xFFFFFFFF
 
     def __init__(self, ip: str, version: Optional[NetDimmVersionEnum] = None, quiet: bool = False) -> None:
@@ -102,7 +110,7 @@ class NetDimm:
             self.version = info.firmware_version
             return info
 
-    def send(self, data: bytes, key: Optional[bytes] = None, disable_crc_check: bool = False, progress_callback: Optional[Callable[[int, int], None]] = None) -> None:
+    def send(self, data: Union[bytes, FileBytes], key: Optional[bytes] = None, disable_crc_check: bool = False, progress_callback: Optional[Callable[[int, int], None]] = None) -> None:
         with self.connection():
             # First, signal back to calling code that we've started
             if progress_callback:
@@ -530,7 +538,7 @@ class NetDimm:
         # the crc over the first 28 bytes.
         self.__send_packet(NetDimmPacket(0x19, 0x00, struct.pack("<III", crc & 0xFFFFFFFF, length, 0)))
 
-    def __upload_file(self, data: bytes, key: Optional[bytes], progress_callback: Optional[Callable[[int, int], None]]) -> None:
+    def __upload_file(self, data: Union[bytes, FileBytes], key: Optional[bytes], progress_callback: Optional[Callable[[int, int], None]]) -> None:
         # upload a file into DIMM memory, and optionally encrypt for the given key.
         # note that the re-encryption is obsoleted by just setting a zero-key, which
         # is a magic to disable the decryption.

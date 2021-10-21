@@ -8,16 +8,12 @@ import sys
 import threading
 import time
 from enum import Enum
-from typing import Optional, Sequence, Tuple, TYPE_CHECKING
+from typing import Any, Optional, Sequence, Tuple, Union, overload
 
-from arcadeutils.binary import BinaryDiff
+from arcadeutils import FileBytes, BinaryDiff
 from netboot.log import log
 from netboot.netboot import NetDimm, NetDimmInfo, NetDimmException, NetDimmVersionEnum
 from naomi import NaomiSettingsPatcher, get_default_trojan as get_default_naomi_trojan
-
-
-if TYPE_CHECKING:
-    from typing import Any  # noqa
 
 
 class TargetEnum(Enum):
@@ -26,7 +22,17 @@ class TargetEnum(Enum):
     TARGET_TRIFORCE = "triforce"
 
 
+@overload
 def _handle_patches(data: bytes, target: TargetEnum, patches: Sequence[str], settings: Optional[bytes]) -> bytes:
+    ...
+
+
+@overload
+def _handle_patches(data: FileBytes, target: TargetEnum, patches: Sequence[str], settings: Optional[bytes]) -> FileBytes:
+    ...
+
+
+def _handle_patches(data: Union[bytes, FileBytes], target: TargetEnum, patches: Sequence[str], settings: Optional[bytes]) -> Union[bytes, FileBytes]:
     # Patch it
     for patch in patches:
         with open(patch, "r") as pp:
@@ -65,13 +71,15 @@ def _send_file_to_host(
 
         # Grab the image itself
         with open(filename, "rb") as fp:
-            data = fp.read()
+            # Get a memory-based file representation so we don't load
+            # too much data into RAM at once.
+            data = FileBytes(fp)
 
-        # Patch it
-        data = _handle_patches(data, target, patches, settings)
+            # Patch it
+            data = _handle_patches(data, target, patches, settings)
 
-        # Send it
-        netdimm.send(data, progress_callback=capture_progress)
+            # Send it
+            netdimm.send(data, progress_callback=capture_progress)
 
         progress_queue.put(("success", None))
     except Exception as e:
@@ -255,13 +263,13 @@ class Host:
     def crc(self, filename: str, patches: Sequence[str], settings: Optional[bytes]) -> int:
         # Grab the image itself
         with open(filename, "rb") as fp:
-            data = fp.read()
+            data = FileBytes(fp)
 
-        # Patch it
-        data = _handle_patches(data, self.target, patches, settings)
+            # Patch it
+            data = _handle_patches(data, self.target, patches, settings)
 
-        # Now, apply the CRC algorithm over it.
-        return NetDimm.crc(data)
+            # Now, apply the CRC algorithm over it.
+            return NetDimm.crc(data)
 
     def info(self) -> Optional[NetDimmInfo]:
         with self.__lock:
