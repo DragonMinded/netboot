@@ -4,7 +4,7 @@
 import argparse
 import enum
 import sys
-from arcadeutils.binary import BinaryDiff
+from arcadeutils import FileBytes, BinaryDiff
 from netboot import NetDimm, TargetEnum, NetDimmVersionEnum
 from naomi import NaomiSettingsPatcher, get_default_trojan as get_default_naomi_trojan
 from typing import Any, Optional
@@ -117,32 +117,32 @@ def main() -> int:
 
     # Grab the binary, patch it with requested patches.
     with open(args.image, "rb") as fp:
-        data = fp.read()
-    for patch in args.patch_file or []:
-        with open(patch, "r") as pp:
-            differences = pp.readlines()
-        differences = [d.strip() for d in differences if d.strip()]
-        try:
-            data = BinaryDiff.patch(data, differences)
-        except Exception as e:
-            print(f"Could not patch {args.image}: {str(e)}", file=sys.stderr)
-            return 1
+        data = FileBytes(fp)
+        for patch in args.patch_file or []:
+            with open(patch, "r") as pp:
+                differences = pp.readlines()
+            differences = [d.strip() for d in differences if d.strip()]
+            try:
+                data = BinaryDiff.patch(data, differences)
+            except Exception as e:
+                print(f"Could not patch {args.image}: {str(e)}", file=sys.stderr)
+                return 1
 
-    # Grab any settings file that should be included.
-    if args.target == TargetEnum.TARGET_NAOMI:
-        if args.settings_file:
-            with open(args.settings_file, "rb") as fp:
-                settings = fp.read()
+        # Grab any settings file that should be included.
+        if args.target == TargetEnum.TARGET_NAOMI:
+            if args.settings_file:
+                with open(args.settings_file, "rb") as fp:
+                    settings = fp.read()
 
-            patcher = NaomiSettingsPatcher(data, get_default_naomi_trojan())
-            patcher.put_settings(settings)
-            data = patcher.data
+                patcher = NaomiSettingsPatcher(data, get_default_naomi_trojan())
+                patcher.put_settings(settings)
+                data = patcher.data
 
-    # Send the binary, reboot into the game.
-    netdimm.send(data, key, disable_crc_check=args.disable_crc)
-    print("rebooting into game...", file=sys.stderr)
-    netdimm.reboot()
-    print("ok!", file=sys.stderr)
+        # Send the binary, reboot into the game.
+        netdimm.send(data, key, disable_crc_check=args.disable_crc)
+        print("rebooting into game...", file=sys.stderr)
+        netdimm.reboot()
+        print("ok!", file=sys.stderr)
 
     return 0
 

@@ -8,6 +8,7 @@ import sys
 import time
 from typing import Dict, List, Optional, Tuple
 
+from arcadeutils import FileBytes
 from naomi import NaomiRom, NaomiRomRegionEnum, add_or_update_section
 from netboot import NetDimm, PeekPokeTypeEnum
 
@@ -343,30 +344,30 @@ def main() -> int:
     for filename in [f for f in os.listdir(romdir) if os.path.isfile(os.path.join(romdir, f))]:
         # Grab the header so we can parse it.
         with open(os.path.join(romdir, filename), "rb") as fp:
-            data = fp.read(NaomiRom.HEADER_LENGTH)
+            data = FileBytes(fp)
 
-        if verbose:
-            print(f"Discovered file {filename}.")
-
-        # Validate that it is a Naomi ROM.
-        if len(data) < NaomiRom.HEADER_LENGTH:
             if verbose:
-                print("Not long enough to be a ROM!")
-            continue
-        rom = NaomiRom(data)
-        if not rom.valid:
+                print(f"Discovered file {filename}.")
+
+            # Validate that it is a Naomi ROM.
+            if len(data) < NaomiRom.HEADER_LENGTH:
+                if verbose:
+                    print("Not long enough to be a ROM!")
+                continue
+            rom = NaomiRom(data)
+            if not rom.valid:
+                if verbose:
+                    print("Not a Naomi ROM!")
+                continue
+
+            # Get the name of the game.
+            name = rom.names[region]
+            serial = rom.serial
+
             if verbose:
-                print("Not a Naomi ROM!")
-            continue
+                print(f"Added {name} with serial {serial.decode('ascii')} to ROM list.")
 
-        # Get the name of the game.
-        name = rom.names[region]
-        serial = rom.serial
-
-        if verbose:
-            print(f"Added {name} with serial {serial.decode('ascii')} to ROM list.")
-
-        games.append((filename, name, serial))
+            games.append((filename, name, serial))
 
     # Alphabetize them.
     games = sorted(games, key=lambda g: g[1])
@@ -383,14 +384,14 @@ def main() -> int:
 
     # Now, load up the menu ROM and append the settings to it.
     with open(args.exe, "rb") as fp:
-        menudata = add_or_update_section(fp.read(), 0x0D000000, config, verbose=verbose)
+        menudata = add_or_update_section(FileBytes(fp), 0x0D000000, config, verbose=verbose)
 
-    # Now, connect to the net dimm, send the menu and then start communicating with it.
-    print("Connecting to net dimm...")
-    netdimm = NetDimm(args.ip, quiet=not verbose)
-    print("Sending menu to net dimm...")
-    netdimm.send(menudata, disable_crc_check=True)
-    netdimm.reboot()
+        # Now, connect to the net dimm, send the menu and then start communicating with it.
+        print("Connecting to net dimm...")
+        netdimm = NetDimm(args.ip, quiet=not verbose)
+        print("Sending menu to net dimm...")
+        netdimm.send(menudata, disable_crc_check=True)
+        netdimm.reboot()
 
     print("Talking to net dimm to wait for ROM selection...")
     while True:
@@ -404,9 +405,9 @@ def main() -> int:
                 print(f"Requested {games[index][1]} be loaded...")
 
                 with open(filename, "rb") as fp:
-                    gamedata = fp.read()
-                netdimm.send(gamedata, disable_crc_check=True)
-                netdimm.reboot()
+                    gamedata = FileBytes(fp)
+                    netdimm.send(gamedata, disable_crc_check=True)
+                    netdimm.reboot()
                 break
 
     return 0
