@@ -205,16 +205,19 @@ class NetDimm:
         if self.sock is None:
             raise NetDimmException("Not connected to NetDimm")
 
-        # a function to receive a number of bytes with hard blocking
-        res: List[bytes] = []
-        left: int = num
+        try:
+            # a function to receive a number of bytes with hard blocking
+            res: List[bytes] = []
+            left: int = num
 
-        while left > 0:
-            ret = self.sock.recv(left)
-            left -= len(ret)
-            res.append(ret)
+            while left > 0:
+                ret = self.sock.recv(left)
+                left -= len(ret)
+                res.append(ret)
 
-        return b"".join(res)
+            return b"".join(res)
+        except Exception as e:
+            raise NetDimmException("Could not receive data from NetDimm") from e
 
     @contextmanager
     def connection(self) -> Generator[None, None, None]:
@@ -263,16 +266,19 @@ class NetDimm:
     def __send_packet(self, packet: NetDimmPacket) -> None:
         if self.sock is None:
             raise NetDimmException("Not connected to NetDimm")
-        self.sock.send(
-            struct.pack(
-                "<I",
-                (
-                    ((packet.pktid & 0xFF) << 24) |  # noqa: W504
-                    ((packet.flags & 0xFF) << 16) |  # noqa: W504
-                    (packet.length & 0xFFFF)
-                ),
-            ) + packet.data
-        )
+        try:
+            self.sock.send(
+                struct.pack(
+                    "<I",
+                    (
+                        ((packet.pktid & 0xFF) << 24) |  # noqa: W504
+                        ((packet.flags & 0xFF) << 16) |  # noqa: W504
+                        (packet.length & 0xFFFF)
+                    ),
+                ) + packet.data
+            )
+        except Exception as e:
+            raise NetDimmException("Could not send data to NetDimm") from e
 
     def __recv_packet(self) -> NetDimmPacket:
         # First read the header to get the packet length.

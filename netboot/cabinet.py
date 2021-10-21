@@ -7,7 +7,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from naomi import NaomiSettingsPatcher
-from netdimm import NetDimmInfo, NetDimmVersionEnum, CRCStatusEnum
+from netdimm import NetDimmInfo, NetDimmException, NetDimmVersionEnum, CRCStatusEnum
 from netboot.hostutils import Host, HostStatusEnum, TargetEnum
 from netboot.log import log
 
@@ -120,7 +120,7 @@ class Cabinet:
                     else:
                         try:
                             info = self.__host.info()
-                        except Exception:
+                        except NetDimmException:
                             info = None
                         if info is not None and info.current_game_crc != 0:
                             # Its worth trying to CRC this game and seeing if it matches.
@@ -178,7 +178,7 @@ class Cabinet:
                 else:
                     try:
                         info = self.__host.info()
-                    except Exception:
+                    except NetDimmException:
                         info = None
                     if info is not None and info.current_game_crc != 0:
                         if info.game_crc_status == CRCStatusEnum.STATUS_VALID:

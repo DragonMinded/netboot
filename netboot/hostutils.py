@@ -1,6 +1,7 @@
 import multiprocessing
 import multiprocessing.synchronize
 import os
+import platform
 import psutil  # type: ignore
 import queue
 import subprocess
@@ -125,13 +126,18 @@ class Host:
     def __poll_thread(self) -> None:
         success_count: int = 0
         failure_count: int = 0
+        on_windows: bool = platform.system() == "Windows"
 
         while True:
             # Dont bother if we're actively sending
             if self.status != HostStatusEnum.STATUS_TRANSFERRING:
                 with open(os.devnull, 'w') as DEVNULL:
                     try:
-                        subprocess.check_call(["ping", "-c1", "-W1", self.ip], stdout=DEVNULL, stderr=DEVNULL)
+                        if on_windows:
+                            call = ["ping", "-n", "1", "-w", "1", self.ip]
+                        else:
+                            call = ["ping", "-c1", "-W1", self.ip]
+                        subprocess.check_call(call, stdout=DEVNULL, stderr=DEVNULL)
                         alive = True
                     except subprocess.CalledProcessError:
                         alive = False
