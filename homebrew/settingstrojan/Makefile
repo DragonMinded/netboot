@@ -6,11 +6,11 @@ all: settingstrojan.bin
 # Include the assembly file for the trojan itself.
 SRCS += trojan.c
 
-# Pick up base makefile rules so we don't have to rewrite the makefile from scratch.
-include ../Makefile.base
-
 # Overwrite starting address with a sane new default where we stick our binary trojan.
 START_ADDR = 0xDFC0000
+
+# Pick up base makefile rules so we don't have to rewrite the makefile from scratch.
+include ../Makefile.base
 
 # Make sure the start address is saved in the executable so we can grab it in the injection script.
 CC += -DSTART_ADDR=${START_ADDR}

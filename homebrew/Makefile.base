@@ -1,3 +1,6 @@
+# Set a default optimization level if the makefile didn't request one.
+OPTIMIZATION_LEVEL ?= -O2
+
 # Set up common library path definitions.
 NAOMI_SH_INCLUDEPATHS  = -I$(dir $(abspath $(lastword $(MAKEFILE_LIST))))libnaomi/ -I${NAOMI_SH_BASE}/include -I${NAOMI_SH_BASE}/sh-elf/include
 # For some reason, freetype expects to be special and different.
@@ -20,7 +23,7 @@ NAOMI_SH_CCFLAGS += -ffunction-sections -fdata-sections
 # Add libnaomi to include path.
 NAOMI_SH_CCFLAGS += ${NAOMI_SH_INCLUDEPATHS}
 # Make sure we compile optimized
-NAOMI_SH_CCFLAGS += -O2
+NAOMI_SH_CCFLAGS += ${OPTIMIZATION_LEVEL}
 # Make sure we warn about a bunch of stuff.
 NAOMI_SH_CCFLAGS += -Wall
 
@@ -44,7 +47,7 @@ NAOMI_SH_CPPFLAGS += -ffunction-sections -fdata-sections
 # Add libnaomi to include path.
 NAOMI_SH_CPPFLAGS += ${NAOMI_SH_INCLUDEPATHS}
 # Make sure we compile optimized
-NAOMI_SH_CPPFLAGS += -O2
+NAOMI_SH_CPPFLAGS += ${OPTIMIZATION_LEVEL}
 # Make sure we warn about a bunch of stuff.
 NAOMI_SH_CCFLAGS += -Wall
 
@@ -108,12 +111,6 @@ ARMLD += -L$(dir $(abspath $(lastword $(MAKEFILE_LIST))))libnaomi/
 # Add system library paths so we can link against libgcc.
 ARMLD += -L${NAOMI_ARM_BASE}/arm-eabi/lib/ -L${NAOMI_ARM_BASE}/lib/gcc/arm-eabi/${NAOMI_ARM_GCC_VER}/
 
-# We don't have many libraries for ARM.
-ARMLIBS ?=
-
-# A list of base libraries that should always link against ARM.
-ARMBASELIBS = -lgcc
-
 # Set up default options for objcopy, used for extracting the raw binary from the linked elf file.
 ARMOBJCOPY = ${NAOMI_ARM_OBJCOPY}
 
@@ -132,17 +129,27 @@ DATE = python3 $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/date.py
 # Set up various toolchain utilities.
 IMG2C = python3 $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/sprite.py
 
+# A list of base libraries that should always link against ARM.
+ARMLIBS = -lgcc
+
+# A list of base libraries that always get included.
+BASELIBS = -lc -lm -lgcc -lstdc++
+
 # A List of source files that should be included.
 SRCS ?=
 
 # A list of libraries that should be linked against.
 LIBS ?=
 
-# A list of base libraries that always get included.
-BASELIBS = -lc -lm -lgcc -lstdc++
-
 # The desired start address of the executable. Its totally okay to leave this alone.
-START_ADDR = 0xc021000
+# If you need to move it, however, it is overrideable.
+START_ADDR ?= 0xc021000
+
+# The serial number for your game. Should be unique for every released game as well
+# as every released homebrew. Override this in your Makefile to change it to something
+# else. Note that it must start with "B" and have 3 ascii digits following, usually
+# two capital letters followed by a number.
+SERIAL ?= B999
 
 # The entrypoint for the main executable. The default crt0 and linkscript put this at
 # the start addr. If you provide a custom linker/crt0 you can overwrite this.
@@ -152,13 +159,9 @@ MAIN_ADDR = $(shell ${ADDR} ${START_ADDR} 0)
 # the start addr + 4. If you provide a custom linker/crt0 you can overwrite this.
 TEST_ADDR = $(shell ${ADDR} ${START_ADDR} 4)
 
-# The serial number for your game. Should be unique for every released game as well
-# as every released homebrew. Override this in your Makefile to change it to something
-# else. Note that it must start with "B" and have 3 ascii digits following, usually
-# two capital letters followed by a number.
-SERIAL ?= B999
-
-OBJS = $(patsubst %.cpp, build/%.o, $(patsubst %.s, build/%.o, $(patsubst %.c, build/%.o, $(SRCS))))
+# Auto-compute objects based on sources we recognize. The rest of the sources will
+# be assumed to be objects that we want to include.
+OBJS = $(patsubst %.ttf, build/%.o, $(patsubst %.cpp, build/%.o, $(patsubst %.s, build/%.o, $(patsubst %.c, build/%.o, $(SRCS)))))
 
 # A rule for how we go from the final built elf file to a raw binary for extracting.
 build/%.bin: build/%.elf
@@ -188,6 +191,12 @@ build/%.o: %.c
 build/%.o: %.cpp
 	@mkdir -p $(dir $@)
 	${CPP} -c $< -o $@ -DSERIAL=\"${SERIAL}\" -DBUILD_DATE=$(shell ${DATE})
+
+# A rule for how to build font files. Depends on the build dir being created.
+build/%.o: %.ttf
+	@mkdir -p $(dir $@)
+	${BIN2C} build/$<.c $<
+	${CC} -c build/$<.c -o $@
 
 # Mark intermediate build files as precious in case we need to examine them later.
 .PRECIOUS: ${OBJS}

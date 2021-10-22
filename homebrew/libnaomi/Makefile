@@ -32,7 +32,7 @@ build/arm/aica.o: aica.c
 
 build/arm/aica.elf: build/arm/base.o build/arm/aica.o build/arm/success.o
 	@mkdir -p $(dir $@)
-	${ARMLD} -o $@ $^ ${ARMLIBS} ${ARMBASELIBS}
+	${ARMLD} -o $@ $^ ${ARMLIBS}
 
 build/aica.bin: build/arm/aica.elf
 	@mkdir -p $(dir $@)

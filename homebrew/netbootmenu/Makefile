@@ -8,7 +8,7 @@ all: netbootmenu.bin
 # one of these files is not found, make will complain about a
 # missing missing `build/naomi.bin' target, so make sure all of
 # these files exist.
-SRCS += main.c build/font.o build/up.o build/dn.o build/cursor.o
+SRCS += main.c helvetica.ttf build/up.o build/dn.o build/cursor.o
 
 # Libraries we need to link against.
 LIBS += -lfreetype -lbz2 -lz -lpng16
@@ -19,25 +19,11 @@ SERIAL = BRP0
 # Pick up base makefile rules common to all examples.
 include ../Makefile.base
 
-build/font.o: helvetica.ttf
+# Specific buildrule for PNG files for this project.
+build/%.o: %.png
 	@mkdir -p $(dir $@)
-	${BIN2C} build/font.c $<
-	${CC} -c build/font.c -o $@
-
-build/up.o: up.png
-	@mkdir -p $(dir $@)
-	${IMG2C} build/up.c --depth 2 $<
-	${CC} -c build/up.c -o $@
-
-build/dn.o: dn.png
-	@mkdir -p $(dir $@)
-	${IMG2C} build/dn.c --depth 2 $<
-	${CC} -c build/dn.c -o $@
-
-build/cursor.o: cursor.png
-	@mkdir -p $(dir $@)
-	${IMG2C} build/cursor.c --depth 2 $<
-	${CC} -c build/cursor.c -o $@
+	${IMG2C} build/$<.c --depth 2 $<
+	${CC} -c build/$<.c -o $@
 
 # Provide the top-level ROM creation target for this binary.
 # See scripts.makerom for details about what is customizable.

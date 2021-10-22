@@ -13,10 +13,11 @@ SRCS += main.c build/sonic.o
 # Pick up base makefile rules common to all examples.
 include ../../Makefile.base
 
-build/sonic.o: sonic.png
+# Specific buildrule for PNG files for this project.
+build/%.o: %.png
 	@mkdir -p $(dir $@)
-	${IMG2C} build/sonic.c --depth 2 $<
-	${CC} -c build/sonic.c -o $@
+	${IMG2C} build/$<.c --depth 2 $<
+	${CC} -c build/$<.c -o $@
 
 # Provide the top-level ROM creation target for this binary.
 # See scripts.makerom for details about what is customizable.
