@@ -205,7 +205,7 @@ void __draw_bitmap(int x, int y, unsigned int width, unsigned int height, unsign
                  * buffer. */
                 for(int xp = low_x; xp < high_x; xp++)
                 {
-                    for (int yp = (high_y - 1); yp >= (low_y); yp--)
+                    for (int yp = (high_y - 1); yp >= low_y; yp--)
                     {
                         // Alpha-blend the grayscale image with the destination.
                         // We only support 32 alpha levels here for speed.

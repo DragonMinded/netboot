@@ -276,25 +276,79 @@ void video_set_background_color(uint32_t color)
 
 void video_fill_box(int x0, int y0, int x1, int y1, uint32_t color)
 {
+    int low_x;
+    int high_x;
+    int low_y;
+    int high_y;
+
     if (x1 < x0)
     {
-        int x2 = x1;
-        x1 = x0;
-        x0 = x2;
+        low_x = x1;
+        high_x = x0;
+    }
+    else
+    {
+        low_x = x0;
+        high_x = x1;
     }
     if (y1 < y0)
     {
-        int y2 = y1;
-        y1 = y0;
-        y0 = y2;
+        low_y = y1;
+        high_y = y0;
+    }
+    else
+    {
+        low_y = y0;
+        high_y = y1;
     }
 
-    for(int y = y0; y <= y1; y++)
+    if (high_x < 0 || low_x >= cached_actual_width || high_y < 0 || low_y >= cached_actual_height)
     {
-        for(int x = x0; x <= x1; x++)
+        return;
+    }
+    if (low_x < 0)
+    {
+        low_x = 0;
+    }
+    if (low_y < 0)
+    {
+        low_y = 0;
+    }
+    if (high_x >= cached_actual_width)
+    {
+        high_x = cached_actual_width - 1;
+    }
+    if (high_y >= cached_actual_height)
+    {
+        high_y = cached_actual_height - 1;
+    }
+
+    if(global_video_depth == 2)
+    {
+        if(global_video_vertical)
         {
-            video_draw_pixel(x, y, color);
+            for(int col = low_x; col <= high_x; col++)
+            {
+                for(int row = high_y; row >= low_y; row--)
+                {
+                    SET_PIXEL_V_2(buffer_base, col, row, color);
+                }
+            }
         }
+        else
+        {
+            for(int row = low_y; row <= high_y; row++)
+            {
+                for(int col = low_x; col <= high_x; col++)
+                {
+                    SET_PIXEL_H_2(buffer_base, col, row, color);
+                }
+            }
+        }
+    }
+    else
+    {
+        // TODO
     }
 }
 
@@ -561,17 +615,77 @@ void video_draw_debug_character( int x, int y, uint32_t color, char ch )
 
 void video_draw_sprite( int x, int y, int width, int height, void *data )
 {
+    int low_x = 0;
+    int high_x = width;
+    int low_y = 0;
+    int high_y = height;
+
+    if (x < 0)
+    {
+        if (x + width <= 0)
+        {
+            return;
+        }
+
+        low_x = -x;
+    }
+    if (y < 0)
+    {
+        if (y + height <= 0)
+        {
+            return;
+        }
+
+        low_y = -y;
+    }
+    if ((x + width) >= cached_actual_width)
+    {
+        if (x >= cached_actual_width)
+        {
+            return;
+        }
+
+        high_x = cached_actual_width - x;
+    }
+    if (y + height >= cached_actual_height)
+    {
+        if (y >= cached_actual_height)
+        {
+            return;
+        }
+
+        high_y = cached_actual_height - y;
+    }
+
     if(global_video_depth == 2)
     {
         uint16_t *pixels = (uint16_t *)data;
 
-        for(int row = 0; row < height; row++)
+        if(global_video_vertical)
         {
-            for(int col = 0; col < width; col++)
+            for(int col = low_x; col < high_x; col++)
             {
-                uint16_t pixel = pixels[col + (row * width)];
-                if (pixel & 0x8000) {
-                    video_draw_pixel( x + col, y + row, pixel );
+                for(int row = (high_y - 1); row >= low_y; row--)
+                {
+                    uint16_t pixel = pixels[col + (row * width)];
+                    if (pixel & 0x8000)
+                    {
+                        SET_PIXEL_V_2(buffer_base, x + col, y + row, pixel);
+                    }
+                }
+            }
+        }
+        else
+        {
+            for(int row = low_y; row < high_y; row++)
+            {
+                for(int col = low_x; col < high_x; col++)
+                {
+                    uint16_t pixel = pixels[col + (row * width)];
+                    if (pixel & 0x8000)
+                    {
+                        SET_PIXEL_H_2(buffer_base, x + col, y + row, pixel);
+                    }
                 }
             }
         }
