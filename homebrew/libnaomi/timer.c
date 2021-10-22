@@ -151,12 +151,12 @@ uint32_t profile_end(int profile)
     return elapsed;
 }
 
-void timer_wait(uint32_t milliseconds)
+void timer_wait(uint32_t microseconds)
 {
     for (int i = 0; i < MAX_TIMERS; i++)
     {
         if (!timers_used[i]) {
-            timer_start(i, 1000000);
+            timer_start(i, microseconds);
             while ((TIMER_TCR(i) & 0x100) == 0) { ; }
             timer_stop(i);
         }

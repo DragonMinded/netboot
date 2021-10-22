@@ -97,7 +97,11 @@ void main()
     video_wait_for_vblank();
     video_display();
 
-    while ( 1 ) { ; }
+    while ( 1 )
+    {
+        // Don't display anything, but make this example rebootable.
+        video_wait_for_vblank();
+    }
 }
 
 void test()

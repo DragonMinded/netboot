@@ -1,5 +1,5 @@
 # Set a default optimization level if the makefile didn't request one.
-OPTIMIZATION_LEVEL ?= -O2
+OPTIMIZATION_LEVEL ?= -O3
 
 # Set up common library path definitions.
 NAOMI_SH_INCLUDEPATHS  = -I$(dir $(abspath $(lastword $(MAKEFILE_LIST))))libnaomi/ -I${NAOMI_SH_BASE}/include -I${NAOMI_SH_BASE}/sh-elf/include
@@ -93,7 +93,7 @@ ARMCC += -ffreestanding -fomit-frame-pointer -nostdlib -nostartfiles -fno-stack-
 # Add libnaomi to include path.
 ARMCC += -I$(dir $(abspath $(lastword $(MAKEFILE_LIST))))libnaomi/
 # # Make sure we compile optimized
-ARMCC += -O4
+ARMCC += -O3
 
 # Set up assembler default options for AICA .s files.
 ARMAS  = ${NAOMI_ARM_AS}
