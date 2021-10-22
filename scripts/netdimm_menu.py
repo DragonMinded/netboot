@@ -286,9 +286,14 @@ class Settings:
         self,
         last_game_file: Optional[str],
         enable_analog: bool,
+        system_region: NaomiRomRegionEnum,
+        use_filenames: bool,
+
     ):
         self.last_game_file = last_game_file
         self.enable_analog = enable_analog
+        self.system_region = system_region
+        self.use_filenames = use_filenames
 
 
 def settings_load(settings_file: str, ip: str) -> Settings:
@@ -301,6 +306,8 @@ def settings_load(settings_file: str, ip: str) -> Settings:
     settings = Settings(
         last_game_file=None,
         enable_analog=False,
+        system_region=NaomiRomRegionEnum.REGION_JAPAN,
+        use_filenames=False
     )
 
     if isinstance(data, dict):
@@ -312,6 +319,13 @@ def settings_load(settings_file: str, ip: str) -> Settings:
                     settings.enable_analog = bool(data['enable_analog'])
                 if 'last_game_file' in data:
                     settings.last_game_file = str(data['last_game_file']) if data['last_game_file'] is not None else None
+                if 'use_filenames' in data:
+                    settings.use_filenames = bool(data['use_filenames'])
+                if 'system_region' in data:
+                    try:
+                        settings.system_region = NaomiRomRegionEnum(data['system_region'])
+                    except ValueError:
+                        pass
 
     return settings
 
@@ -326,6 +340,8 @@ def settings_save(settings_file: str, ip: str, settings: Settings) -> None:
     data[ip] = {
         'enable_analog': settings.enable_analog,
         'last_game_file': settings.last_game_file,
+        'use_filenames': settings.use_filenames,
+        'system_region': settings.system_region.value,
     }
 
     with open(settings_file, "w") as fp:
@@ -335,6 +351,9 @@ def settings_save(settings_file: str, ip: str, settings: Settings) -> None:
 MESSAGE_SELECTION: int = 0x1000
 MESSAGE_LOAD_SETTINGS: int = 0x1001
 MESSAGE_LOAD_SETTINGS_ACK: int = 0x1002
+MESSAGE_SAVE_CONFIG: int = 0x1003
+MESSAGE_SAVE_CONFIG_ACK: int = 0x1004
+SETTINGS_SIZE: int = 64
 
 
 def main() -> int:
@@ -356,6 +375,7 @@ def main() -> int:
         '--region',
         metavar="REGION",
         type=str,
+        default=None,
         help='The region of the Naomi which we are running the menu on. Defaults to "japan".',
     )
     parser.add_argument(
@@ -378,6 +398,11 @@ def main() -> int:
         help="Force-enable analog control inputs. Use this if you have no digital controls and cannot set up analog options in the test menu.",
     )
     parser.add_argument(
+        '--force-use-filenames',
+        action="store_true",
+        help="Force-enable using filenames for ROM display instead of the name in the ROM.",
+    )
+    parser.add_argument(
         '--persistent',
         action="store_true",
         help="Don't exit after successfully booting game. Instead, wait for power cycle and then send the menu again.",
@@ -396,20 +421,26 @@ def main() -> int:
     args = parser.parse_args()
     verbose = args.verbose
 
-    region = {
-        "japan": NaomiRomRegionEnum.REGION_JAPAN,
-        "usa": NaomiRomRegionEnum.REGION_USA,
-        "export": NaomiRomRegionEnum.REGION_EXPORT,
-        "korea": NaomiRomRegionEnum.REGION_KOREA,
-        "australia": NaomiRomRegionEnum.REGION_AUSTRALIA,
-    }.get(args.region, NaomiRomRegionEnum.REGION_JAPAN)
-
     # Load the settings file
     settings = settings_load(args.menu_settings_file, args.ip)
+
+    if args.region is not None:
+        region = {
+            "japan": NaomiRomRegionEnum.REGION_JAPAN,
+            "usa": NaomiRomRegionEnum.REGION_USA,
+            "export": NaomiRomRegionEnum.REGION_EXPORT,
+            "korea": NaomiRomRegionEnum.REGION_KOREA,
+        }.get(args.region, NaomiRomRegionEnum.REGION_JAPAN)
+        settings.system_region = region
+        settings_save(args.menu_settings_file, args.ip, settings)
 
     if args.force_analog:
         # Force the setting on, as a safeguard against cabinets that have no digital controls.
         settings.enable_analog = True
+        settings_save(args.menu_settings_file, args.ip, settings)
+
+    if args.force_use_filenames:
+        settings.use_filenames = True
         settings_save(args.menu_settings_file, args.ip, settings)
 
     # Intentionally rebuild the menu every loop if we are in persistent mode, so that
@@ -439,7 +470,10 @@ def main() -> int:
                     continue
 
                 # Get the name of the game.
-                name = rom.names[region]
+                if settings.use_filenames:
+                    name = os.path.splitext(filename)[0].replace("_", " ")
+                else:
+                    name = rom.names[settings.system_region]
                 serial = rom.serial
 
                 if verbose:
@@ -461,7 +495,19 @@ def main() -> int:
             if filename == settings.last_game_file:
                 last_game_id = index
 
-        config = struct.pack("<IIIII", 20, len(games), 1 if settings.enable_analog else 0, 1 if args.debug_mode else 0, last_game_id) + gamesconfig
+        config = struct.pack(
+            "<IIIIIII",
+            SETTINGS_SIZE,
+            len(games),
+            1 if settings.enable_analog else 0,
+            1 if args.debug_mode else 0,
+            last_game_id,
+            settings.system_region.value,
+            1 if settings.use_filenames else 0,
+        )
+        if len(config) < SETTINGS_SIZE:
+            config = config + (b"\0" * (SETTINGS_SIZE - len(config)))
+        config = config + gamesconfig
 
         # Now, load up the menu ROM and append the settings to it.
         if success:
@@ -520,6 +566,18 @@ def main() -> int:
                             filename = games[index][0]
                             print(f"Requested settings for {games[index][1]}...")
                             send_message(netdimm, Message(MESSAGE_LOAD_SETTINGS_ACK, msg.data))
+
+                        elif msg.id == MESSAGE_SAVE_CONFIG:
+                            if len(msg.data) == SETTINGS_SIZE:
+                                _, _, analogsetting, _, _, regionsetting, filenamesetting = struct.unpack("<IIIIIII", msg.data[:28])
+                                print(f"Requested configuration save...")
+
+                                settings.enable_analog = analogsetting != 0
+                                settings.use_filenames = filenamesetting != 0
+                                settings.system_region = NaomiRomRegionEnum(regionsetting)
+                                settings_save(args.menu_settings_file, args.ip, settings)
+
+                                send_message(netdimm, Message(MESSAGE_SAVE_CONFIG_ACK))
 
             except NetDimmException:
                 # Mark failure so we don't try to wait for power down below.

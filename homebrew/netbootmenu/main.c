@@ -722,6 +722,8 @@ int message_recv(uint16_t *type, void ** data, unsigned int *length)
 #define ENABLE_ANALOG_LOC 8
 #define ENABLE_DEBUG_LOC 12
 #define DEFAULT_SELECTION_LOC 16
+#define SYSTEM_REGION_LOC 20
+#define USE_FILENAMES_LOC 24
 
 typedef struct __attribute__((__packed__))
 {
@@ -730,32 +732,29 @@ typedef struct __attribute__((__packed__))
     unsigned int id;
 } games_list_t;
 
+typedef struct __attribute__((__packed__))
+{
+    uint32_t game_list_offset;
+    uint32_t games_count;
+    uint32_t enable_analog;
+    uint32_t enable_debug;
+    uint32_t boot_selection;
+    uint32_t system_region;
+    uint32_t use_filenames;
+} config_t;
+
+config_t *get_config()
+{
+    return (config_t *)CONFIG_MEMORY_LOCATION;
+}
+
 games_list_t *get_games_list(unsigned int *count)
 {
-    uint32_t config = CONFIG_MEMORY_LOCATION;
-
     // Index into config memory to grab the count of games, as well as the offset pointer
     // to where the games blob is.
-    *count = *((uint32_t *)(config + GAMES_COUNT_LOC));
-    return (games_list_t *)(*((uint32_t *)(config + GAMES_POINTER_LOC)) + CONFIG_MEMORY_LOCATION);
-}
-
-unsigned int analog_enabled()
-{
-    uint32_t config = CONFIG_MEMORY_LOCATION;
-    return *((uint32_t *)(config + ENABLE_ANALOG_LOC));
-}
-
-unsigned int debug_enabled()
-{
-    uint32_t config = CONFIG_MEMORY_LOCATION;
-    return *((uint32_t *)(config + ENABLE_DEBUG_LOC));
-}
-
-unsigned int get_default_selection()
-{
-    uint32_t config = CONFIG_MEMORY_LOCATION;
-    return *((uint32_t *)(config + DEFAULT_SELECTION_LOC));
+    config_t *config = get_config();
+    *count = config->games_count;
+    return (games_list_t *)(CONFIG_MEMORY_LOCATION + config->game_list_offset);
 }
 
 unsigned int repeat(unsigned int cur_state, int *repeat_count, double fps)
@@ -809,6 +808,8 @@ void repeat_init(unsigned int pushed_state, int *repeat_count)
 #define MESSAGE_SELECTION 0x1000
 #define MESSAGE_LOAD_SETTINGS 0x1001
 #define MESSAGE_LOAD_SETTINGS_ACK 0x1002
+#define MESSAGE_SAVE_CONFIG 0x1003
+#define MESSAGE_SAVE_CONFIG_ACK 0x1004
 
 #define ANALOG_CENTER 0x80
 #define ANALOG_THRESH_ON 0x30
@@ -836,12 +837,15 @@ unsigned int selected_game;
 #define SCREEN_GAME_SETTINGS_LOAD 2
 #define SCREEN_GAME_SETTINGS 3
 #define SCREEN_CONFIGURATION 4
+#define SCREEN_CONFIGURATION_SAVE 5
 
 #define MAX_WAIT_FOR_COMMS 3.0
+#define MAX_WAIT_FOR_SAVE 5.0
 
 typedef struct
 {
     eeprom_t *settings;
+    config_t *config;
     double fps;
     double animation_counter;
     double test_error_counter;
@@ -854,7 +858,10 @@ typedef struct
     // The following controls only ever need a pressed event.
     uint8_t up_pressed;
     uint8_t down_pressed;
+    uint8_t left_pressed;
+    uint8_t right_pressed;
     uint8_t test_pressed;
+    uint8_t service_pressed;
 
     // The following controls need pressed and released events to detect holds.
     uint8_t start_pressed;
@@ -867,7 +874,11 @@ controls_t get_controls(state_t *state, int reinit)
     static unsigned int oldadown[2] = { 0 };
     static unsigned int aup[2] = { 0 };
     static unsigned int adown[2] = { 0 };
-    static int repeats[4] = { -1, -1, -1, -1 };
+    static unsigned int oldaleft[2] = { 0 };
+    static unsigned int oldaright[2] = { 0 };
+    static unsigned int aleft[2] = { 0 };
+    static unsigned int aright[2] = { 0 };
+    static int repeats[8] = { -1, -1, -1, -1, -1, -1, -1, -1 };
 
     if (reinit)
     {
@@ -875,6 +886,10 @@ controls_t get_controls(state_t *state, int reinit)
         memset(aup, 0, sizeof(unsigned int) * 2);
         memset(oldadown, 0, sizeof(unsigned int) * 2);
         memset(adown, 0, sizeof(unsigned int) * 2);
+        memset(oldaleft, 0, sizeof(unsigned int) * 2);
+        memset(aleft, 0, sizeof(unsigned int) * 2);
+        memset(oldaright, 0, sizeof(unsigned int) * 2);
+        memset(aright, 0, sizeof(unsigned int) * 2);
         
         for (unsigned int i = 0; i < sizeof(repeats) / sizeof(repeats[0]); i++)
         {
@@ -889,7 +904,7 @@ controls_t get_controls(state_t *state, int reinit)
     jvs_buttons_t released = maple_buttons_released();
 
     // Also calculate analog thresholds so we can emulate joystick with analog.
-    if (analog_enabled())
+    if (state->config->enable_analog)
     {
         if (held.player1.analog1 < (ANALOG_CENTER - ANALOG_THRESH_ON))
         {
@@ -969,13 +984,20 @@ controls_t get_controls(state_t *state, int reinit)
     controls_t controls;
     controls.up_pressed = 0;
     controls.down_pressed = 0;
+    controls.left_pressed = 0;
+    controls.right_pressed = 0;
     controls.start_pressed = 0;
     controls.start_released = 0;
     controls.test_pressed = 0;
+    controls.service_pressed = 0;
 
     if (pressed.test || pressed.psw1)
     {
         controls.test_pressed = 1;
+    }
+    else if (pressed.player1.service || pressed.psw2 || (state->settings->system.players >= 2 && pressed.player2.service))
+    {
+        controls.service_pressed = 1;
     }
     else
     {
@@ -1010,6 +1032,28 @@ controls_t get_controls(state_t *state, int reinit)
             else if (repeat(held.player1.down, &repeats[2], state->fps) || (state->settings->system.players >= 2 && repeat(held.player2.down, &repeats[3], state->fps)))
             {
                 controls.down_pressed = 1;
+            }
+            if (pressed.player1.left || (state->settings->system.players >= 2 && pressed.player2.left))
+            {
+                controls.left_pressed = 1;
+
+                repeat_init(pressed.player1.left, &repeats[4]);
+                repeat_init(pressed.player2.left, &repeats[5]);
+            }
+            else if (pressed.player1.right || (state->settings->system.players >= 2 && pressed.player2.right))
+            {
+                controls.right_pressed = 1;
+
+                repeat_init(pressed.player1.right, &repeats[6]);
+                repeat_init(pressed.player2.right, &repeats[7]);
+            }
+            if (repeat(held.player1.left, &repeats[4], state->fps) || (state->settings->system.players >= 2 && repeat(held.player2.left, &repeats[5], state->fps)))
+            {
+                controls.left_pressed = 1;
+            }
+            else if (repeat(held.player1.right, &repeats[6], state->fps) || (state->settings->system.players >= 2 && repeat(held.player2.right, &repeats[7], state->fps)))
+            {
+                controls.right_pressed = 1;
             }
         }
     }
@@ -1402,9 +1446,28 @@ unsigned int comm_error(state_t *state, int reinit)
 
 unsigned int configuration(state_t *state, int reinit)
 {
+    static uint32_t options[5];
+    static uint32_t maximums[5];
+    static unsigned int cursor = 0;
+    static unsigned int top = 0;
+    static unsigned int maxoptions = 0;
+
     if (reinit)
     {
-        // TODO
+        options[0] = state->config->enable_analog;
+        options[1] = state->config->system_region;
+        options[2] = state->config->use_filenames;
+        options[3] = 0;
+        options[4] = 0;
+        maximums[0] = 1;
+        maximums[1] = 3;
+        maximums[2] = 1;
+        maximums[3] = 0;
+        maximums[4] = 0;
+
+        cursor = 0;
+        top = 0;
+        maxoptions = (video_height() - (24 + 16 + 21 + 21)) / 21;
     }
 
     // If we need to switch screens.
@@ -1415,11 +1478,209 @@ unsigned int configuration(state_t *state, int reinit)
 
     if (controls.test_pressed)
     {
-        // Request to exit this screen.
-        new_screen = SCREEN_MAIN_MENU;
+        // Test cycles as a safeguard.
+        if (cursor == ((sizeof(options) / sizeof(options[0])) - 1))
+        {
+            // Exit without save.
+            new_screen = SCREEN_MAIN_MENU;
+        }
+        else if (cursor == ((sizeof(options) / sizeof(options[0])) - 2))
+        {
+            // Exit with save.
+            new_screen = SCREEN_MAIN_MENU;
+
+            state->config->enable_analog = options[0];
+            state->config->system_region = options[1];
+            state->config->use_filenames = options[2];
+
+            // Send back to PC.
+            message_send(MESSAGE_SAVE_CONFIG, state->config, 64);
+            new_screen = SCREEN_CONFIGURATION_SAVE;
+        }
+        else if (options[cursor] < maximums[cursor])
+        {
+            options[cursor]++;
+        }
+        else
+        {
+            options[cursor] = 0;
+        }
+    }
+    else if (controls.start_pressed)
+    {
+        // Test cycles as a safeguard.
+        if (cursor == ((sizeof(options) / sizeof(options[0])) - 1))
+        {
+            // Exit without save.
+            new_screen = SCREEN_MAIN_MENU;
+        }
+        else if (cursor == ((sizeof(options) / sizeof(options[0])) - 2))
+        {
+            // Exit with save.
+            new_screen = SCREEN_MAIN_MENU;
+
+            state->config->enable_analog = options[0];
+            state->config->system_region = options[1];
+            state->config->use_filenames = options[2];
+
+            // Send back to PC.
+            message_send(MESSAGE_SAVE_CONFIG, state->config, 64);
+            new_screen = SCREEN_CONFIGURATION_SAVE;
+        }
+    }
+    else if(controls.up_pressed)
+    {
+        if (cursor > 0)
+        {
+            cursor--;
+        }
+    }
+    else if(controls.down_pressed)
+    {
+        if (cursor < ((sizeof(options) / sizeof(options[0])) - 1))
+        {
+            cursor++;
+        }
+    }
+    else if(controls.left_pressed)
+    {
+        if (options[cursor] > 0)
+        {
+            options[cursor]--;
+        }
+    }
+    else if(controls.right_pressed)
+    {
+        if (options[cursor] < maximums[cursor])
+        {
+            options[cursor]++;
+        }
+    }
+    else if(controls.service_pressed)
+    {
+        // Service cycles as a safeguard.
+        if (cursor < ((sizeof(options) / sizeof(options[0])) - 1))
+        {
+            cursor++;
+        }
+        else
+        {
+            cursor = 0;
+        }
     }
 
-    video_draw_text(video_width() / 2 - 50, 100, state->font_18pt, rgb(255, 0, 0), "Menu Settings");
+    // Actually draw the menu
+    {
+        video_draw_text(video_width() / 2 - 70, 22, state->font_18pt, rgb(0, 255, 255), "Menu Configuration");
+
+        for (unsigned int option = top; option < top + maxoptions; option++)
+        {
+            if (option >= (sizeof(options) / sizeof(options[0])))
+            {
+                // Ran out of options to display.
+                break;
+            }
+
+            // Draw cursor itself.
+            if (option == cursor)
+            {
+                video_draw_sprite(24, 24 + 21 + ((option - top) * 21), cursor_png_width, cursor_png_height, cursor_png_data);
+            }
+
+            // Draw option, highlighted if it is selected.
+            char buffer[64];
+            switch(option)
+            {
+                case 0:
+                {
+                    // Enable analog
+                    sprintf(buffer, "Analog controls: %s", options[option] ? "enabled" : "disabled");
+                    break;
+                }
+                case 1:
+                {
+                    // System region
+                    char *regions[4] = {"japan", "usa", "export", "korea"};
+                    sprintf(buffer, "Naomi region: %s*", regions[options[option]]);
+                    break;
+                }
+                case 2:
+                {
+                    // Filename display
+                    sprintf(buffer, "Game name display: %s*", options[option] ? "from filename" : "from ROM");
+                    break;
+                }
+                case 3:
+                {
+                    // Save and exit display
+                    strcpy(buffer, "Save and exit");
+                    break;
+                }
+                case 4:
+                {
+                    // Save and exit display
+                    strcpy(buffer, "Exit without save");
+                    break;
+                }
+                default:
+                {
+                    // Uh oh??
+                    strcpy(buffer, "WTF?");
+                    break;
+                }
+            }
+
+            video_draw_text(48, 22 + 21 + ((option - top) * 21), state->font_18pt, option == cursor ? rgb(255, 255, 20) : rgb(255, 255, 255), buffer);
+        }
+
+        // Draw asterisk for some settings.
+        video_draw_text(48, 22 + 21 + (maxoptions * 21), state->font_12pt, rgb(255, 255, 255), "Options marked with an asterisk (*) take effect only on the next boot.");
+    }
+
+    return new_screen;
+}
+
+unsigned int configuration_save(state_t *state, int reinit)
+{
+    static double load_start = 0.0;
+
+    if (reinit)
+    {
+        // Attempt to fetch the game settings for this game.
+        load_start = state->animation_counter;
+    }
+
+    // If we need to switch screens.
+    unsigned int new_screen = SCREEN_CONFIGURATION_SAVE;
+
+    // Check to see if we got a response in time.
+    {
+        uint16_t type = 0;
+        uint8_t *data = 0;
+        unsigned int length = 0;
+        if (message_recv(&type, (void *)&data, &length) == 0)
+        {
+            if (type == MESSAGE_SAVE_CONFIG_ACK && length == 0)
+            {
+                // Successfully acknowledged, time to go back to main screen.
+                new_screen = SCREEN_MAIN_MENU;
+            }
+
+            // Wipe any data that we need.
+            if (data != 0)
+            {
+                free(data);
+            }
+        }
+
+        if (((state->animation_counter - load_start) >= MAX_WAIT_FOR_SAVE))
+        {
+            // Uh oh, no ack.
+            new_screen = SCREEN_COMM_ERROR;
+        }
+    }
+
+    video_draw_text(video_width() / 2 - 100, 100, state->font_18pt, rgb(0, 255, 0), "Saving configuration...");
 
     return new_screen;
 }
@@ -1429,7 +1690,6 @@ void main()
     // Grab the system configuration
     eeprom_t settings;
     eeprom_read(&settings);
-    selected_game = get_default_selection();
 
     // Attach our communication handler for packet sending/receiving.
     packetlib_init();
@@ -1441,6 +1701,9 @@ void main()
     // Create global state for the menu.
     state_t state;
     state.settings = &settings;
+    state.config = get_config();
+    state.test_error_counter = 0.0;
+    selected_game = state.config->boot_selection;
 
     // Attach our fonts
     state.font_18pt = video_font_add(helvetica_ttf_data, helvetica_ttf_len);
@@ -1487,6 +1750,9 @@ void main()
             case SCREEN_CONFIGURATION:
                 newscreen = configuration(&state, curscreen != oldscreen);
                 break;
+            case SCREEN_CONFIGURATION_SAVE:
+                newscreen = configuration_save(&state, curscreen != oldscreen);
+                break;
             default:
                 newscreen = curscreen;
                 break;
@@ -1512,7 +1778,7 @@ void main()
         oldscreen = curscreen;
         curscreen = newscreen;
 
-        if (debug_enabled())
+        if (state.config->enable_debug)
         {
             // Display some debugging info.
             video_draw_debug_text((video_width() / 2) - (18 * 4), video_height() - 16, rgb(0, 200, 255), "FPS: %.01f, %dx%d", fps_value, video_width(), video_height());
