@@ -205,9 +205,10 @@ void __draw_bitmap(int x, int y, unsigned int width, unsigned int height, unsign
                     for(int xp = low_x; xp < high_x; xp++)
                     {
                         // Alpha-blend the grayscale image with the destination.
-                        uint8_t alpha = buffer[(yp * width) + xp];
+                        // We only support 32 alpha levels here for speed.
+                        uint8_t alpha = buffer[(yp * width) + xp] | 0x7;
 
-                        if (alpha != 0)
+                        if (alpha > 0x7)
                         {
                             if(alpha >= 255)
                             {
@@ -238,9 +239,10 @@ void __draw_bitmap(int x, int y, unsigned int width, unsigned int height, unsign
                     for(int xp = low_x; xp < high_x; xp++)
                     {
                         // Alpha-blend the grayscale image with the destination.
-                        uint8_t alpha = buffer[(yp * width) + xp];
+                        // We only support 32 alpha levels here for speed.
+                        uint8_t alpha = buffer[(yp * width) + xp] | 0x7;
 
-                        if (alpha != 0)
+                        if (alpha > 0x7)
                         {
                             if(alpha >= 255)
                             {
