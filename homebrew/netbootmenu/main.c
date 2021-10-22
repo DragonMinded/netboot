@@ -181,7 +181,7 @@ void packetlib_discard(int packetno)
 uint32_t checksum_add(uint32_t value)
 {
     uint8_t sum = ((value & 0xFF) + ((value >> 8) & 0xFF)) & 0xFF;
-    return (((~sum) & 0xFF) << 16) | value & 0x0000FFFF;
+    return (((~sum) & 0xFF) << 16) | (value & 0x0000FFFF);
 }
 
 int checksum_verify(uint32_t value)
@@ -538,6 +538,8 @@ int message_send(uint16_t type, void * data, unsigned int length)
         // Don't want sequence ID 0 for reassembly purposes.
         sequence = 1;
     }
+
+    return 0;
 }
 
 int message_recv(uint16_t *type, void ** data, unsigned int *length)
@@ -572,7 +574,7 @@ int message_recv(uint16_t *type, void ** data, unsigned int *length)
 
         // Grab the sequence number from this packet.
         uint16_t sequence;
-        unsigned int index;
+        int index = -1;
         memcpy(&sequence, &pkt_data[MESSAGE_SEQ_LOC], 2);
 
         if (sequence == 0)
@@ -612,7 +614,7 @@ int message_recv(uint16_t *type, void ** data, unsigned int *length)
             }
         }
 
-        if (num_packets_needed > 0)
+        if (num_packets_needed > 0 && index >= 0)
         {
             // Now, mark the particular portion of this packet as present.
             uint16_t location;
@@ -776,17 +778,18 @@ unsigned int repeat(unsigned int cur_state, int *repeat_count, double fps)
 
     // Calculate repeat values based on current FPS.
     int count = *repeat_count;
+    *repeat_count = count + 1;
+
     int thresh = (int)(30.0 * (fps / 60.0));
     int repeat = thresh / 5;
-
-    // Update our counter.
-    *repeat_count = count + 1;
 
     if (count >= thresh)
     {
         // Repeat every 1/16 second after 0.5 second.
         return (count % repeat) ? 0 : 1;
     }
+
+    return 0;
 }
 
 void repeat_init(unsigned int pushed_state, int *repeat_count)
@@ -1128,7 +1131,7 @@ unsigned int main_menu(state_t *state, int reinit)
         int scroll_offset = scroll_indicator_move_amount[((int)(state->animation_counter * 4.0)) & 0x3];
         int cursor_offset = 0;
 
-        if (holding)
+        if (holding > 0)
         {
             unsigned int cursor_move_amount[10] = {0, 0, 1, 2, 3, 4, 5, 6, 7, 8};
             unsigned int which = (int)((state->animation_counter - holding_animation) * 10.0);
@@ -1142,7 +1145,7 @@ unsigned int main_menu(state_t *state, int reinit)
             cursor_offset = cursor_move_amount[which];
         }
 
-        if (booting)
+        if (booting > 0)
         {
             if ((state->animation_counter - holding_animation) >= 2.0)
             {
@@ -1172,9 +1175,9 @@ unsigned int main_menu(state_t *state, int reinit)
 
             unsigned int away = abs(game - cursor);
             int horizontal_offset = 0;
-            if (away > 0 && booting)
+            if (away > 0 && booting > 0)
             {
-                double x = ((state->animation_counter - holding_animation) * 1.25) - (((double)away) * 0.1);
+                double x = ((state->animation_counter - booting_animation) * 1.25) - (((double)away) * 0.1);
                 if (x <= 0)
                 {
                     horizontal_offset = 0;

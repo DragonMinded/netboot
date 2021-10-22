@@ -157,7 +157,7 @@ void timer_wait(uint32_t milliseconds)
     {
         if (!timers_used[i]) {
             timer_start(i, 1000000);
-            while (TIMER_TCR(i) & 0x100 == 0) { ; }
+            while ((TIMER_TCR(i) & 0x100) == 0) { ; }
             timer_stop(i);
         }
     }

@@ -19,7 +19,7 @@ extern "C" {
 #define MAPLE_DMA_HW_INIT (0x8C >> 2)
 #define MAPLE_ENDIAN_SELECT (0x0E8 >> 2)
 
-#define MAPLE_ADDRESS_RANGE(x) ((x >> 20) - 0x80)
+#define MAPLE_ADDRESS_RANGE(x) (((x) >> 20) - 0x80)
 
 #define MAPLE_DEVICE_INFO_REQUEST 0x01
 #define MAPLE_DEVICE_RESET_REQUEST 0x03

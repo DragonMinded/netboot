@@ -124,6 +124,8 @@ int video_font_set_size(font_t *fontface, unsigned int size)
 
         fontface->lineheight = size;
         __cache_discard(fontface);
+
+        return 0;
     }
     else
     {
@@ -426,21 +428,12 @@ int video_draw_text(int x, int y, font_t *fontface, uint32_t color, const char *
     if (msg)
     {
         static char buffer[2048];
+        va_list args;
+        va_start(args, msg);
+        vsnprintf(buffer, 2047, msg, args);
+        va_end(args);
 
-        if (buffer)
-        {
-            va_list args;
-            va_start(args, msg);
-            vsnprintf(buffer, 2047, msg, args);
-            va_end(args);
-
-            int err = __video_draw_text(x, y, fontface, color, buffer);
-            return err;
-        }
-        else
-        {
-            return -1;
-        }
+        return __video_draw_text(x, y, fontface, color, buffer);
     }
     else
     {

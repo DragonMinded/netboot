@@ -75,7 +75,7 @@ void marshall_dimm_command()
                 case 4:
                 {
                     /* Peek 8-bit value out of memory */
-                    uint32_t address = (((dimm_command & CONST_DIMM_TOP_MASK) << 16) | (*NAOMI_DIMM_OFFSETL) & 0xFFFF) + base_address;
+                    uint32_t address = (((dimm_command & CONST_DIMM_TOP_MASK) << 16) | ((*NAOMI_DIMM_OFFSETL) & 0xFFFF)) + base_address;
 
                     if (global_peek_hook)
                     {
@@ -88,7 +88,7 @@ void marshall_dimm_command()
                 case 5:
                 {
                     /* Peek 16-bit value out of memory */
-                    uint32_t address = (((dimm_command & CONST_DIMM_TOP_MASK) << 16) | (*NAOMI_DIMM_OFFSETL) & 0xFFFF) + base_address;
+                    uint32_t address = (((dimm_command & CONST_DIMM_TOP_MASK) << 16) | ((*NAOMI_DIMM_OFFSETL) & 0xFFFF)) + base_address;
 
                     if ((address & 1) == 0)
                     {
@@ -109,7 +109,7 @@ void marshall_dimm_command()
                 case 6:
                 {
                     /* Peek 32-bit value out of memory */
-                    uint32_t address = (((dimm_command & CONST_DIMM_TOP_MASK) << 16) | (*NAOMI_DIMM_OFFSETL) & 0xFFFF) + base_address;
+                    uint32_t address = (((dimm_command & CONST_DIMM_TOP_MASK) << 16) | ((*NAOMI_DIMM_OFFSETL) & 0xFFFF)) + base_address;
 
                     if ((address & 3) == 0)
                     {
@@ -132,7 +132,7 @@ void marshall_dimm_command()
                 case 8:
                 {
                     /* Poke 8-bit value into memory */
-                    uint32_t address = (((dimm_command & CONST_DIMM_TOP_MASK) << 16) | (*NAOMI_DIMM_OFFSETL) & 0xFFFF) + base_address;
+                    uint32_t address = (((dimm_command & CONST_DIMM_TOP_MASK) << 16) | ((*NAOMI_DIMM_OFFSETL) & 0xFFFF)) + base_address;
                     uint8_t value = (*NAOMI_DIMM_PARAMETERL) & 0xFF;
                     if (global_poke_hook)
                     {
@@ -145,7 +145,7 @@ void marshall_dimm_command()
                 case 9:
                 {
                     /* Poke 16-bit value into memory */
-                    uint32_t address = (((dimm_command & CONST_DIMM_TOP_MASK) << 16) | (*NAOMI_DIMM_OFFSETL) & 0xFFFF) + base_address;
+                    uint32_t address = (((dimm_command & CONST_DIMM_TOP_MASK) << 16) | ((*NAOMI_DIMM_OFFSETL) & 0xFFFF)) + base_address;
                     uint16_t value = (*NAOMI_DIMM_PARAMETERL) & 0xFFFF;
 
                     if ((address & 1) == 0)
@@ -167,7 +167,7 @@ void marshall_dimm_command()
                 case 10:
                 {
                     /* Poke 32-bit value into memory */
-                    uint32_t address = (((dimm_command & CONST_DIMM_TOP_MASK) << 16) | (*NAOMI_DIMM_OFFSETL) & 0xFFFF) + base_address;
+                    uint32_t address = (((dimm_command & CONST_DIMM_TOP_MASK) << 16) | ((*NAOMI_DIMM_OFFSETL) & 0xFFFF)) + base_address;
                     uint32_t value = (((*NAOMI_DIMM_PARAMETERH) & 0xFFFF) << 16) | ((*NAOMI_DIMM_PARAMETERL) & 0xFFFF);
 
                     if ((address & 3) == 0)

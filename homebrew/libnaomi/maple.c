@@ -75,12 +75,12 @@ uint32_t *maple_swap_data(unsigned int port, int peripheral, unsigned int cmd, u
     if (peripheral == 0)
     {
         // Main controller peripheral.
-        addr = (port & 0x3) << 6 | 0x20;
+        addr = ((port & 0x3) << 6) | 0x20;
     }
     else
     {
         // Sub peripheral.
-        addr = (port & 0x3) << 6 | (1 << (peripheral - 1)) & 0x1F;
+        addr = ((port & 0x3) << 6) | ((1 << (peripheral - 1)) & 0x1F);
     }
 
     // Calculate receive buffer
@@ -93,8 +93,8 @@ uint32_t *maple_swap_data(unsigned int port, int peripheral, unsigned int cmd, u
     // Now, construct the maple request transfer descriptor.
     memset((void *)send, 0, 1024);
     send[0] = (
-        1 << 31 |       // This is the last entry in the transfer descriptor.
-        datalen & 0xFF  // Length is how many extra bytes of payload we are including.
+        1 << 31 |         // This is the last entry in the transfer descriptor.
+        (datalen & 0xFF)  // Length is how many extra bytes of payload we are including.
     );
     send[1] = buffer;
     send[2] = (
@@ -332,11 +332,11 @@ int maple_request_update(void *binary, unsigned int len)
         {
             return -1;
         }
-        if((resp[1] >> 16) & 0xFFFF != memloc)
+        if(((resp[1] >> 16) & 0xFFFF) != memloc)
         {
             return -2;
         }
-        if(resp[1] & 0xFF != checksum)
+        if((resp[1] & 0xFF) != checksum)
         {
             return -3;
         }
@@ -359,6 +359,8 @@ int maple_request_update(void *binary, unsigned int len)
         // works on Rev. H BIOS, I think we're good here.
         return -4;
     }
+
+    return 0;
 }
 
 /**

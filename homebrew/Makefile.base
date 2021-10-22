@@ -21,6 +21,8 @@ NAOMI_SH_CCFLAGS += -ffunction-sections -fdata-sections
 NAOMI_SH_CCFLAGS += ${NAOMI_SH_INCLUDEPATHS}
 # Make sure we compile optimized
 NAOMI_SH_CCFLAGS += -O2
+# Make sure we warn about a bunch of stuff.
+NAOMI_SH_CCFLAGS += -Wall
 
 # Set up gcc default options for compiling .c files.
 CC  = ${NAOMI_SH_CC} ${NAOMI_SH_CCFLAGS}
@@ -43,6 +45,8 @@ NAOMI_SH_CPPFLAGS += -ffunction-sections -fdata-sections
 NAOMI_SH_CPPFLAGS += ${NAOMI_SH_INCLUDEPATHS}
 # Make sure we compile optimized
 NAOMI_SH_CPPFLAGS += -O2
+# Make sure we warn about a bunch of stuff.
+NAOMI_SH_CCFLAGS += -Wall
 
 # Set up gcc default options for compiling .cpp files.
 CPP  = ${NAOMI_SH_CPP} ${NAOMI_SH_CPPFLAGS}

@@ -221,9 +221,9 @@ void main()
                 // Calculate the sentinel.
                 sprintf(
                     eeprom_buf + strlen(eeprom_buf),
-                    "Sentinel expected: %04X Calc: %04X\n",
-                    old_sentinel,
-                    get_sentinel()
+                    "Sentinel expected: %08X Calc: %08X\n",
+                    (unsigned int)old_sentinel,
+                    (unsigned int)get_sentinel()
                 );
             }
 
