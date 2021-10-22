@@ -146,10 +146,10 @@ void __draw_bitmap(int x, int y, unsigned int width, unsigned int height, unsign
 {
     if (mode == FT_PIXEL_MODE_GRAY)
     {
-        unsigned int low_x = 0;
-        unsigned int high_x = width;
-        unsigned int low_y = 0;
-        unsigned int high_y = height;
+        int low_x = 0;
+        int high_x = width;
+        int low_y = 0;
+        int high_y = height;
 
         if (x < 0)
         {
@@ -200,9 +200,12 @@ void __draw_bitmap(int x, int y, unsigned int width, unsigned int height, unsign
         {
             if (global_video_vertical)
             {
-                for (int yp = low_y; yp < high_y; yp++)
+                /* Iterate slightly differently so we can guarantee that we're close to the data
+                 * cache, since drawing vertically is done from the perspective of a horizontal
+                 * buffer. */
+                for(int xp = low_x; xp < high_x; xp++)
                 {
-                    for(int xp = low_x; xp < high_x; xp++)
+                    for (int yp = (high_y - 1); yp >= (low_y); yp--)
                     {
                         // Alpha-blend the grayscale image with the destination.
                         // We only support 32 alpha levels here for speed.
