@@ -836,6 +836,8 @@ unsigned int selected_game;
 #define SCREEN_GAME_SETTINGS_LOAD 2
 #define SCREEN_GAME_SETTINGS 3
 
+#define MAX_WAIT_FOR_COMMS 3.0
+
 typedef struct
 {
     eeprom_t *settings;
@@ -1147,7 +1149,7 @@ unsigned int main_menu(state_t *state, int reinit)
 
         if (booting > 0)
         {
-            if ((state->animation_counter - holding_animation) >= 2.0)
+            if ((state->animation_counter - holding_animation) >= MAX_WAIT_FOR_COMMS)
             {
                 // We failed to boot, display an error.
                 new_screen = SCREEN_COMM_ERROR;
@@ -1247,7 +1249,7 @@ unsigned int game_settings_load(state_t *state, int reinit)
             }
         }
 
-        if ((!ack_received) && ((state->animation_counter - load_start) >= 2.0))
+        if ((!ack_received) && ((state->animation_counter - load_start) >= MAX_WAIT_FOR_COMMS))
         {
             // Uh oh, no ack.
             new_screen = SCREEN_COMM_ERROR;

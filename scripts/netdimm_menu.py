@@ -506,6 +506,9 @@ def main() -> int:
                             settings.last_game_file = filename
                             settings_save(args.menu_settings_file, args.ip, settings)
 
+                            # Wait a second for animation on the Naomi.
+                            time.sleep(1.0)
+
                             with open(filename, "rb") as fp:
                                 gamedata = FileBytes(fp)
                                 netdimm.send(gamedata, disable_crc_check=True)
@@ -559,7 +562,7 @@ def main() -> int:
                             # dead.
                             break
 
-                    time.sleep(2 if failure_count == 0 else 1)
+                    time.sleep(2.0 if failure_count == 0 else 1.0)
 
             # Now, wait for the cabinet to come back so we can send the menu again.
             print("Waiting for cabinet to be ready to receive the menu...")
