@@ -8,6 +8,7 @@
 #include FT_FREETYPE_H
 #include "naomi/system.h"
 #include "naomi/video.h"
+#include "video-internal.h"
 
 FT_Library * __video_freetype_init()
 {
@@ -60,7 +61,8 @@ void __cache_discard(font_t *fontface)
 font_cache_entry_t *__cache_lookup(font_t *fontface, uint32_t index)
 {
     // TODO: This is linear and we could make it a lot better if we sorted
-    // by index and then did a binary search.
+    // by index and then did a binary search. The lion's share of this
+    // module's compute time goes to __draw_bitmap however, so I didn't bother.
 
     for (int i = 0; i < fontface->cacheloc; i++)
     {
@@ -135,6 +137,10 @@ int video_font_set_size(font_t *fontface, unsigned int size)
 
 extern unsigned int cached_actual_width;
 extern unsigned int cached_actual_height;
+extern unsigned int global_video_depth;
+extern unsigned int global_video_vertical;
+extern unsigned int global_video_width;
+extern void * buffer_base;
 
 void __draw_bitmap(int x, int y, unsigned int width, unsigned int height, unsigned int mode, uint8_t *buffer, uint32_t color)
 {
@@ -186,37 +192,82 @@ void __draw_bitmap(int x, int y, unsigned int width, unsigned int height, unsign
         unsigned int sr;
         unsigned int sg;
         unsigned int sb;
-        explodergb(color, &sr, &sg, &sb);
+        EXPLODE0555(color, sr, sg, sb);
 
-        for (int yp = low_y; yp < high_y; yp++)
+        // The below algorithm is fully duplicated for speed. It makes a massive difference
+        // (on the order of 33% faster) so it is worth the code duplication.
+        if (global_video_depth == 2)
         {
-            for(int xp = low_x; xp < high_x; xp++)
+            if (global_video_vertical)
             {
-                // Alpha-blend the grayscale image with the destination.
-                uint8_t alpha = buffer[(yp * width) + xp];
-
-                if (alpha != 0)
+                for (int yp = low_y; yp < high_y; yp++)
                 {
-                    if(alpha >= 255)
+                    for(int xp = low_x; xp < high_x; xp++)
                     {
-                        video_draw_pixel(x + xp, y + yp, color);
-                    }
-                    else
-                    {
-                        unsigned int dr;
-                        unsigned int dg;
-                        unsigned int db;
+                        // Alpha-blend the grayscale image with the destination.
+                        uint8_t alpha = buffer[(yp * width) + xp];
 
-                        // Technically it should be divided by 255, but this should
-                        // be much much faster.
-                        explodergb(video_get_pixel(x + xp, y + yp), &dr, &dg, &db); 
-                        dr = ((sr * alpha) + (dr * (~alpha))) >> 8;
-                        dg = ((sg * alpha) + (dg * (~alpha))) >> 8;
-                        db = ((sb * alpha) + (db * (~alpha))) >> 8;
-                        video_draw_pixel(x + xp, y + yp, rgb(dr, dg, db));
+                        if (alpha != 0)
+                        {
+                            if(alpha >= 255)
+                            {
+                                SET_PIXEL_V_2(buffer_base, x + xp, y + yp, color);
+                            }
+                            else
+                            {
+                                unsigned int dr;
+                                unsigned int dg;
+                                unsigned int db;
+
+                                // Technically it should be divided by 255, but this should
+                                // be much much faster for an 0.4% accuracy loss.
+                                EXPLODE0555(GET_PIXEL_V_2(buffer_base, x + xp, y + yp), dr, dg, db);
+                                dr = ((sr * alpha) + (dr * (~alpha))) >> 8;
+                                dg = ((sg * alpha) + (dg * (~alpha))) >> 8;
+                                db = ((sb * alpha) + (db * (~alpha))) >> 8;
+                                SET_PIXEL_V_2(buffer_base, x + xp, y + yp, RGB0555(dr, dg, db));
+                            }
+                        }
                     }
                 }
             }
+            else
+            {
+                for (int yp = low_y; yp < high_y; yp++)
+                {
+                    for(int xp = low_x; xp < high_x; xp++)
+                    {
+                        // Alpha-blend the grayscale image with the destination.
+                        uint8_t alpha = buffer[(yp * width) + xp];
+
+                        if (alpha != 0)
+                        {
+                            if(alpha >= 255)
+                            {
+                                SET_PIXEL_H_2(buffer_base, x + xp, y + yp, color);
+                            }
+                            else
+                            {
+                                unsigned int dr;
+                                unsigned int dg;
+                                unsigned int db;
+
+                                // Technically it should be divided by 255, but this should
+                                // be much much faster for an 0.4% accuracy loss.
+                                EXPLODE0555(GET_PIXEL_H_2(buffer_base, x + xp, y + yp), dr, dg, db);
+                                dr = ((sr * alpha) + (dr * (~alpha))) >> 8;
+                                dg = ((sg * alpha) + (dg * (~alpha))) >> 8;
+                                db = ((sb * alpha) + (db * (~alpha))) >> 8;
+                                SET_PIXEL_H_2(buffer_base, x + xp, y + yp, RGB0555(dr, dg, db));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            // TODO
         }
     }
     else

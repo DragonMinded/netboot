@@ -6,6 +6,7 @@
 #include "naomi/system.h"
 #include "naomi/dimmcomms.h"
 #include "naomi/eeprom.h"
+#include "video-internal.h"
 #include "font.h"
 
 
@@ -13,12 +14,8 @@
 // TODO: Need to support more than RGB1555 color.
 
 
-static void *buffer_base = 0;
+// Static members that don't need to be accessed anywhere else.
 static int buffer_loc = 0;
-static unsigned int global_video_width = 0;
-static unsigned int global_video_height = 0;
-static unsigned int global_video_depth = 0;
-static unsigned int global_video_vertical = 0;
 static uint32_t global_background_color = 0;
 static uint32_t global_background_fill_start = 0;
 static uint32_t global_background_fill_end = 0;
@@ -27,8 +24,13 @@ static unsigned int global_background_set = 0;
 static uint32_t global_buffer_offset[2];
 
 // Nonstatic so that other video modules can use it as well.
+unsigned int global_video_width = 0;
+unsigned int global_video_height = 0;
 unsigned int cached_actual_width = 0;
 unsigned int cached_actual_height = 0;
+unsigned int global_video_depth = 0;
+unsigned int global_video_vertical = 0;
+void *buffer_base = 0;
 
 void video_wait_for_vblank()
 {
@@ -42,13 +44,8 @@ void video_wait_for_vblank()
 
     // Handle filling the background of the other screen while we wait.
     if (global_background_set) {
-        if (global_video_depth == 2) {
-            global_background_fill_start = ((VRAM_BASE + global_buffer_offset[buffer_loc ? 0 : 1]) | 0xA0000000);
-            global_background_fill_end = global_background_fill_start + ((global_video_width * global_video_height) * 2);
-        }
-        else {
-            // TODO
-        }
+        global_background_fill_start = ((VRAM_BASE + global_buffer_offset[buffer_loc ? 0 : 1]) | 0xA0000000);
+        global_background_fill_end = global_background_fill_start + ((global_video_width * global_video_height * global_video_depth));
     }
 
     while(!(videobase[POWERVR2_SYNC_STAT] & 0x01ff)) {
@@ -196,7 +193,7 @@ uint32_t rgb(unsigned int r, unsigned int g, unsigned int b)
     if(global_video_depth == 2)
     {
         // Make a 1555 color that is non-transparent.
-        return ((b >> 3) & (0x1F << 0)) | ((g << 2) & (0x1F << 5)) | ((r << 7) & (0x1F << 10)) | 0x8000;
+        return RGB0555(r, g, b);
     }
     else
     {
@@ -210,7 +207,7 @@ uint32_t rgba(unsigned int r, unsigned int g, unsigned int b, unsigned int a)
     if(global_video_depth == 2)
     {
         // Make a 1555 color that is transparent if a < 128 and opaque if a >= 128.
-        return ((b >> 3) & (0x1F << 0)) | ((g << 2) & (0x1F << 5)) | ((r << 7) & (0x1F << 10)) | ((a << 8) & 0x8000);
+        return RGB1555(r, g, b, a);
     }
     else
     {
@@ -223,16 +220,7 @@ void explodergb(uint32_t color, unsigned int *r, unsigned int *g, unsigned int *
 {
     if(global_video_depth == 2)
     {
-        unsigned int bint = color & 0x1F;
-        unsigned int gint = (color >> 5) & 0x1F;
-        unsigned int rint = (color >> 10) & 0x1F;
-
-        // Convert back to 8-bit values, setting the lower 3 bits to the high
-        // bits so that values closer to 255 will be brighter and values closer
-        // to 0 will be darker.
-        *r = (rint << 3) | (rint >> 2);
-        *g = (gint << 3) | (gint >> 2);
-        *b = (bint << 3) | (bint >> 2);
+        EXPLODE0555(color, *r, *g, *b);
     }
     else
     {
@@ -247,17 +235,7 @@ void explodergba(uint32_t color, unsigned int *r, unsigned int *g, unsigned int 
 {
     if(global_video_depth == 2)
     {
-        unsigned int bint = color & 0x1F;
-        unsigned int gint = (color >> 5) & 0x1F;
-        unsigned int rint = (color >> 10) & 0x1F;
-
-        // Convert back to 8-bit values, setting the lower 3 bits to the high
-        // bits so that values closer to 255 will be brighter and values closer
-        // to 0 will be darker.
-        *r = (rint << 3) | (rint >> 2);
-        *g = (gint << 3) | (gint >> 2);
-        *b = (bint << 3) | (bint >> 2);
-        *a = (color & 0x8000) ? 255 : 0;
+        EXPLODE1555(color, *r, *g, *b, *a);
     }
     else
     {
@@ -277,7 +255,7 @@ void video_fill_screen(uint32_t color)
     }
     else
     {
-        // TODO
+        hw_memset(buffer_base, color, global_video_width * global_video_height * 4);
     }
 }
 
@@ -292,7 +270,7 @@ void video_set_background_color(uint32_t color)
     }
     else
     {
-        // TODO
+        global_background_fill_color = color;
     }
 }
 
@@ -326,16 +304,23 @@ void video_draw_pixel(int x, int y, uint32_t color)
     {
         if (global_video_vertical)
         {
-            ((uint16_t *)buffer_base)[(global_video_width - y) + (x * global_video_width)] = color & 0xFFFF;
+            SET_PIXEL_V_2(buffer_base, x, y, color);
         }
         else
         {
-            ((uint16_t *)buffer_base)[x + (y * global_video_width)] = color & 0xFFFF;
+            SET_PIXEL_H_2(buffer_base, x, y, color);
         }
     }
     else
     {
-        // TODO
+        if (global_video_vertical)
+        {
+            SET_PIXEL_V_4(buffer_base, x, y, color);
+        }
+        else
+        {
+            SET_PIXEL_H_4(buffer_base, x, y, color);
+        }
     }
 }
 
@@ -345,17 +330,23 @@ uint32_t video_get_pixel(int x, int y)
     {
         if (global_video_vertical)
         {
-            return ((uint16_t *)buffer_base)[(global_video_width - y) + (x * global_video_width)];
+            return GET_PIXEL_V_2(buffer_base, x, y);
         }
         else
         {
-            return ((uint16_t *)buffer_base)[x + (y * global_video_width)];
+            return GET_PIXEL_H_2(buffer_base, x, y);
         }
     }
     else
     {
-        // TODO
-        return 0;
+        if (global_video_vertical)
+        {
+            return GET_PIXEL_V_4(buffer_base, x, y);
+        }
+        else
+        {
+            return GET_PIXEL_H_4(buffer_base, x, y);
+        }
     }
 }
 
