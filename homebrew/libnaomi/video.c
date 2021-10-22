@@ -26,6 +26,9 @@ static uint32_t global_background_fill_color = 0;
 static unsigned int global_background_set = 0;
 static uint32_t global_buffer_offset[2];
 
+// Nonstatic so that other video modules can use it as well.
+unsigned int cached_actual_width = 0;
+unsigned int cached_actual_height = 0;
 
 void video_wait_for_vblank()
 {
@@ -61,20 +64,12 @@ void video_wait_for_vblank()
 
 unsigned int video_width()
 {
-    if (global_video_vertical) {
-        return global_video_height;
-    } else {
-        return global_video_width;
-    }
+    return cached_actual_width;
 }
 
 unsigned int video_height()
 {
-    if (global_video_vertical) {
-        return global_video_width;
-    } else {
-        return global_video_height;
-    }
+    return cached_actual_height;
 }
 
 unsigned int video_depth()
@@ -103,6 +98,17 @@ void video_init_simple()
     eeprom_t eeprom;
     eeprom_read(&eeprom);
     global_video_vertical = eeprom.system.monitor_orientation == MONITOR_ORIENTATION_VERTICAL ? 1 : 0;
+
+    if (global_video_vertical) {
+        cached_actual_width = global_video_height;
+    } else {
+        cached_actual_width = global_video_width;
+    }
+    if (global_video_vertical) {
+        cached_actual_height = global_video_width;
+    } else {
+        cached_actual_height = global_video_height;
+    }
 
     // Now, zero out the screen so there's no garbage if we never display.
     void *zero_base = (void *)(VRAM_BASE | 0xA0000000);
@@ -614,7 +620,7 @@ void __video_draw_debug_text( int x, int y, uint32_t color, const char * const m
                 break;
         }
 
-        if ((tx + 8) >= video_width())
+        if ((tx + 8) >= cached_actual_width)
         {
             tx = 0;
             ty += 8;

@@ -131,14 +131,11 @@ int video_font_set_size(font_t *fontface, unsigned int size)
     }
 }
 
+extern unsigned int cached_actual_width;
+extern unsigned int cached_actual_height;
+
 void __draw_bitmap(int x, int y, unsigned int width, unsigned int height, unsigned int mode, uint8_t *buffer, uint32_t color)
 {
-    // Grab the color itself.
-    unsigned int sr;
-    unsigned int sg;
-    unsigned int sb;
-    explodergb(color, &sr, &sg, &sb);
-
     if (mode == FT_PIXEL_MODE_GRAY)
     {
         unsigned int low_x = 0;
@@ -164,28 +161,30 @@ void __draw_bitmap(int x, int y, unsigned int width, unsigned int height, unsign
 
             low_y = -y;
         }
-
-        unsigned int vw = video_width();
-        if ((x + width) >= vw)
+        if ((x + width) >= cached_actual_width)
         {
-            if (x >= vw)
+            if (x >= cached_actual_width)
             {
                 return;
             }
 
-            high_x = vw - x;
+            high_x = cached_actual_width - x;
         }
-
-        unsigned int vh = video_height();
-        if (y + height >= vh)
+        if (y + height >= cached_actual_height)
         {
-            if (y >= vh)
+            if (y >= cached_actual_height)
             {
                 return;
             }
 
-            high_y = vh - y;
+            high_y = cached_actual_height - y;
         }
+
+        // Grab the color itself.
+        unsigned int sr;
+        unsigned int sg;
+        unsigned int sb;
+        explodergb(color, &sr, &sg, &sb);
 
         for (int yp = low_y; yp < high_y; yp++)
         {
