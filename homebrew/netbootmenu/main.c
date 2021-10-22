@@ -835,6 +835,7 @@ unsigned int selected_game;
 #define SCREEN_COMM_ERROR 1
 #define SCREEN_GAME_SETTINGS_LOAD 2
 #define SCREEN_GAME_SETTINGS 3
+#define SCREEN_CONFIGURATION 4
 
 #define MAX_WAIT_FOR_COMMS 3.0
 
@@ -843,6 +844,7 @@ typedef struct
     eeprom_t *settings;
     double fps;
     double animation_counter;
+    double test_error_counter;
     font_t *font_18pt;
     font_t *font_12pt;
 } state_t;
@@ -1015,6 +1017,66 @@ controls_t get_controls(state_t *state, int reinit)
     return controls;
 }
 
+#define ERROR_BOX_WIDTH 300
+#define ERROR_BOX_HEIGHT 50
+#define ERROR_BOX_TOP 100
+
+void display_test_error(state_t *state)
+{
+    unsigned int halfwidth = video_width() / 2;
+    video_fill_box(
+        halfwidth - (ERROR_BOX_WIDTH / 2),
+        ERROR_BOX_TOP,
+        halfwidth + (ERROR_BOX_WIDTH / 2),
+        ERROR_BOX_TOP + ERROR_BOX_HEIGHT,
+        rgb(32, 32, 32)
+    );
+
+    video_draw_line(
+        halfwidth - (ERROR_BOX_WIDTH / 2),
+        ERROR_BOX_TOP,
+        halfwidth + (ERROR_BOX_WIDTH / 2),
+        ERROR_BOX_TOP,
+        rgb(255, 0, 0)
+    );
+    video_draw_line(
+        halfwidth - (ERROR_BOX_WIDTH / 2),
+        ERROR_BOX_TOP + ERROR_BOX_HEIGHT,
+        halfwidth + (ERROR_BOX_WIDTH / 2),
+        ERROR_BOX_TOP + ERROR_BOX_HEIGHT,
+        rgb(255, 0, 0)
+    );
+    video_draw_line(
+        halfwidth - (ERROR_BOX_WIDTH / 2),
+        ERROR_BOX_TOP,
+        halfwidth - (ERROR_BOX_WIDTH / 2),
+        ERROR_BOX_TOP + ERROR_BOX_HEIGHT,
+        rgb(255, 0, 0)
+    );
+    video_draw_line(
+        halfwidth + (ERROR_BOX_WIDTH / 2),
+        ERROR_BOX_TOP,
+        halfwidth + (ERROR_BOX_WIDTH / 2),
+        ERROR_BOX_TOP + ERROR_BOX_HEIGHT,
+        rgb(255, 0, 0)
+    );
+
+    video_draw_text(
+        halfwidth - (ERROR_BOX_WIDTH / 2) + 37,
+        ERROR_BOX_TOP + 10,
+        state->font_12pt,
+        rgb(255, 0, 0),
+        "Cannot edit menu settings on this screen!"
+    );
+    video_draw_text(
+        halfwidth - (ERROR_BOX_WIDTH / 2) + 27,
+        ERROR_BOX_TOP + 25,
+        state->font_12pt,
+        rgb(255, 0, 0),
+        "Please edit settings from the main menu only!"
+    );
+}
+
 unsigned int main_menu(state_t *state, int reinit)
 {
     // Grab our configuration.
@@ -1051,6 +1113,9 @@ unsigned int main_menu(state_t *state, int reinit)
         booting_animation = 0.0;
         holding = 0;
         holding_animation = 0.0;
+
+        // Clear any error screens.
+        state->test_error_counter = 0.0;
     }
 
     // If we need to switch screens.
@@ -1061,68 +1126,75 @@ unsigned int main_menu(state_t *state, int reinit)
 
     if (controls.test_pressed)
     {
-        // Request to go into system test mode.
-        enter_test_mode();
+        // Request to go into our configuration screen.
+        if (booting == 0 && holding == 0)
+        {
+            selected_game = cursor;
+            new_screen = SCREEN_CONFIGURATION;
+        }
     }
-    if (controls.start_pressed)
+    else
     {
-        // Possibly long-pressing to get into game settings menu.
+        if (controls.start_pressed)
+        {
+            // Possibly long-pressing to get into game settings menu.
+            if (!controls_locked)
+            {
+                controls_locked = 1;
+                if (booting == 0 && holding == 0)
+                {
+                    holding = 1;
+                    holding_animation = state->animation_counter;
+                }
+            }
+        }
+        if (controls.start_released)
+        {
+            if (booting == 0 && holding == 1)
+            {
+                // Made a selection!
+                booting = 1;
+                holding = 0;
+                booting_animation = state->animation_counter;
+                message_send(MESSAGE_SELECTION, &cursor, 4);
+            }
+            else if(booting == 1)
+            {
+                // Ignore everything, we're waiting to boot at this point.
+            }
+            else
+            {
+                // Somehow got here, maybe start held on another screen?
+                booting = 0;
+                holding = 0;
+                controls_locked = 0;
+            }
+        }
         if (!controls_locked)
         {
-            controls_locked = 1;
-            if (booting == 0 && holding == 0)
+            if (controls.up_pressed)
             {
-                holding = 1;
-                holding_animation = state->animation_counter;
+                // Moved cursor up.
+                if (cursor > 0)
+                {
+                    cursor --;
+                }
+                if (cursor < top)
+                {
+                    top = cursor;
+                }
             }
-        }
-    }
-    if (controls.start_released)
-    {
-        if (booting == 0 && holding == 1)
-        {
-            // Made a selection!
-            booting = 1;
-            holding = 0;
-            booting_animation = state->animation_counter;
-            message_send(MESSAGE_SELECTION, &cursor, 4);
-        }
-        else if(booting == 1)
-        {
-            // Ignore everything, we're waiting to boot at this point.
-        }
-        else
-        {
-            // Somehow got here, maybe start held on another screen?
-            booting = 0;
-            holding = 0;
-            controls_locked = 0;
-        }
-    }
-    if (!controls_locked)
-    {
-        if (controls.up_pressed)
-        {
-            // Moved cursor up.
-            if (cursor > 0)
+            else if (controls.down_pressed)
             {
-                cursor --;
-            }
-            if (cursor < top)
-            {
-                top = cursor;
-            }
-        }
-        else if (controls.down_pressed)
-        {
-            // Moved cursor down.
-            if (cursor < (count - 1))
-            {
-                cursor ++;
-            }
-            if (cursor >= (top + maxgames))
-            {
-                top = cursor - (maxgames - 1);
+                // Moved cursor down.
+                if (cursor < (count - 1))
+                {
+                    cursor ++;
+                }
+                if (cursor >= (top + maxgames))
+                {
+                    top = cursor - (maxgames - 1);
+                }
             }
         }
     }
@@ -1230,6 +1302,13 @@ unsigned int game_settings_load(state_t *state, int reinit)
     // If we need to switch screens.
     unsigned int new_screen = SCREEN_GAME_SETTINGS_LOAD;
 
+    controls_t controls = get_controls(state, reinit);
+    if (controls.test_pressed)
+    {
+        // Display error message about not going into settings now.
+        state->test_error_counter = state->animation_counter;
+    }
+
     // Check to see if we got a response in time.
     {
         uint16_t type = 0;
@@ -1279,6 +1358,13 @@ unsigned int game_settings(state_t *state, int reinit)
     // If we need to switch screens.
     unsigned int new_screen = SCREEN_GAME_SETTINGS;
 
+    controls_t controls = get_controls(state, reinit);
+    if (controls.test_pressed)
+    {
+        // Display error message about not going into settings now.
+        state->test_error_counter = state->animation_counter;
+    }
+
     video_draw_text(video_width() / 2 - 100, 100, state->font_18pt, rgb(255, 255, 0), "TODO...");
 
     return new_screen;
@@ -1293,6 +1379,13 @@ unsigned int comm_error(state_t *state, int reinit)
         // trying to do anything.
     }
 
+    controls_t controls = get_controls(state, reinit);
+    if (controls.test_pressed)
+    {
+        // Display error message about not going into settings now.
+        state->test_error_counter = state->animation_counter;
+    }
+
     video_draw_text(video_width() / 2 - 50, 100, state->font_18pt, rgb(255, 0, 0), "Comm Error!");
     video_draw_text(
         video_width() / 2 - 130,
@@ -1305,6 +1398,30 @@ unsigned int comm_error(state_t *state, int reinit)
     );
 
     return SCREEN_COMM_ERROR;
+}
+
+unsigned int configuration(state_t *state, int reinit)
+{
+    if (reinit)
+    {
+        // TODO
+    }
+
+    // If we need to switch screens.
+    unsigned int new_screen = SCREEN_CONFIGURATION;
+
+    // Get our controls, including repeats.
+    controls_t controls = get_controls(state, reinit);
+
+    if (controls.test_pressed)
+    {
+        // Request to exit this screen.
+        new_screen = SCREEN_MAIN_MENU;
+    }
+
+    video_draw_text(video_width() / 2 - 50, 100, state->font_18pt, rgb(255, 0, 0), "Menu Settings");
+
+    return new_screen;
 }
 
 void main()
@@ -1367,10 +1484,27 @@ void main()
             case SCREEN_COMM_ERROR:
                 newscreen = comm_error(&state, curscreen != oldscreen);
                 break;
+            case SCREEN_CONFIGURATION:
+                newscreen = configuration(&state, curscreen != oldscreen);
+                break;
             default:
                 newscreen = curscreen;
                 break;
         }
+
+        if (state.test_error_counter > 0.0)
+        {
+            // Only display for 3 seconds.
+            if ((state.animation_counter - state.test_error_counter) >= 3.0)
+            {
+                state.test_error_counter = 0.0;
+            }
+            else
+            {
+                display_test_error(&state);
+            }
+        }
+
         uint32_t draw_time = profile_end(profile);
 
         // Track what screen we are versus what we were so we know when we
@@ -1413,7 +1547,18 @@ void test()
             enter_test_mode();
         }
 
-        video_draw_debug_text(320 - 56, 236, rgb(255, 255, 255), "test mode stub\n\n[test] - exit");
+        // It would not make sense to have a test menu for our ROM. This is
+        // because all of our settings are saved on the controlling PC or
+        // Raspberry PI so that it can survive booting games and having the
+        // EEPROM cleared every boot. So, nothing is worth changing here.
+        video_draw_debug_text(
+            (video_width() / 2) - (8 * (56 / 2)),
+            (video_height() / 2) - (8 * 4),
+            rgb(255, 255, 255),
+            "No game settings available here. To change settings for\n"
+            "the menu, press [test] when you are on the main screen.\n\n"
+            "                  press [test] to exit                  "
+        );
         video_wait_for_vblank();
         video_display();
     }
