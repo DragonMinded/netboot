@@ -1127,7 +1127,6 @@ unsigned int main_menu(state_t *state, int reinit)
         unsigned int scroll_indicator_move_amount[4] = { 1, 2, 1, 0 };
         int scroll_offset = scroll_indicator_move_amount[((int)(state->animation_counter * 4.0)) & 0x3];
         int cursor_offset = 0;
-        int boot_animation_offset = 0;
 
         if (holding)
         {
@@ -1145,15 +1144,11 @@ unsigned int main_menu(state_t *state, int reinit)
 
         if (booting)
         {
-            unsigned int which = (int)((state->animation_counter - holding_animation) * 20.0);
-            if (which >= 40)
+            if ((state->animation_counter - holding_animation) >= 2.0)
             {
                 // We failed to boot, display an error.
                 new_screen = SCREEN_COMM_ERROR;
-                which = 39;
             }
-
-            boot_animation_offset = which;
         }
 
         if (top > 0)
@@ -1177,27 +1172,18 @@ unsigned int main_menu(state_t *state, int reinit)
 
             unsigned int away = abs(game - cursor);
             int horizontal_offset = 0;
-            if (away > 0 && boot_animation_offset > 0)
+            if (away > 0 && booting)
             {
-                int slide_location = boot_animation_offset - (away - 1);
-                if (slide_location < 0)
+                double x = ((state->animation_counter - holding_animation) * 1.25) - (((double)away) * 0.1);
+                if (x <= 0)
                 {
-                    slide_location = 0;
-                }
-
-                int slide_positions[20] = {
-                    0, 20, 40, 50, 55,
-                    57, 58, 58, 57, 55,
-                    50, 40, 20, -20, -100,
-                    -260, -580, -900, -1540, -2000,
-                };
-                if (slide_location >= 20)
-                {
-                    horizontal_offset = -2000;
+                    horizontal_offset = 0;
                 }
                 else
                 {
-                    horizontal_offset = slide_positions[slide_location];
+                    // Reduce to half wave by 10 away from the cursor.
+                    double coeff = -(900.0 - 450.0 * ((double)away / 10.0));
+                    horizontal_offset = (int)((coeff * x) * (x - 0.6));
                 }
             }
 
