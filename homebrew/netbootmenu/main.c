@@ -1179,6 +1179,8 @@ unsigned int main_menu(state_t *state, int reinit)
             int horizontal_offset = 0;
             if (away > 0 && booting > 0)
             {
+                // How far behind should this animation play? this means that the animation plays in
+                // waves starting at the cursor and fanning out.
                 double x = ((state->animation_counter - booting_animation) * 1.25) - (((double)away) * 0.1);
                 if (x <= 0)
                 {
@@ -1186,8 +1188,14 @@ unsigned int main_menu(state_t *state, int reinit)
                 }
                 else
                 {
-                    // Reduce to half wave by 10 away from the cursor.
-                    double coeff = -(900.0 - 450.0 * ((double)away / 10.0));
+                    // Reduce to half wave by 10 away from the cursor. This makes the animation less
+                    // pronounced the further away it gets.
+                    double coeff = -(900.0 - 450.0 * ((double)(away >= 10 ? 10 : away) / 10.0));
+
+                    // Quadratic equation that puts the text in the same spot at 0.6 seconds into the
+                    // animation, and has a maximum positive horizontal displacement of ~90 pixels.
+                    // Of course this gets flattened the further out from the cursor you go, due to the
+                    // above coeff calculation.
                     horizontal_offset = (int)((coeff * x) * (x - 0.6));
                 }
             }
