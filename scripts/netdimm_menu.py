@@ -288,12 +288,15 @@ class Settings:
         enable_analog: bool,
         system_region: NaomiRomRegionEnum,
         use_filenames: bool,
-
+        joy1_calibration: List[int],
+        joy2_calibration: List[int],
     ):
         self.last_game_file = last_game_file
         self.enable_analog = enable_analog
         self.system_region = system_region
         self.use_filenames = use_filenames
+        self.joy1_calibration = joy1_calibration
+        self.joy2_calibration = joy2_calibration
 
 
 def settings_load(settings_file: str, ip: str) -> Settings:
@@ -307,7 +310,9 @@ def settings_load(settings_file: str, ip: str) -> Settings:
         last_game_file=None,
         enable_analog=False,
         system_region=NaomiRomRegionEnum.REGION_JAPAN,
-        use_filenames=False
+        use_filenames=False,
+        joy1_calibration=[0x80, 0x80, 0x50, 0xB0, 0x50, 0xB0],
+        joy2_calibration=[0x80, 0x80, 0x50, 0xB0, 0x50, 0xB0],
     )
 
     if isinstance(data, dict):
@@ -326,6 +331,14 @@ def settings_load(settings_file: str, ip: str) -> Settings:
                         settings.system_region = NaomiRomRegionEnum(data['system_region'])
                     except ValueError:
                         pass
+                if 'joy1_calibration' in data:
+                    calib = data['joy1_calibration']
+                    if isinstance(calib, list) and len(calib) == 6:
+                        settings.joy1_calibration = calib
+                if 'joy2_calibration' in data:
+                    calib = data['joy2_calibration']
+                    if isinstance(calib, list) and len(calib) == 6:
+                        settings.joy2_calibration = calib
 
     return settings
 
@@ -342,6 +355,8 @@ def settings_save(settings_file: str, ip: str, settings: Settings) -> None:
         'last_game_file': settings.last_game_file,
         'use_filenames': settings.use_filenames,
         'system_region': settings.system_region.value,
+        'joy1_calibration': settings.joy1_calibration,
+        'joy2_calibration': settings.joy2_calibration,
     }
 
     with open(settings_file, "w") as fp:
@@ -496,7 +511,7 @@ def main() -> int:
                 last_game_id = index
 
         config = struct.pack(
-            "<IIIIIII",
+            "<IIIIIIIBBBBBBBBBBBB",
             SETTINGS_SIZE,
             len(games),
             1 if settings.enable_analog else 0,
@@ -504,6 +519,18 @@ def main() -> int:
             last_game_id,
             settings.system_region.value,
             1 if settings.use_filenames else 0,
+            settings.joy1_calibration[0],
+            settings.joy1_calibration[1],
+            settings.joy2_calibration[0],
+            settings.joy2_calibration[1],
+            settings.joy1_calibration[2],
+            settings.joy1_calibration[3],
+            settings.joy1_calibration[4],
+            settings.joy1_calibration[5],
+            settings.joy2_calibration[2],
+            settings.joy2_calibration[3],
+            settings.joy2_calibration[4],
+            settings.joy2_calibration[5],
         )
         if len(config) < SETTINGS_SIZE:
             config = config + (b"\0" * (SETTINGS_SIZE - len(config)))
@@ -533,6 +560,7 @@ def main() -> int:
         # Now, talk to the net dimm and exchange packets to handle settings and game selection.
         if success:
             print("Talking to net dimm to wait for ROM selection...")
+            time.sleep(5)
 
             try:
                 # Always show game send progress.
@@ -569,12 +597,26 @@ def main() -> int:
 
                         elif msg.id == MESSAGE_SAVE_CONFIG:
                             if len(msg.data) == SETTINGS_SIZE:
-                                _, _, analogsetting, _, _, regionsetting, filenamesetting = struct.unpack("<IIIIIII", msg.data[:28])
-                                print(f"Requested configuration save...")
+                                (
+                                    _,
+                                    _,
+                                    analogsetting,
+                                    _,
+                                    _,
+                                    regionsetting,
+                                    filenamesetting,
+                                    *rest,
+                                ) = struct.unpack("<IIIIIIIBBBBBBBBBBBB", msg.data[:40])
+                                print("Requested configuration save...")
+
+                                joy1 = [rest[0], rest[1], rest[4], rest[5], rest[6], rest[7]]
+                                joy2 = [rest[2], rest[3], rest[8], rest[9], rest[10], rest[11]]
 
                                 settings.enable_analog = analogsetting != 0
                                 settings.use_filenames = filenamesetting != 0
                                 settings.system_region = NaomiRomRegionEnum(regionsetting)
+                                settings.joy1_calibration = joy1
+                                settings.joy2_calibration = joy2
                                 settings_save(args.menu_settings_file, args.ip, settings)
 
                                 send_message(netdimm, Message(MESSAGE_SAVE_CONFIG_ACK))

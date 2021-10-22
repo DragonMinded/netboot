@@ -12,6 +12,14 @@
 #define MAX_OUTSTANDING_PACKETS 268
 #define MAX_PACKET_LENGTH 253
 
+#ifndef min
+#define min(a,b) (((a) < (b)) ? (a) : (b))
+#endif
+
+#ifndef max
+#define max(a,b) (((a) > (b)) ? (a) : (b))
+#endif
+
 typedef struct
 {
     uint8_t data[MAX_PACKET_LENGTH];
@@ -741,6 +749,18 @@ typedef struct __attribute__((__packed__))
     uint32_t boot_selection;
     uint32_t system_region;
     uint32_t use_filenames;
+    uint8_t joy1_hcenter;
+    uint8_t joy1_vcenter;
+    uint8_t joy2_hcenter;
+    uint8_t joy2_vcenter;
+    uint8_t joy1_hmin;
+    uint8_t joy1_hmax;
+    uint8_t joy1_vmin;
+    uint8_t joy1_vmax;
+    uint8_t joy2_hmin;
+    uint8_t joy2_hmax;
+    uint8_t joy2_vmin;
+    uint8_t joy2_vmax;
 } config_t;
 
 config_t *get_config()
@@ -868,6 +888,8 @@ typedef struct
     uint8_t start_released;
 } controls_t;
 
+#define ANALOG_DEAD_ZONE 8
+
 controls_t get_controls(state_t *state, int reinit)
 {
     static unsigned int oldaup[2] = { 0 };
@@ -903,43 +925,89 @@ controls_t get_controls(state_t *state, int reinit)
     jvs_buttons_t held = maple_buttons_current();
     jvs_buttons_t released = maple_buttons_released();
 
+    // Calculate calibrations.
+    unsigned int joy1_hminthresh = (state->config->joy1_hmin + state->config->joy1_hcenter) / 2;
+    unsigned int joy1_hmaxthresh = (state->config->joy1_hmax + state->config->joy1_hcenter) / 2;
+    unsigned int joy1_vminthresh = (state->config->joy1_vmin + state->config->joy1_vcenter) / 2;
+    unsigned int joy1_vmaxthresh = (state->config->joy1_vmax + state->config->joy1_vcenter) / 2;
+    unsigned int joy2_hminthresh = (state->config->joy2_hmin + state->config->joy2_hcenter) / 2;
+    unsigned int joy2_hmaxthresh = (state->config->joy2_hmax + state->config->joy2_hcenter) / 2;
+    unsigned int joy2_vminthresh = (state->config->joy2_vmin + state->config->joy2_vcenter) / 2;
+    unsigned int joy2_vmaxthresh = (state->config->joy2_vmax + state->config->joy2_vcenter) / 2;
+
     // Also calculate analog thresholds so we can emulate joystick with analog.
     if (state->config->enable_analog)
     {
-        if (held.player1.analog1 < (ANALOG_CENTER - ANALOG_THRESH_ON))
+        if (held.player1.analog1 < joy1_vminthresh)
         {
             aup[0] = 1;
         }
-        else if (held.player1.analog1 > (ANALOG_CENTER - ANALOG_THRESH_OFF))
+        else if (held.player1.analog1 > (joy1_vminthresh + ANALOG_DEAD_ZONE))
         {
             aup[0] = 0;
         }
 
-        if (held.player2.analog1 < (ANALOG_CENTER - ANALOG_THRESH_ON))
+        if (held.player2.analog1 < joy2_vminthresh)
         {
             aup[1] = 1;
         }
-        else if (held.player2.analog1 > (ANALOG_CENTER - ANALOG_THRESH_OFF))
+        else if (held.player2.analog1 > (joy2_vminthresh + ANALOG_DEAD_ZONE))
         {
             aup[1] = 0;
         }
 
-        if (held.player1.analog1 > (ANALOG_CENTER + ANALOG_THRESH_ON))
+        if (held.player1.analog1 > joy1_vmaxthresh)
         {
             adown[0] = 1;
         }
-        else if (held.player1.analog1 < (ANALOG_CENTER + ANALOG_THRESH_OFF))
+        else if (held.player1.analog1 < (joy1_vmaxthresh - ANALOG_DEAD_ZONE))
         {
             adown[0] = 0;
         }
 
-        if (held.player2.analog1 > (ANALOG_CENTER + ANALOG_THRESH_ON))
+        if (held.player2.analog1 > joy2_vmaxthresh)
         {
             adown[1] = 1;
         }
-        else if (held.player2.analog1 < (ANALOG_CENTER + ANALOG_THRESH_OFF))
+        else if (held.player2.analog1 < (joy2_vmaxthresh - ANALOG_DEAD_ZONE))
         {
             adown[1] = 0;
+        }
+
+        if (held.player1.analog2 < joy1_hminthresh)
+        {
+            aleft[0] = 1;
+        }
+        else if (held.player1.analog2 > (joy1_hminthresh + ANALOG_DEAD_ZONE))
+        {
+            aleft[0] = 0;
+        }
+
+        if (held.player2.analog2 < joy2_hminthresh)
+        {
+            aleft[1] = 1;
+        }
+        else if (held.player2.analog2 > (joy2_hminthresh + ANALOG_DEAD_ZONE))
+        {
+            aleft[1] = 0;
+        }
+
+        if (held.player1.analog2 > joy1_hmaxthresh)
+        {
+            aright[0] = 1;
+        }
+        else if (held.player1.analog2 < (joy1_hmaxthresh - ANALOG_DEAD_ZONE))
+        {
+            aright[0] = 0;
+        }
+
+        if (held.player2.analog2 > joy2_hmaxthresh)
+        {
+            aright[1] = 1;
+        }
+        else if (held.player2.analog2 < (joy2_hmaxthresh - ANALOG_DEAD_ZONE))
+        {
+            aright[1] = 0;
         }
 
         // Map analogs back onto digitals.
@@ -976,8 +1044,43 @@ controls_t get_controls(state_t *state, int reinit)
             pressed.player2.down = 1;
         }
 
+        if (aleft[0])
+        {
+            held.player1.left = 1;
+        }
+        if (aleft[1])
+        {
+            held.player2.left = 1;
+        }
+        if (aright[0])
+        {
+            held.player1.right = 1;
+        }
+        if (aright[1])
+        {
+            held.player2.right = 1;
+        }
+        if (aleft[0] && !oldaleft[0])
+        {
+            pressed.player1.left = 1;
+        }
+        if (aleft[1] && !oldaleft[1])
+        {
+            pressed.player2.left = 1;
+        }
+        if (aright[0] && !oldaright[0])
+        {
+            pressed.player1.right = 1;
+        }
+        if (aright[1] && !oldaright[1])
+        {
+            pressed.player2.right = 1;
+        }
+
         memcpy(oldaup, aup, sizeof(aup));
         memcpy(oldadown, adown, sizeof(adown));
+        memcpy(oldaleft, aleft, sizeof(aleft));
+        memcpy(oldaright, aright, sizeof(aright));
     }
 
     // Process buttons and repeats.
@@ -1446,11 +1549,27 @@ unsigned int comm_error(state_t *state, int reinit)
 
 unsigned int configuration(state_t *state, int reinit)
 {
-    static uint32_t options[5];
-    static uint32_t maximums[5];
+    static uint32_t options[7];
+    static uint32_t maximums[7];
+    static uint32_t lockable[7];
+    static uint32_t disabled[7];
     static unsigned int cursor = 0;
     static unsigned int top = 0;
     static unsigned int maxoptions = 0;
+    static int locked = -1;
+
+    static uint8_t joy1_hcenter;
+    static uint8_t joy1_vcenter;
+    static uint8_t joy2_hcenter;
+    static uint8_t joy2_vcenter;
+    static uint8_t joy1_hmin;
+    static uint8_t joy1_hmax;
+    static uint8_t joy1_vmin;
+    static uint8_t joy1_vmax;
+    static uint8_t joy2_hmin;
+    static uint8_t joy2_hmax;
+    static uint8_t joy2_vmin;
+    static uint8_t joy2_vmax;
 
     if (reinit)
     {
@@ -1464,14 +1583,61 @@ unsigned int configuration(state_t *state, int reinit)
         maximums[2] = 1;
         maximums[3] = 0;
         maximums[4] = 0;
+        lockable[0] = 0;
+        lockable[1] = 0;
+        lockable[2] = 0;
+        lockable[3] = 1;
+        lockable[4] = 1;
+        disabled[0] = 0;
+        disabled[1] = 0;
+        disabled[2] = 0;
+        disabled[3] = 0;
+        disabled[4] = state->settings->system.players == 1;
+
+        // Dummy options for save and exit.
+        options[((sizeof(options) / sizeof(options[0])) - 1)] = 0;
+        options[((sizeof(options) / sizeof(options[0])) - 2)] = 0;
+        maximums[((sizeof(options) / sizeof(options[0])) - 1)] = 0;
+        maximums[((sizeof(options) / sizeof(options[0])) - 2)] = 0;
+        lockable[((sizeof(options) / sizeof(options[0])) - 1)] = 0;
+        lockable[((sizeof(options) / sizeof(options[0])) - 2)] = 0;
+        disabled[((sizeof(options) / sizeof(options[0])) - 1)] = 0;
+        disabled[((sizeof(options) / sizeof(options[0])) - 2)] = 0;
+
+        // Calibration special case.
+        joy1_hcenter = state->config->joy1_hcenter;
+        joy1_vcenter = state->config->joy1_vcenter;
+        joy2_hcenter = state->config->joy2_hcenter;
+        joy2_vcenter = state->config->joy2_vcenter;
+        joy1_hmin = state->config->joy1_hmin;
+        joy1_hmax = state->config->joy1_hmax;
+        joy1_vmin = state->config->joy1_vmin;
+        joy1_vmax = state->config->joy1_vmax;
+        joy2_hmin = state->config->joy2_hmin;
+        joy2_hmax = state->config->joy2_hmax;
+        joy2_vmin = state->config->joy2_vmin;
+        joy2_vmax = state->config->joy2_vmax;
 
         cursor = 0;
         top = 0;
         maxoptions = (video_height() - (24 + 16 + 21 + 21)) / 21;
+        locked = -1;
     }
 
     // If we need to switch screens.
     unsigned int new_screen = SCREEN_CONFIGURATION;
+
+    // Calculate disabled controls.
+    if (options[0])
+    {
+        disabled[3] = 0;
+        disabled[4] = state->settings->system.players == 1;
+    }
+    else
+    {
+        disabled[3] = 1;
+        disabled[4] = 1;
+    }
 
     // Get our controls, including repeats.
     controls_t controls = get_controls(state, reinit);
@@ -1493,17 +1659,52 @@ unsigned int configuration(state_t *state, int reinit)
             state->config->system_region = options[1];
             state->config->use_filenames = options[2];
 
+            // Calibration special case.
+            state->config->joy1_hcenter = joy1_hcenter;
+            state->config->joy1_vcenter = joy1_vcenter;
+            state->config->joy2_hcenter = joy2_hcenter;
+            state->config->joy2_vcenter = joy2_vcenter;
+            state->config->joy1_hmin = joy1_hmin;
+            state->config->joy1_hmax = joy1_hmax;
+            state->config->joy1_vmin = joy1_vmin;
+            state->config->joy1_vmax = joy1_vmax;
+            state->config->joy2_hmin = joy2_hmin;
+            state->config->joy2_hmax = joy2_hmax;
+            state->config->joy2_vmin = joy2_vmin;
+            state->config->joy2_vmax = joy2_vmax;
+
+
             // Send back to PC.
             message_send(MESSAGE_SAVE_CONFIG, state->config, 64);
             new_screen = SCREEN_CONFIGURATION_SAVE;
         }
-        else if (options[cursor] < maximums[cursor])
+        else if (!disabled[cursor])
         {
-            options[cursor]++;
-        }
-        else
-        {
-            options[cursor] = 0;
+            if (lockable[cursor])
+            {
+                if (cursor == locked)
+                {
+                    // Unlock control.
+                    locked = -1;
+                }
+                else
+                {
+                    // Lock to this control.
+                    locked = cursor;
+                }
+            }
+            else if (locked == -1)
+            {
+                // Only edit controls if locking is diabled.
+                if (options[cursor] < maximums[cursor])
+                {
+                    options[cursor]++;
+                }
+                else
+                {
+                    options[cursor] = 0;
+                }
+            }
         }
     }
     else if (controls.start_pressed)
@@ -1523,50 +1724,113 @@ unsigned int configuration(state_t *state, int reinit)
             state->config->system_region = options[1];
             state->config->use_filenames = options[2];
 
+            // Calibration special case.
+            state->config->joy1_hcenter = joy1_hcenter;
+            state->config->joy1_vcenter = joy1_vcenter;
+            state->config->joy2_hcenter = joy2_hcenter;
+            state->config->joy2_vcenter = joy2_vcenter;
+            state->config->joy1_hmin = joy1_hmin;
+            state->config->joy1_hmax = joy1_hmax;
+            state->config->joy1_vmin = joy1_vmin;
+            state->config->joy1_vmax = joy1_vmax;
+            state->config->joy2_hmin = joy2_hmin;
+            state->config->joy2_hmax = joy2_hmax;
+            state->config->joy2_vmin = joy2_vmin;
+            state->config->joy2_vmax = joy2_vmax;
+
             // Send back to PC.
             message_send(MESSAGE_SAVE_CONFIG, state->config, 64);
             new_screen = SCREEN_CONFIGURATION_SAVE;
         }
-    }
-    else if(controls.up_pressed)
-    {
-        if (cursor > 0)
+        else if (!disabled[cursor])
         {
-            cursor--;
+            if (lockable[cursor])
+            {
+                if (cursor == locked)
+                {
+                    // Unlock control.
+                    locked = -1;
+                }
+                else
+                {
+                    // Lock to this control.
+                    locked = cursor;
+                }
+            }
         }
     }
-    else if(controls.down_pressed)
+    else if(locked == -1)
     {
-        if (cursor < ((sizeof(options) / sizeof(options[0])) - 1))
+        if(controls.up_pressed)
         {
-            cursor++;
+            if (cursor > 0)
+            {
+                cursor--;
+            }
+        }
+        else if(controls.down_pressed)
+        {
+            if (cursor < ((sizeof(options) / sizeof(options[0])) - 1))
+            {
+                cursor++;
+            }
+        }
+        else if(controls.service_pressed)
+        {
+            // Service cycles as a safeguard.
+            if (cursor < ((sizeof(options) / sizeof(options[0])) - 1))
+            {
+                cursor++;
+            }
+            else
+            {
+                cursor = 0;
+            }
+        }
+        else if (!disabled[cursor])
+        {
+            if(controls.left_pressed)
+            {
+                if (options[cursor] > 0)
+                {
+                    options[cursor]--;
+                }
+            }
+            else if(controls.right_pressed)
+            {
+                if (options[cursor] < maximums[cursor])
+                {
+                    options[cursor]++;
+                }
+            }
         }
     }
-    else if(controls.left_pressed)
+
+    if (locked == 3)
     {
-        if (options[cursor] > 0)
-        {
-            options[cursor]--;
-        }
+        // 1P calibration.
+        jvs_buttons_t held = maple_buttons_current();
+
+        joy1_vcenter = held.player1.analog1;
+        joy1_hcenter = held.player1.analog2;
+
+        joy1_hmin = min(joy1_hmin, joy1_hcenter);
+        joy1_hmax = max(joy1_hmax, joy1_hcenter);
+        joy1_vmin = min(joy1_vmin, joy1_vcenter);
+        joy1_vmax = max(joy1_vmax, joy1_vcenter);
     }
-    else if(controls.right_pressed)
+    else if (locked == 4)
     {
-        if (options[cursor] < maximums[cursor])
-        {
-            options[cursor]++;
-        }
-    }
-    else if(controls.service_pressed)
-    {
-        // Service cycles as a safeguard.
-        if (cursor < ((sizeof(options) / sizeof(options[0])) - 1))
-        {
-            cursor++;
-        }
-        else
-        {
-            cursor = 0;
-        }
+        // 2P calibration.
+        jvs_buttons_t held = maple_buttons_current();
+
+        joy2_vcenter = held.player2.analog1;
+        joy2_hcenter = held.player2.analog2;
+
+        joy2_hmin = min(joy2_hmin, joy2_hcenter);
+        joy2_hmax = max(joy2_hmax, joy2_hcenter);
+        joy2_vmin = min(joy2_vmin, joy2_vcenter);
+        joy2_vmax = max(joy2_vmax, joy2_vcenter);
     }
 
     // Actually draw the menu
@@ -1582,7 +1846,7 @@ unsigned int configuration(state_t *state, int reinit)
             }
 
             // Draw cursor itself.
-            if (option == cursor)
+            if (option == cursor && locked == -1)
             {
                 video_draw_sprite(24, 24 + 21 + ((option - top) * 21), cursor_png_width, cursor_png_height, cursor_png_data);
             }
@@ -1612,11 +1876,55 @@ unsigned int configuration(state_t *state, int reinit)
                 }
                 case 3:
                 {
+                    if (locked == 3)
+                    {
+                        // 1P analog calibration
+                        sprintf(
+                            buffer,
+                            "h: %02X, v: %02X, max: %02X %02X %02X %02X",
+                            joy1_hcenter,
+                            joy1_vcenter,
+                            joy1_hmin,
+                            joy1_hmax,
+                            joy1_vmin,
+                            joy1_vmax
+                        );
+                    }
+                    else
+                    {
+                        strcpy(buffer, "Player 1 analog calibration");
+                    }
+                    break;
+                }
+                case 4:
+                {
+                    if (locked == 4)
+                    {
+                        // 2P analog calibration
+                        sprintf(
+                            buffer,
+                            "h: %02X, v: %02X, max: %02X %02X %02X %02X",
+                            joy2_hcenter,
+                            joy2_vcenter,
+                            joy2_hmin,
+                            joy2_hmax,
+                            joy2_vmin,
+                            joy2_vmax
+                        );
+                    }
+                    else
+                    {
+                        strcpy(buffer, "Player 2 analog calibration");
+                    }
+                    break;
+                }
+                case ((sizeof(options) / sizeof(options[0])) - 2):
+                {
                     // Save and exit display
                     strcpy(buffer, "Save and exit");
                     break;
                 }
-                case 4:
+                case ((sizeof(options) / sizeof(options[0])) - 1):
                 {
                     // Save and exit display
                     strcpy(buffer, "Exit without save");
@@ -1630,7 +1938,13 @@ unsigned int configuration(state_t *state, int reinit)
                 }
             }
 
-            video_draw_text(48, 22 + 21 + ((option - top) * 21), state->font_18pt, option == cursor ? rgb(255, 255, 20) : rgb(255, 255, 255), buffer);
+            video_draw_text(
+                48,
+                22 + 21 + ((option - top) * 21),
+                state->font_18pt,
+                disabled[option] ? rgb(128, 128, 128) : (option == cursor ? (cursor == locked ? rgb(0, 255, 0) : rgb(255, 255, 20)) : rgb(255, 255, 255)),
+                buffer
+            );
         }
 
         // Draw asterisk for some settings.
