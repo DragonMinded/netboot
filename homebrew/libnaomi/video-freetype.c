@@ -209,7 +209,7 @@ void __draw_bitmap(int x, int y, unsigned int width, unsigned int height, unsign
                     {
                         // Alpha-blend the grayscale image with the destination.
                         // We only support 32 alpha levels here for speed.
-                        uint8_t alpha = buffer[(yp * width) + xp] | 0x7;
+                        unsigned int alpha = buffer[(yp * width) + xp] | 0x7;
 
                         if (alpha > 0x7)
                         {
@@ -222,13 +222,14 @@ void __draw_bitmap(int x, int y, unsigned int width, unsigned int height, unsign
                                 unsigned int dr;
                                 unsigned int dg;
                                 unsigned int db;
+                                unsigned int negalpha = (~alpha) & 0xFF;
 
                                 // Technically it should be divided by 255, but this should
                                 // be much much faster for an 0.4% accuracy loss.
                                 EXPLODE0555(GET_PIXEL_V_2(buffer_base, x + xp, y + yp), dr, dg, db);
-                                dr = ((sr * alpha) + (dr * (~alpha))) >> 8;
-                                dg = ((sg * alpha) + (dg * (~alpha))) >> 8;
-                                db = ((sb * alpha) + (db * (~alpha))) >> 8;
+                                dr = ((sr * alpha) + (dr * negalpha)) >> 8;
+                                dg = ((sg * alpha) + (dg * negalpha)) >> 8;
+                                db = ((sb * alpha) + (db * negalpha)) >> 8;
                                 SET_PIXEL_V_2(buffer_base, x + xp, y + yp, RGB0555(dr, dg, db));
                             }
                         }
@@ -243,7 +244,7 @@ void __draw_bitmap(int x, int y, unsigned int width, unsigned int height, unsign
                     {
                         // Alpha-blend the grayscale image with the destination.
                         // We only support 32 alpha levels here for speed.
-                        uint8_t alpha = buffer[(yp * width) + xp] | 0x7;
+                        unsigned int alpha = buffer[(yp * width) + xp] | 0x7;
 
                         if (alpha > 0x7)
                         {
@@ -256,13 +257,14 @@ void __draw_bitmap(int x, int y, unsigned int width, unsigned int height, unsign
                                 unsigned int dr;
                                 unsigned int dg;
                                 unsigned int db;
+                                unsigned int negalpha = (~alpha) & 0xFF;
 
                                 // Technically it should be divided by 255, but this should
                                 // be much much faster for an 0.4% accuracy loss.
                                 EXPLODE0555(GET_PIXEL_H_2(buffer_base, x + xp, y + yp), dr, dg, db);
-                                dr = ((sr * alpha) + (dr * (~alpha))) >> 8;
-                                dg = ((sg * alpha) + (dg * (~alpha))) >> 8;
-                                db = ((sb * alpha) + (db * (~alpha))) >> 8;
+                                dr = ((sr * alpha) + (dr * negalpha)) >> 8;
+                                dg = ((sg * alpha) + (dg * negalpha)) >> 8;
+                                db = ((sb * alpha) + (db * negalpha)) >> 8;
                                 SET_PIXEL_H_2(buffer_base, x + xp, y + yp, RGB0555(dr, dg, db));
                             }
                         }
