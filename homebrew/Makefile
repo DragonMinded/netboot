@@ -1,4 +1,4 @@
-all: libnaomi examples
+all: libnaomi examples tests
 
 .PHONY: libnaomi
 libnaomi:
@@ -7,6 +7,10 @@ libnaomi:
 .PHONY: examples
 examples:
 	$(MAKE) -C examples
+
+.PHONY: tests
+tests:
+	$(MAKE) -C tests
 
 .PHONY: 3rdparty
 3rdparty:
@@ -20,3 +24,4 @@ copy: libnaomi examples
 clean:
 	$(MAKE) -C libnaomi clean
 	$(MAKE) -C examples clean
+	$(MAKE) -C tests clean

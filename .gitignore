@@ -18,3 +18,4 @@ wheels/
 .netdimm_menu_settings.yaml
 MANIFEST
 homebrew/examples/*/*.bin
+homebrew/tests/*.bin
