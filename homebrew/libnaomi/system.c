@@ -8,6 +8,7 @@
 #include "naomi/system.h"
 #include "naomi/maple.h"
 #include "naomi/timer.h"
+#include "naomi/rtc.h"
 
 #define CCR (*(uint32_t *)0xFF00001C)
 #define QACR0 (*(uint32_t *)0xFF000038)
@@ -499,11 +500,15 @@ _CLOCK_T_ _times_r(struct _reent *reent, struct tms *tm)
     return -1;
 }
 
+// Amount of seconds in twenty years not spanning over a century rollover.
+// We use this because RTC epoch on Naomi is 1/1/1950 instead of 1/1/1970
+// like unix and C standard library expects.
+#define TWENTY_YEARS ((20 * 365LU + 5) * 86400)
+
 int _gettimeofday_r(struct _reent *reent, struct timeval *tv, void *tz)
 {
-    // TODO: Implement gettimeofday once we have RTC support.
+    tv->tv_sec = rtc_get() - TWENTY_YEARS;
     tv->tv_usec = 0;
-    tv->tv_sec = 0;
     return 0;
 }
 

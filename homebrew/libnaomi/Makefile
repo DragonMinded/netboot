@@ -14,6 +14,7 @@ SRCS += maple.c
 SRCS += eeprom.c
 SRCS += audio.c
 SRCS += console.c
+SRCS += rtc.c
 
 # Pick up base makefile rules common to all examples.
 include ../Makefile.base
