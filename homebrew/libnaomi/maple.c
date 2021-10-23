@@ -91,7 +91,6 @@ uint32_t *maple_swap_data(unsigned int port, int peripheral, unsigned int cmd, u
     maple_wait_for_dma();
 
     // Now, construct the maple request transfer descriptor.
-    memset((void *)send, 0, 1024);
     send[0] = (
         1 << 31 |         // This is the last entry in the transfer descriptor.
         (datalen & 0xFF)  // Length is how many extra bytes of payload we are including.
@@ -112,7 +111,6 @@ uint32_t *maple_swap_data(unsigned int port, int peripheral, unsigned int cmd, u
 
     // Set the first word of the recv buffer like real BIOS does.
     // This lets us check the response with maple_response_valid().
-    memset(recv, 0, 1024);
     recv[0] = 0xFFFFFFFF;
 
     // Kick off the DMA request

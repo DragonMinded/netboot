@@ -2,6 +2,7 @@
 #include <sys/times.h>
 #include <sys/types.h>
 #include <sys/reent.h>
+#include <sys/errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include "naomi/system.h"
@@ -17,10 +18,8 @@
 #define SYSCALL_ENTER_TEST_MODE 0x11
 #define SYSCALL_POLL_HAS_DIMM_COMMAND 0x14
 
+/* Actual definition of global errno */
 int errno;
-
-/* This is used by _sbrk.  */
-register char *stack_ptr asm("r15");
 
 extern int main();
 extern int test();
@@ -90,7 +89,7 @@ void _enter()
     }
 
     // Execute main/test executable based on boot variable set in
-    // crt0.s which comes from the entrypoint used to start the code.
+    // sh-crt0.s which comes from the entrypoint used to start the code.
     if(_boot_mode == 0)
     {
         int status;
@@ -121,9 +120,7 @@ void hw_memset(void *addr, uint32_t value, unsigned int amount)
 {
     // Very similar to a standard memset, but the address pointer must be aligned
     // to a 32 byte boundary, the amount must be a multiple of 32 bytes and the
-    // value must be 32 bits. TODO: The data must not also cross any memory boundary
-    // that would change address bits 28:26. This could be fixed by detecting such
-    // a possibility and updating QACR0/1 during the copy loop.
+    // value must be 32 bits. No checking of these constraints is done.
 
     // Set the base queue address pointer to the queue location with address bits
     // 25:5. The bottom bits should be all 0s since hw_memset requires an alignment
@@ -132,10 +129,12 @@ void hw_memset(void *addr, uint32_t value, unsigned int amount)
     // interleaves the data between the two queues, but it really does not matter what
     // order the hardware copies things.
     uint32_t *queue = (uint32_t *)(STORE_QUEUE_BASE | (((uint32_t)addr) & 0x03FFFFE0));
+    uint32_t actual_copy_addr = (uint32_t)addr;
+    uint32_t stored_addr_bits = (actual_copy_addr >> 24) & 0x1C;
 
     // Set the top address bits (28:26) into the store queue address control registers.
-    QACR0 = (((uint32_t)addr) >> 24) & 0x1C;
-    QACR1 = (((uint32_t)addr) >> 24) & 0x1C;
+    QACR0 = stored_addr_bits;
+    QACR1 = stored_addr_bits;
 
     // Now, set up both store queues to contain the same value that we want to memset.
     // This is 8 32-bit values per store queue.
@@ -147,8 +146,25 @@ void hw_memset(void *addr, uint32_t value, unsigned int amount)
     // care about, triggering one 32-byte prefetch at a time.
     for (int cycles = amount >> 5; cycles > 0; cycles--)
     {
+        // Make sure we don't wrap around our top address bits.
+        if (((actual_copy_addr >> 24) & 0x1C) != stored_addr_bits)
+        {
+            // Re-init the top address control registers and the queue.
+            stored_addr_bits = (actual_copy_addr >> 24) & 0x1C;
+            QACR0 = stored_addr_bits;
+            QACR1 = stored_addr_bits;
+
+            // Now, set up both store queues to contain the same value that we want to memset.
+            // This is 8 32-bit values per store queue.
+            for (int i = 0; i < 16; i++) {
+                queue[i] = value;
+            }
+        }
+
+        // Perform the actual memset.
         __asm__("pref @%0" : : "r"(queue));
         queue += 8;
+        actual_copy_addr += 32;
     }
 
     // Finally, attempt a new write to both queues in order to stall the CPU until the
@@ -157,6 +173,68 @@ void hw_memset(void *addr, uint32_t value, unsigned int amount)
     queue[0] = 0;
     queue[8] = 0;
 }
+
+void hw_memcpy(void *dest, void *src, unsigned int amount)
+{
+    // Very similar to a standard memcpy, but the destination pointer must be aligned
+    // to a 32 byte boundary, the amount must be a multiple of 32 bytes and the source
+    // pointer must be aligned to a 4 byte boundary. No checking of these constraints
+    // is done.
+
+    // Set the base queue address pointer to the queue location with destination bits
+    // 25:5. The bottom bits should be all 0s since hw_memset requires an alignment
+    // to a 32 byte boundary. We will use both queue areas since SQ0/SQ1 specification
+    // is the same bit as destination bit 5. Technically this means the below queue setup
+    // interleaves the data between the two queues, but it really does not matter what
+    // order the hardware copies things.
+    uint32_t *srcptr = (uint32_t *)src;
+    uint32_t *queue = (uint32_t *)(STORE_QUEUE_BASE | (((uint32_t)dest) & 0x03FFFFE0));
+    uint32_t actual_copy_dest = (uint32_t)dest;
+    uint32_t stored_dest_bits = (actual_copy_dest >> 24) & 0x1C;
+
+    // Set the top address bits (28:26) into the store queue address control registers.
+    QACR0 = stored_dest_bits;
+    QACR1 = stored_dest_bits;
+
+    // Now, trigger the hardware to copy the values from the queue to the address we
+    // care about, triggering one 32-byte prefetch at a time.
+    for (int cycles = amount >> 5; cycles > 0; cycles--)
+    {
+        // Make sure we don't wrap around if we were near a memory border.
+        if (((actual_copy_dest >> 24) & 0x1C) != stored_dest_bits)
+        {
+            // Re-init the top address control registers and the queue.
+            stored_dest_bits = (actual_copy_dest >> 24) & 0x1C;
+            QACR0 = stored_dest_bits;
+            QACR1 = stored_dest_bits;
+        }
+
+        // First, prefetch the bytes we will need in the next cycle.
+        __asm__("pref @%0" : : "r"(srcptr + 8));
+
+        // Now, load the destination queue with the next 32 bytes from the source.
+        queue[0] = *srcptr++;
+        queue[1] = *srcptr++;
+        queue[2] = *srcptr++;
+        queue[3] = *srcptr++;
+        queue[4] = *srcptr++;
+        queue[5] = *srcptr++;
+        queue[6] = *srcptr++;
+        queue[7] = *srcptr++;
+
+        // Finally, trigger the store of this data
+        __asm__("pref @%0" : : "r"(queue));
+        queue += 8;
+        actual_copy_dest += 32;
+    }
+
+    // Finally, attempt a new write to both queues in order to stall the CPU until the
+    // last write is done.
+    queue = (uint32_t *)STORE_QUEUE_BASE;
+    queue[0] = 0;
+    queue[8] = 0;
+}
+
 
 void enter_test_mode()
 {
@@ -169,46 +247,55 @@ void enter_test_mode()
 
 _ssize_t _read_r(struct _reent *reent, int file, void *ptr, size_t len)
 {
-    // TODO
+    // TODO: Implement read once we have FS support.
+    reent->_errno = ENOTSUP;
     return -1;
 }
 
 _off_t _lseek_r(struct _reent *reent, int file, _off_t amount, int dir)
 {
-    // TODO
+    // TODO: Implement seek once we have FS support.
+    reent->_errno = ENOTSUP;
     return -1;
 }
 
 _ssize_t _write_r(struct _reent *reent, int file, const void * ptr, size_t len)
 {
-    // TODO
+    // TODO: Implement write once we have FS support.
+    reent->_errno = ENOTSUP;
     return -1;
 }
 
 int _close_r(struct _reent *reent, int file)
 {
-    // TODO
+    // TODO: Implement close once we have FS support.
+    reent->_errno = ENOTSUP;
     return -1;
 }
 
 int _link_r(struct _reent *reent, const char *old, const char *new)
 {
-    // TODO
+    // TODO: Implement link once we have FS support.
+    reent->_errno = ENOTSUP;
     return -1;
 }
 
 int _rename_r (struct _reent *reent, const char *old, const char *new)
 {
-    // TODO
+    // TODO: Implement rename once we have FS support.
+    reent->_errno = ENOTSUP;
     return -1;
 }
 
 void *_sbrk_r(struct _reent *reent, ptrdiff_t incr)
 {
-    // TODO: This is not re-entrant
-    extern char end;      /* Defined by the linker */
+    // TODO: This is not re-entrant, but it's not possible to make so. We need
+    // to disable and re-enable interrupts here, but we don't support interrupts yet.
+
+    extern char end;      /* Defined by the linker in naomi.ld */
     static char *heap_end;
     char *prev_heap_end;
+    register char *stack_ptr asm("r15");
 
     if(heap_end == 0)
     {
@@ -217,8 +304,8 @@ void *_sbrk_r(struct _reent *reent, ptrdiff_t incr)
     prev_heap_end = heap_end;
     if(heap_end + incr > stack_ptr)
     {
-        _write_r(reent, 1, "Heap and stack collision\n", 25);
-        abort();
+        reent->_errno = ENOMEM;
+        return (void *)-1;
     }
     heap_end += incr;
     return prev_heap_end;
@@ -226,79 +313,91 @@ void *_sbrk_r(struct _reent *reent, ptrdiff_t incr)
 
 int _fstat_r(struct _reent *reent, int file, struct stat *st)
 {
-    // TODO
+    // TODO: Implement fstat once we have FS support.
+    reent->_errno = ENOTSUP;
     return -1;
 }
 
 int _mkdir_r(struct _reent *reent, const char *path, int flags)
 {
-    // TODO
+    // TODO: Implement mkdir once we have FS support.
+    reent->_errno = ENOTSUP;
     return -1;
 }
 
 int _open_r(struct _reent *reent, const char *path, int flags, int unk)
 {
-    // TODO
+    // TODO: Implement open once we have FS support.
+    reent->_errno = ENOTSUP;
     return -1;
 }
 
 int _unlink_r(struct _reent *reent, const char *path)
 {
-    // TODO
+    // TODO: Implement unlink once we have FS support.
+    reent->_errno = ENOTSUP;
     return -1;
 }
 
 int _isatty_r(struct _reent *reent, int fd)
 {
-    // TODO
+    // TODO: Implement isatty once we have some sort of console bridge support.
+    reent->_errno = ENOTSUP;
     return -1;
 }
 
 int _kill_r(struct _reent *reent, int n, int m)
 {
-    // TODO
+    // TODO: Implement kill once we have threads support.
+    reent->_errno = ENOTSUP;
     return -1;
 }
 
 int _getpid_r(struct _reent *reent)
 {
-    // TODO
+    // TODO: Implement getpid once we have threads support.
+    reent->_errno = ENOTSUP;
     return -1;
 }
 
 int _stat_r(struct _reent *reent, const char *path, struct stat *st)
 {
-    // TODO
+    // TODO: Implement stat once we have FS support.
+    reent->_errno = ENOTSUP;
     return -1;
 }
 
 int _fork_r(struct _reent *reent)
 {
-    // TODO
+    // TODO: Implement fork once we have threads support.
+    reent->_errno = ENOTSUP;
     return -1;
 }
 
 int _wait_r(struct _reent *reent, int *statusp)
 {
-    // TODO
+    // TODO: Implement wait once we have threads support.
+    reent->_errno = ENOTSUP;
     return -1;
 }
 
 int _execve_r(struct _reent *reent, const char *path, char *const argv[], char *const envp[])
 {
-    // TODO
+    // TODO: Implement execve once we have threads support.
+    reent->_errno = ENOTSUP;
     return -1;
 }
 
 _CLOCK_T_ _times_r(struct _reent *reent, struct tms *tm)
 {
-    // TODO
+    // TODO: Implement times once we have threads support.
+    reent->_errno = ENOTSUP;
     return -1;
 }
 
 int _gettimeofday_r(struct _reent *reent, struct timeval *tv, void *tz)
 {
-    // TODO
+    // TODO: Implement gettimeofday once we have RTC support.
     tv->tv_usec = 0;
     tv->tv_sec = 0;
     return 0;

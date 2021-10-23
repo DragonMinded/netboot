@@ -197,7 +197,7 @@ uint32_t rgb(unsigned int r, unsigned int g, unsigned int b)
     }
     else
     {
-        // TODO
+        // TODO: 32-bit video modes.
         return 0;
     }
 }
@@ -211,7 +211,7 @@ uint32_t rgba(unsigned int r, unsigned int g, unsigned int b, unsigned int a)
     }
     else
     {
-        // TODO
+        // TODO: 32-bit video modes.
         return 0;
     }
 }
@@ -224,7 +224,7 @@ void explodergb(uint32_t color, unsigned int *r, unsigned int *g, unsigned int *
     }
     else
     {
-        // TODO
+        // TODO: 32-bit video modes.
         *r = 0;
         *g = 0;
         *b = 0;
@@ -239,7 +239,7 @@ void explodergba(uint32_t color, unsigned int *r, unsigned int *g, unsigned int 
     }
     else
     {
-        // TODO
+        // TODO: 32-bit video modes.
         *r = 0;
         *g = 0;
         *b = 0;
@@ -348,7 +348,7 @@ void video_fill_box(int x0, int y0, int x1, int y1, uint32_t color)
     }
     else
     {
-        // TODO
+        // TODO: 32-bit video modes.
     }
 }
 
@@ -692,7 +692,7 @@ void video_draw_sprite( int x, int y, int width, int height, void *data )
     }
     else
     {
-        // TODO
+        // TODO: 32-bit video modes.
     }
 }
 

@@ -207,8 +207,7 @@ void parse_eeprom(uint8_t *data, eeprom_t *eeprom)
 
 void unparse_eeprom(uint8_t *data, eeprom_t *eeprom)
 {
-    // First, make sure that we set up the full data, even bytes we don't
-    // touch.
+    // First, make sure that we set up the full data, even bytes we don't touch.
     memset(data, 0xFF, 128);
 
     // Now, unparse the system settings.
@@ -319,7 +318,6 @@ void unparse_eeprom(uint8_t *data, eeprom_t *eeprom)
 int eeprom_read(eeprom_t *eeprom)
 {
     uint8_t data[128];
-    memset(data, 0, 128);
 
     // First, attempt to read from the actual chip.
     if(maple_request_eeprom_read(data) == 0)

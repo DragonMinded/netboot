@@ -31,6 +31,10 @@ extern "C" {
 // the fastest tight loop that you can write in software.
 void hw_memset(void *addr, uint32_t value, unsigned int amount);
 
+// A 32-byte aligned and 32-byte multiple hardware memcpy that is similarly faster than
+// the fastest tight loop that you can write in software.
+void hw_memcpy(void *addr, void *src, unsigned int amount);
+
 // Syscalls that request the BIOS do something.
 void enter_test_mode();
 

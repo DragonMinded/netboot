@@ -274,7 +274,7 @@ void __draw_bitmap(int x, int y, unsigned int width, unsigned int height, unsign
         }
         else
         {
-            // TODO
+            // TODO: Need to support 32-bit video modes.
         }
     }
     else

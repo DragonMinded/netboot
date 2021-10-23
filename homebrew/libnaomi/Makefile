@@ -4,7 +4,7 @@
 all: libnaomi.a
 
 # The source files that make libnaomi.a tick.
-SRCS += crt0.s
+SRCS += sh-crt0.s
 SRCS += system.c
 SRCS += timer.c
 SRCS += dimmcomms.c
@@ -20,7 +20,7 @@ include ../Makefile.base
 # Special-case for AICA binary, since it is an ARM executable. This is
 # stored in the main executable as the default AICA binary which can be
 # loaded by homebrew wishing to use sound.
-build/arm/base.o: base.s
+build/arm/arm-crt0.o: arm-crt0.s
 	@mkdir -p $(dir $@)
 	${ARMAS} -o $@ $<
 
@@ -30,7 +30,7 @@ build/arm/aica.o: aica.c
 	@mkdir -p $(dir $@)
 	${ARMCC} -c -o $@ $<
 
-build/arm/aica.elf: build/arm/base.o build/arm/aica.o build/arm/success.o
+build/arm/aica.elf: build/arm/arm-crt0.o build/arm/aica.o build/arm/success.o
 	@mkdir -p $(dir $@)
 	${ARMLD} -o $@ $^ ${ARMLIBS}
 
