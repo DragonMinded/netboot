@@ -235,7 +235,6 @@ void hw_memcpy(void *dest, void *src, unsigned int amount)
     queue[8] = 0;
 }
 
-
 void enter_test_mode()
 {
     // Look up the address of the enter test mode syscall.
@@ -245,11 +244,83 @@ void enter_test_mode()
     ((void (*)())test_mode_syscall)();
 }
 
+// Currently hooked stdio calls.
+static stdio_t stdio_hooks = { 0, 0, 0 };
+
+int hook_stdio_calls( stdio_t *stdio_calls )
+{
+    if( stdio_calls == NULL )
+    {
+        /* Failed to hook, bad input */
+        return -1;
+    }
+
+    /* Safe to hook */
+    if (stdio_calls->stdin_read)
+    {
+        stdio_hooks.stdin_read = stdio_calls->stdin_read;
+    }
+    if (stdio_calls->stdout_write)
+    {
+        stdio_hooks.stdout_write = stdio_calls->stdout_write;
+    }
+    if (stdio_calls->stderr_write)
+    {
+        stdio_hooks.stderr_write = stdio_calls->stderr_write;
+    }
+
+    /* Success */
+    return 0;
+}
+
+int unhook_stdio_calls( stdio_t *stdio_calls )
+{
+    /* Just wipe out internal variable */
+    if (stdio_calls->stdin_read == stdio_hooks.stdin_read)
+    {
+        stdio_hooks.stdin_read = 0;
+    }
+    if (stdio_calls->stdout_write == stdio_hooks.stdout_write)
+    {
+        stdio_hooks.stdout_write = 0;
+    }
+    if (stdio_calls->stderr_write == stdio_hooks.stderr_write)
+    {
+        stdio_hooks.stderr_write = 0;
+    }
+
+    /* Always successful for now */
+    return 0;
+}
+
+
 _ssize_t _read_r(struct _reent *reent, int file, void *ptr, size_t len)
 {
-    // TODO: Implement read once we have FS support.
-    reent->_errno = ENOTSUP;
-    return -1;
+    if( file == 0 )
+    {
+        if( stdio_hooks.stdin_read )
+        {
+            return stdio_hooks.stdin_read( ptr, len );
+        }
+        else
+        {
+            /* No hook for this */
+            reent->_errno = EBADF;
+            return -1;
+        }
+    }
+    else if( file == 1 || file == 2 )
+    {
+        /* Can't read from output buffers */
+        reent->_errno = EBADF;
+        return -1;
+    }
+    else
+    {
+        // TODO: Implement read once we have FS support.
+        reent->_errno = ENOTSUP;
+        return -1;
+    }
 }
 
 _off_t _lseek_r(struct _reent *reent, int file, _off_t amount, int dir)
@@ -261,9 +332,42 @@ _off_t _lseek_r(struct _reent *reent, int file, _off_t amount, int dir)
 
 _ssize_t _write_r(struct _reent *reent, int file, const void * ptr, size_t len)
 {
-    // TODO: Implement write once we have FS support.
-    reent->_errno = ENOTSUP;
-    return -1;
+    if( file == 0 )
+    {
+        /* Can't write to input buffers */
+        reent->_errno = EBADF;
+        return -1;
+    }
+    else if( file == 1 )
+    {
+        if( stdio_hooks.stdout_write )
+        {
+            return stdio_hooks.stdout_write( ptr, len );
+        }
+        else
+        {
+            reent->_errno = EBADF;
+            return -1;
+        }
+    }
+    else if( file == 2 )
+    {
+        if( stdio_hooks.stderr_write )
+        {
+            return stdio_hooks.stderr_write( ptr, len );
+        }
+        else
+        {
+            reent->_errno = EBADF;
+            return -1;
+        }
+    }
+    else
+    {
+        // TODO: Implement write once we have FS support.
+        reent->_errno = ENOTSUP;
+        return -1;
+    }
 }
 
 int _close_r(struct _reent *reent, int file)

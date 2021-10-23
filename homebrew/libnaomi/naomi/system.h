@@ -42,6 +42,17 @@ void enter_test_mode();
 unsigned int utf8_strlen(const char * const str);
 uint32_t *utf8_convert(const char * const str);
 
+typedef struct
+{
+    int (*stdin_read)( char * const data, unsigned int len );
+    int (*stdout_write)( const char * const data, unsigned int len );
+    int (*stderr_write)( const char * const data, unsigned int len );
+} stdio_t;
+
+// Allow stdin/stdout/stderr to be hooked by external functions.
+int hook_stdio_calls( stdio_t *stdio_calls );
+int unhook_stdio_calls( stdio_t *stdio_calls );
+
 #ifdef __cplusplus
 }
 #endif

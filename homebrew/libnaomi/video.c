@@ -6,6 +6,7 @@
 #include "naomi/system.h"
 #include "naomi/dimmcomms.h"
 #include "naomi/eeprom.h"
+#include "naomi/console.h"
 #include "video-internal.h"
 #include "font.h"
 
@@ -35,6 +36,9 @@ void *buffer_base = 0;
 void video_wait_for_vblank()
 {
     volatile unsigned int *videobase = (volatile unsigned int *)POWERVR2_BASE;
+
+    // Draw any registered console to the screen.
+    console_render();
 
     // Poll for dimm communications during wait for vblank, since this is
     // a convenient place to put this. It probably should go int an interrupt
