@@ -21,6 +21,7 @@ typedef void (*test_func_t)(test_context_t *context);
 #define TEST_PASSED 0
 #define TEST_FAILED 1
 #define TEST_SKIPPED 2
+#define TEST_TOO_LONG 3
 
 #define LOG(msg, ...) \
 do { \
@@ -43,6 +44,22 @@ do { \
         return; \
     } \
 } while(0)
+
+#define ASSERT_ARRAYS_EQUAL(expected, actual, msg, ...) \
+do { \
+    for (unsigned int __pos = 0; __pos < (sizeof(expected) / sizeof((expected)[0])); __pos++) { \
+        if (expected[__pos] != actual[__pos]) { \
+            context->result = TEST_FAILED; \
+            int __len = snprintf(context->reason, context->reasonleft, "assertion failure"); \
+            context->reason += __len; \
+            context->reasonleft -= __len; \
+            LOG("ASSERTION FAILED (%s:%d):\n  %s[%d] != %s[%d],\n  ", context->name, __LINE__, #expected, __pos, #actual, __pos); \
+            LOG(msg, ##__VA_ARGS__); \
+            return; \
+        } \
+    } \
+} while(0)
+
 
 #define SKIP(msg, ...) \
 do { \
@@ -136,7 +153,14 @@ void main()
         uint32_t nsec = profile_end(profile);
         total_duration += nsec;
 
-        // TODO: Variance testing for tests that define a duration.
+        if (context.result == TEST_PASSED && tests[testno].duration >= 0)
+        {
+            if (nsec > tests[testno].duration)
+            {
+                context.result = TEST_TOO_LONG;
+                snprintf(context.reason, context.reasonleft, "duration larger than %d", tests[testno].duration);
+            }
+        }
 
         if (context.result == TEST_PASSED)
         {
@@ -154,6 +178,18 @@ void main()
                 printf("SKIPPED, %ldns\n", nsec);
             }
             skipped ++;
+        }
+        else if (context.result == TEST_TOO_LONG)
+        {
+            if (strlen(reasonbuffer))
+            {
+                printf("FAILED, %ldns (%s)\n", nsec, reasonbuffer);
+            }
+            else
+            {
+                printf("FAILED, %ldns\n", nsec);
+            }
+            failed ++;
         }
         else if (context.result == TEST_FAILED)
         {
