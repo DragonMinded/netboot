@@ -39,7 +39,7 @@ do { \
         int __len = snprintf(context->reason, context->reasonleft, "assertion failure"); \
         context->reason += __len; \
         context->reasonleft -= __len; \
-        LOG("ASSERTION FAILED (%s:%d): %s, ", context->name, __LINE__, #condition); \
+        LOG("ASSERTION FAILED (%s:%d):\n  %s,\n  ", context->name, __LINE__, #condition); \
         LOG(msg, ##__VA_ARGS__); \
         return; \
     } \

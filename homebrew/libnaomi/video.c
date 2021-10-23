@@ -22,7 +22,10 @@ static uint32_t global_background_fill_start = 0;
 static uint32_t global_background_fill_end = 0;
 static uint32_t global_background_fill_color = 0;
 static unsigned int global_background_set = 0;
-static uint32_t global_buffer_offset[2];
+
+// We only use two of these for rendering. The third is so we can
+// give a pointer out to scratch VRAM for other code to use.
+static uint32_t global_buffer_offset[3];
 
 // Nonstatic so that other video modules can use it as well.
 unsigned int global_video_width = 0;
@@ -93,7 +96,8 @@ void video_init_simple()
     global_background_color = 0;
     global_background_set = 0;
     global_buffer_offset[0] = 0;
-    global_buffer_offset[1] = global_video_width * global_video_height * global_video_depth;
+    global_buffer_offset[1] = global_buffer_offset[0] + (global_video_width * global_video_height * global_video_depth);
+    global_buffer_offset[2] = global_buffer_offset[1] + (global_video_width * global_video_height * global_video_depth);
 
     // First, read the EEPROM and figure out if we're vertical orientation.
     eeprom_t eeprom;
@@ -772,4 +776,9 @@ void video_display()
     }
     global_background_fill_start = 0;
     global_background_fill_end = 0;
+}
+
+void *video_scratch_area()
+{
+    return(void *)((VRAM_BASE + global_buffer_offset[2]) | 0xA0000000);
 }

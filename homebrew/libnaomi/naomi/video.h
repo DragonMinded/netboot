@@ -78,6 +78,10 @@ unsigned int video_height();
 // be 2 or 4 depending on the video mode.
 unsigned int video_depth();
 
+// Scratch memory area in the VRAM region safe to modify without possibly
+// corrupting video contents.
+void *video_scratch_area();
+
 // Returns nonzero if the screen is in vertical orientation, or zero if
 // the screen is in horizontal orientation. This is for convenience, the
 // pixel-based drawing functions always treat the top left of the screen
