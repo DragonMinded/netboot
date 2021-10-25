@@ -37,6 +37,11 @@ class NaomiRomRegionEnum(Enum):
     REGION_AUSTRALIA = 4
 
 
+class NaomiRomVersionEnum(Enum):
+    VERSION_NAOMI_1 = 1
+    VERSION_NAOMI_2 = 2
+
+
 class NaomiEEPROMDefaults:
     def __init__(
         self,
@@ -96,7 +101,7 @@ class NaomiRom:
 
     @property
     def valid(self) -> bool:
-        return self.data[0x000:0x010] == b'NAOMI           '
+        return self.data[0x000:0x010] in {b'NAOMI           ', b'Naomi2          '}
 
     def _raise_on_invalid(self) -> None:
         if not self.valid:
@@ -133,6 +138,26 @@ class NaomiRom:
 
     def _sanitize_uint8(self, offset: int) -> int:
         return cast(int, struct.unpack("<B", self.data[offset:(offset + 1)])[0])
+
+    @property
+    def version(self) -> NaomiRomVersionEnum:
+        self._raise_on_invalid()
+        if self.data[0x000:0x010] == b'NAOMI           ':
+            return NaomiRomVersionEnum.VERSION_NAOMI_1
+        elif self.data[0x000:0x010] == b'Naomi2          ':
+            return NaomiRomVersionEnum.VERSION_NAOMI_2
+        else:
+            raise Exception("Logic error!")
+
+    @version.setter
+    def version(self, val: NaomiRomVersionEnum) -> None:
+        self._raise_on_invalid()
+        if val == NaomiRomVersionEnum.VERSION_NAOMI_1:
+            self._inject(0x000, b'NAOMI           ')
+        elif val == NaomiRomVersionEnum.VERSION_NAOMI_2:
+            self._inject(0x000, b'Naomi2          ')
+        else:
+            raise NaomiRomException(f"Invalid Naomi header version value {val}!")
 
     @property
     def publisher(self) -> str:
