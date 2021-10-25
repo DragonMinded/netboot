@@ -119,7 +119,7 @@ void main()
     console_init(16);
 
     printf("====================\n");
-    printf("Starting tests\n");
+    printf("Starting tests\n%d tests to run\n", (sizeof(tests) / sizeof(tests[0])));
     printf("====================\n\n");
     wait_and_display();
 
@@ -214,7 +214,7 @@ void main()
     }
 
     printf("\n====================\n");
-    printf("Finished, %d pass, %d fail, %d skip, %ldns total duration\n", passed, failed, skipped, total_duration);
+    printf("Finished\n%d pass, %d fail, %d skip\n%ldns total duration\n", passed, failed, skipped, total_duration);
     printf("====================\n");
 
     while ( 1 )
