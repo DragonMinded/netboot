@@ -8,7 +8,7 @@ all: netbootmenu.bin
 # one of these files is not found, make will complain about a
 # missing missing `build/naomi.bin' target, so make sure all of
 # these files exist.
-SRCS += main.c helvetica.ttf build/up.o build/dn.o build/cursor.o
+SRCS += main.c dejavusans.ttf build/up.o build/dn.o build/cursor.o
 
 # Libraries we need to link against.
 LIBS += -lfreetype -lbz2 -lz -lpng16

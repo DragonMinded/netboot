@@ -761,6 +761,8 @@ typedef struct __attribute__((__packed__))
     uint8_t joy2_hmax;
     uint8_t joy2_vmin;
     uint8_t joy2_vmax;
+    uint32_t fallback_font_offset;
+    uint32_t fallback_font_size;
 } config_t;
 
 config_t *get_config()
@@ -775,6 +777,20 @@ games_list_t *get_games_list(unsigned int *count)
     config_t *config = get_config();
     *count = config->games_count;
     return (games_list_t *)(CONFIG_MEMORY_LOCATION + config->game_list_offset);
+}
+
+uint8_t *get_fallback_font(unsigned int *size)
+{
+    config_t *config = get_config();
+    *size = config->fallback_font_size;
+    if (config->fallback_font_size && config->fallback_font_offset)
+    {
+        return (uint8_t *)(CONFIG_MEMORY_LOCATION + config->fallback_font_offset);
+    }
+    else
+    {
+        return 0;
+    }
 }
 
 unsigned int repeat(unsigned int cur_state, int *repeat_count, double fps)
@@ -835,8 +851,8 @@ void repeat_init(unsigned int pushed_state, int *repeat_count)
 #define ANALOG_THRESH_ON 0x30
 #define ANALOG_THRESH_OFF 0x20
 
-extern uint8_t *helvetica_ttf_data;
-extern unsigned int helvetica_ttf_len;
+extern uint8_t *dejavusans_ttf_data;
+extern unsigned int dejavusans_ttf_len;
 
 extern unsigned int up_png_width;
 extern unsigned int up_png_height;
@@ -1209,14 +1225,14 @@ void display_test_error(state_t *state)
     );
 
     video_draw_text(
-        halfwidth - (ERROR_BOX_WIDTH / 2) + 37,
+        halfwidth - (ERROR_BOX_WIDTH / 2) + 22,
         ERROR_BOX_TOP + 10,
         state->font_12pt,
         rgb(255, 0, 0),
         "Cannot edit menu settings on this screen!"
     );
     video_draw_text(
-        halfwidth - (ERROR_BOX_WIDTH / 2) + 27,
+        halfwidth - (ERROR_BOX_WIDTH / 2) + 12,
         ERROR_BOX_TOP + 25,
         state->font_12pt,
         rgb(255, 0, 0),
@@ -2020,10 +2036,19 @@ void main()
     selected_game = state.config->boot_selection;
 
     // Attach our fonts
-    state.font_18pt = video_font_add(helvetica_ttf_data, helvetica_ttf_len);
+    state.font_18pt = video_font_add(dejavusans_ttf_data, dejavusans_ttf_len);
     video_font_set_size(state.font_18pt, 18);
-    state.font_12pt = video_font_add(helvetica_ttf_data, helvetica_ttf_len);
+    state.font_12pt = video_font_add(dejavusans_ttf_data, dejavusans_ttf_len);
     video_font_set_size(state.font_12pt, 12);
+
+    // Add fallbacks if they are provided, for rendering CJK or other characters.
+    unsigned int fallback_size;
+    uint8_t *fallback_data = get_fallback_font(&fallback_size);
+    if (fallback_size && fallback_data)
+    {
+        video_font_add_fallback(state.font_18pt, fallback_data, fallback_size);
+        video_font_add_fallback(state.font_12pt, fallback_data, fallback_size);
+    }
 
     // What screen we're on right now.
     unsigned int curscreen = SCREEN_MAIN_MENU;
