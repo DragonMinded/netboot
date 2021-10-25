@@ -92,8 +92,9 @@ uint32_t *maple_swap_data(unsigned int port, int peripheral, unsigned int cmd, u
 
     // Now, construct the maple request transfer descriptor.
     send[0] = (
-        1 << 31 |         // This is the last entry in the transfer descriptor.
-        (datalen & 0xFF)  // Length is how many extra bytes of payload we are including.
+        1 << 31 |               // This is the last entry in the transfer descriptor.
+        ((port & 0x3) << 16) |  // Set DMA port as well
+        (datalen & 0xFF)        // Length is how many extra bytes of payload we are including.
     );
     send[1] = buffer;
     send[2] = (
@@ -310,8 +311,8 @@ int maple_request_update(void *binary, unsigned int len)
         memcpy(&data[4], binloc, len > 24 ? 24 : len);
 
         // Now, set the address to copy to.
-        data[0] = memloc & 0xFF;
-        data[1] = (memloc >> 8) & 0xFF;
+        data[3] = memloc & 0xFF;
+        data[2] = (memloc >> 8) & 0xFF;
 
         // Now, calculate the checksum.
         uint8_t checksum = 0;
@@ -322,7 +323,7 @@ int maple_request_update(void *binary, unsigned int len)
 
         resp = maple_swap_data(0, 0, MAPLE_NAOMI_UPLOAD_CODE_REQUEST, 28 / 4, data);
 
-        if(maple_response_code(resp) != MAPLE_NAOMI_UPLOAD_CODE_RESPONSE)
+        if(maple_response_code(resp) != MAPLE_NAOMI_UPLOAD_CODE_RESPONSE && (maple_response_code(resp) != MAPLE_NAOMI_UPLOAD_CODE_BOOTUP_RESPONSE))
         {
             return -1;
         }
@@ -330,7 +331,7 @@ int maple_request_update(void *binary, unsigned int len)
         {
             return -1;
         }
-        if(((resp[1] >> 16) & 0xFFFF) != memloc)
+        if((((resp[1] & 0xFF0000) >> 8) | ((resp[1] & 0xFF000000) >> 24)) != memloc)
         {
             return -2;
         }
