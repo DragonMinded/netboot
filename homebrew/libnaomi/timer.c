@@ -125,14 +125,26 @@ uint32_t timer_elapsed(int timer)
     return reset_values[timer] - timer_left(timer);
 }
 
-int profile_start()
+int timer_available()
 {
     for (int i = 0; i < MAX_TIMERS; i++)
     {
-        if (!timers_used[i]) {
-            timer_start(i, 1000000);
+        if (!timers_used[i])
+        {
             return i;
         }
+    }
+
+    return -1;
+}
+
+int profile_start()
+{
+    int timer = timer_available();
+    if (timer >= 0)
+    {
+        timer_start(timer, MAX_PROFILE_MICROSECONDS);
+        return timer;
     }
 
     return -1;

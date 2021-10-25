@@ -18,6 +18,9 @@ void timer_free();
 // Wait for the specified number of microseconds in a spin loop.
 void timer_wait(uint32_t microseconds);
 
+// Grab the next available timer handle.
+int timer_available();
+
 // Start a timer that will expire after specified microseconds have elapsed.
 void timer_start(int timer, uint32_t microseconds);
 
@@ -29,6 +32,9 @@ uint32_t timer_left(int timer);
 
 // Return the number of microseconds elapsed on an active timer.
 uint32_t timer_elapsed(int timer);
+
+// Maximum number of microseconds a thing that is being profiled can last.
+#define MAX_PROFILE_MICROSECONDS 10000000
 
 // Start a timer for the purpose of profiling code. This has granularity up to 1 second.
 int profile_start();

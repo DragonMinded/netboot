@@ -4,6 +4,9 @@
 
 void load_aica_binary(void *binary, unsigned int length)
 {
+    // Note that for this to work without bugs or weirdness on the ARM side, the ARM
+    // binary pointer should be 4-byte aligned, and the length should be a multiple
+    // of 4. Any other configuration asks for undefined behavior.
     volatile unsigned int *aicabase = (volatile unsigned int *)AICA_BASE;
 
     // Set up 16-bit wave memory size.
@@ -13,13 +16,12 @@ void load_aica_binary(void *binary, unsigned int length)
     aicabase[AICA_RESET] |= 0x1;
 
     // Do the BSS-init for the ARM binary.
-    for(int memloc = 0; memloc < SOUNDRAM_SIZE; memloc+= 4)
-    {
-        *((uint32_t *)((SOUNDRAM_BASE | UNCACHED_MIRROR) + memloc)) = 0;
-    }
+    hw_memset((void *)(SOUNDRAM_BASE | UNCACHED_MIRROR), 0, SOUNDRAM_SIZE);
 
     // Copy the binary to the AICA MCU.
-    for(int memloc = 0; memloc < length; memloc+= 4)
+    unsigned int hw_copy_amount = length & 0xFFFFFFE0;
+    hw_memcpy((void *)(SOUNDRAM_BASE | UNCACHED_MIRROR), binary, hw_copy_amount);
+    for(unsigned int memloc = hw_copy_amount; memloc < length; memloc+= 4)
     {
         *((uint32_t *)((SOUNDRAM_BASE | UNCACHED_MIRROR) + memloc)) = *((uint32_t *)(((uint32_t)binary) + memloc));
     }
