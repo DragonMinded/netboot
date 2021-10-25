@@ -246,19 +246,19 @@ void unparse_eeprom(uint8_t *data, eeprom_t *eeprom)
     if (eeprom->system.coins_per_credit < 1 || eeprom->system.coins_per_credit > 9) {
         system[8] = 1;
     } else {
-        system[8] = eeprom->system.coins_per_credit - 1;
+        system[8] = eeprom->system.coins_per_credit;
     }
 
     if (eeprom->system.chute_1_multiplier < 1 || eeprom->system.chute_1_multiplier > 9) {
         system[9] = 1;
     } else {
-        system[9] = eeprom->system.chute_1_multiplier - 1;
+        system[9] = eeprom->system.chute_1_multiplier;
     }
 
     if (eeprom->system.chute_2_multiplier < 1 || eeprom->system.chute_2_multiplier > 9) {
         system[10] = 1;
     } else {
-        system[10] = eeprom->system.chute_2_multiplier - 1;
+        system[10] = eeprom->system.chute_2_multiplier;
     }
 
     if (eeprom->system.bonus_coin == 1 || eeprom->system.bonus_coin > 9) {
