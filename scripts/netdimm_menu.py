@@ -428,6 +428,13 @@ def main() -> int:
         help="Enable extra debugging information on the Naomi.",
     )
     parser.add_argument(
+        '--fallback-font',
+        metavar="FILE",
+        type=str,
+        default=None,
+        help="Any truetype font that should be used as a fallback if the built-in font can't render a character.",
+    )
+    parser.add_argument(
         '--verbose',
         action="store_true",
         help="Display verbose debugging information.",
@@ -503,15 +510,20 @@ def main() -> int:
         last_game_id: int = 0
         gamesconfig = b""
         for index, (filename, name, serial) in enumerate(games):
-            namebytes = name.encode('ascii')[:127]
+            namebytes = name.encode('utf-8')[:127]
             while len(namebytes) < 128:
                 namebytes = namebytes + b"\0"
             gamesconfig += namebytes + serial + struct.pack("<I", index)
             if filename == settings.last_game_file:
                 last_game_id = index
 
+        fallback_data = None
+        if args.fallback_font is not None:
+            with open(args.fallback_font, "rb") as fp:
+                fallback_data = fp.read()
+
         config = struct.pack(
-            "<IIIIIIIBBBBBBBBBBBB",
+            "<IIIIIIIBBBBBBBBBBBBII",
             SETTINGS_SIZE,
             len(games),
             1 if settings.enable_analog else 0,
@@ -531,10 +543,14 @@ def main() -> int:
             settings.joy2_calibration[3],
             settings.joy2_calibration[4],
             settings.joy2_calibration[5],
+            SETTINGS_SIZE + len(gamesconfig) if fallback_data is not None else 0,
+            len(fallback_data) if fallback_data is not None else 0,
         )
         if len(config) < SETTINGS_SIZE:
             config = config + (b"\0" * (SETTINGS_SIZE - len(config)))
         config = config + gamesconfig
+        if fallback_data is not None:
+            config = config + fallback_data
 
         # Now, load up the menu ROM and append the settings to it.
         if success:
@@ -558,6 +574,8 @@ def main() -> int:
                         print("Sending failed...")
 
         # Now, talk to the net dimm and exchange packets to handle settings and game selection.
+        selected_filename = None
+
         if success:
             print("Talking to net dimm to wait for ROM selection...")
             time.sleep(5)
@@ -565,61 +583,60 @@ def main() -> int:
             try:
                 # Always show game send progress.
                 netdimm = NetDimm(args.ip, log=print)
-                while True:
-                    msg = receive_message(netdimm)
-                    if msg:
-                        if verbose:
-                            print(f"Received type: {hex(msg.id)}, length: {len(msg.data)}")
+                with netdimm.connection():
+                    while True:
+                        msg = receive_message(netdimm)
+                        if msg:
+                            if verbose:
+                                print(f"Received type: {hex(msg.id)}, length: {len(msg.data)}")
 
-                        if msg.id == MESSAGE_SELECTION:
-                            index = struct.unpack("<I", msg.data)[0]
-                            filename = games[index][0]
-                            print(f"Requested {games[index][1]} be loaded...")
+                            if msg.id == MESSAGE_SELECTION:
+                                index = struct.unpack("<I", msg.data)[0]
+                                filename = games[index][0]
+                                print(f"Requested {games[index][1]} be loaded...")
 
-                            # Save the menu position.
-                            settings.last_game_file = filename
-                            settings_save(args.menu_settings_file, args.ip, settings)
-
-                            # Wait a second for animation on the Naomi.
-                            time.sleep(1.0)
-
-                            with open(filename, "rb") as fp:
-                                gamedata = FileBytes(fp)
-                                netdimm.send(gamedata, disable_crc_check=True)
-                                netdimm.reboot()
-                            break
-
-                        elif msg.id == MESSAGE_LOAD_SETTINGS:
-                            index = struct.unpack("<I", msg.data)[0]
-                            filename = games[index][0]
-                            print(f"Requested settings for {games[index][1]}...")
-                            send_message(netdimm, Message(MESSAGE_LOAD_SETTINGS_ACK, msg.data))
-
-                        elif msg.id == MESSAGE_SAVE_CONFIG:
-                            if len(msg.data) == SETTINGS_SIZE:
-                                (
-                                    _,
-                                    _,
-                                    analogsetting,
-                                    _,
-                                    _,
-                                    regionsetting,
-                                    filenamesetting,
-                                    *rest,
-                                ) = struct.unpack("<IIIIIIIBBBBBBBBBBBB", msg.data[:40])
-                                print("Requested configuration save...")
-
-                                joy1 = [rest[0], rest[1], rest[4], rest[5], rest[6], rest[7]]
-                                joy2 = [rest[2], rest[3], rest[8], rest[9], rest[10], rest[11]]
-
-                                settings.enable_analog = analogsetting != 0
-                                settings.use_filenames = filenamesetting != 0
-                                settings.system_region = NaomiRomRegionEnum(regionsetting)
-                                settings.joy1_calibration = joy1
-                                settings.joy2_calibration = joy2
+                                # Save the menu position.
+                                settings.last_game_file = filename
                                 settings_save(args.menu_settings_file, args.ip, settings)
 
-                                send_message(netdimm, Message(MESSAGE_SAVE_CONFIG_ACK))
+                                # Wait a second for animation on the Naomi.
+                                time.sleep(1.0)
+
+                                # Remember selected filename.
+                                selected_filename = filename
+                                break
+
+                            elif msg.id == MESSAGE_LOAD_SETTINGS:
+                                index = struct.unpack("<I", msg.data)[0]
+                                filename = games[index][0]
+                                print(f"Requested settings for {games[index][1]}...")
+                                send_message(netdimm, Message(MESSAGE_LOAD_SETTINGS_ACK, msg.data))
+
+                            elif msg.id == MESSAGE_SAVE_CONFIG:
+                                if len(msg.data) == SETTINGS_SIZE:
+                                    (
+                                        _,
+                                        _,
+                                        analogsetting,
+                                        _,
+                                        _,
+                                        regionsetting,
+                                        filenamesetting,
+                                        *rest,
+                                    ) = struct.unpack("<IIIIIIIBBBBBBBBBBBB", msg.data[:40])
+                                    print("Requested configuration save...")
+
+                                    joy1 = [rest[0], rest[1], rest[4], rest[5], rest[6], rest[7]]
+                                    joy2 = [rest[2], rest[3], rest[8], rest[9], rest[10], rest[11]]
+
+                                    settings.enable_analog = analogsetting != 0
+                                    settings.use_filenames = filenamesetting != 0
+                                    settings.system_region = NaomiRomRegionEnum(regionsetting)
+                                    settings.joy1_calibration = joy1
+                                    settings.joy2_calibration = joy2
+                                    settings_save(args.menu_settings_file, args.ip, settings)
+
+                                    send_message(netdimm, Message(MESSAGE_SAVE_CONFIG_ACK))
 
             except NetDimmException:
                 # Mark failure so we don't try to wait for power down below.
@@ -629,6 +646,24 @@ def main() -> int:
                     print("Communicating failed, will try again...")
                 else:
                     print("Communicating failed...")
+
+        if success and selected_filename is not None:
+            try:
+                # Always show game send progress.
+                netdimm = NetDimm(args.ip, log=print)
+
+                with open(filename, "rb") as fp:
+                    gamedata = FileBytes(fp)
+                    netdimm.send(gamedata, disable_crc_check=True)
+                    netdimm.reboot()
+            except NetDimmException:
+                # Mark failure so we don't try to wait for power down below.
+                success = False
+
+                if args.persistent:
+                    print("Sending game failed, will try again...")
+                else:
+                    print("Sending game failed...")
 
         if args.persistent:
             if success:
