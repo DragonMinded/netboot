@@ -27,14 +27,18 @@ font_t * video_font_add(void *buffer, unsigned int size)
 {
     FT_Library *library = __video_freetype_init();
     font_t *font = malloc(sizeof(font_t));
-    font->face = malloc(sizeof(FT_Face));
+    font->faces = malloc(sizeof(void *) * MAX_FALLBACK_SIZE);
+    memset(font->faces, 0, sizeof(void *) * MAX_FALLBACK_SIZE);
+    font->faces[0] = malloc(sizeof(FT_Face));
 
-    if (FT_New_Memory_Face(*library, buffer, size, 0, (FT_Face *)font->face))
+    if (FT_New_Memory_Face(*library, buffer, size, 0, (FT_Face *)font->faces[0]))
     {
-        free(font->face);
+        free(font->faces[0]);
+        free(font->faces);
         free(font);
         return 0;
     }
+    FT_Select_Charmap(*((FT_Face *)font->faces[0]), FT_ENCODING_UNICODE);
 
     font->cachesize = FONT_CACHE_SIZE;
     font->cacheloc = 0;
@@ -44,6 +48,31 @@ font_t * video_font_add(void *buffer, unsigned int size)
     video_font_set_size(font, 12);
 
     return font;
+}
+
+int video_font_add_fallback(font_t *font, void *buffer, unsigned int size)
+{
+    for (int i = 0; i < MAX_FALLBACK_SIZE; i++)
+    {
+        if (font->faces[i] == 0)
+        {
+            FT_Library *library = __video_freetype_init();
+            font->faces[i] = malloc(sizeof(FT_Face));
+            int error = FT_New_Memory_Face(*library, buffer, size, 0, (FT_Face *)font->faces[i]);
+            if (error)
+            {
+                free(font->faces[i]);
+                font->faces[i] = 0;
+                return error;
+            }
+            FT_Select_Charmap(*((FT_Face *)font->faces[i]), FT_ENCODING_UNICODE);
+            video_font_set_size(font, font->lineheight);
+
+            return 0;
+        }
+    }
+
+    return -1;
 }
 
 void __cache_discard(font_t *fontface)
@@ -107,9 +136,17 @@ void video_font_discard(font_t *fontface)
 {
     if (fontface)
     {
-        FT_Done_Face(*((FT_Face *)fontface->face));
+        for (int i = 0; i < MAX_FALLBACK_SIZE; i++)
+        {
+            if (fontface->faces[i] != 0)
+            {
+                FT_Done_Face(*((FT_Face *)fontface->faces[i]));
+                free(fontface->faces[i]);
+            }
+        }
         __cache_discard(fontface);
         free(fontface->cache);
+        free(fontface->faces);
         free(fontface);
     }
 }
@@ -118,10 +155,16 @@ int video_font_set_size(font_t *fontface, unsigned int size)
 {
     if (fontface)
     {
-        int error = FT_Set_Pixel_Sizes(*((FT_Face *)fontface->face), 0, size);
-        if (error)
+        for (int i = 0; i < MAX_FALLBACK_SIZE; i++)
         {
-            return error;
+            if (fontface->faces[i] != 0)
+            {
+                int error = FT_Set_Pixel_Sizes(*((FT_Face *)fontface->faces[i]), 0, size);
+                if (error)
+                {
+                    return error;
+                }
+            }
         }
 
         fontface->lineheight = size;
@@ -298,8 +341,24 @@ int video_draw_character(int x, int y, font_t *fontface, uint32_t color, int ch)
         }
         else
         {
-            // Grab the actual unicode glyph.
-            FT_Face *face = (FT_Face *)fontface->face;
+            // Grab the actual unicode glyph, searching through all fallbacks if we need to.
+            // faces[0] is always guaranteed to be valid, since that's our original non-fallback
+            // fontface. If none of the fonts has this glyph, then we fall back even further to
+            // the original font selected, and display the unicode error glyph.
+            FT_Face *face = (FT_Face *)fontface->faces[0];
+            for (int i = 0; i < MAX_FALLBACK_SIZE; i++)
+            {
+                if (fontface->faces[i] != 0)
+                {
+                    FT_UInt glyph_index = FT_Get_Char_Index( *((FT_Face *)fontface->faces[i]), ch );
+                    if (glyph_index != 0)
+                    {
+                        // This font has this glyph. Use this instead of the original.
+                        face = (FT_Face *)fontface->faces[i];
+                        break;
+                    }
+                }
+            }
             int error = FT_Load_Char(*face, ch, FT_LOAD_RENDER);
             if (error)
             {
@@ -352,7 +411,6 @@ int __video_draw_text( int x, int y, font_t *fontface, uint32_t color, const cha
     if (text)
     {
         uint32_t *freeptr = text;
-        FT_Face *face = (FT_Face *)fontface->face;
         unsigned int lineheight = fontface->lineheight;
 
         while( *text )
@@ -376,6 +434,8 @@ int __video_draw_text( int x, int y, font_t *fontface, uint32_t color, const cha
                     }
                     else
                     {
+                        // Every font should have a space, I'm not doing a fallack for that one.
+                        FT_Face *face = (FT_Face *)fontface->faces[0];
                         int error = FT_Load_Char(*face, ' ', FT_LOAD_RENDER);
                         if (error)
                         {
@@ -418,11 +478,25 @@ int __video_draw_text( int x, int y, font_t *fontface, uint32_t color, const cha
                     }
                     else
                     {
-                        int error = FT_Load_Char(*face, *text, FT_LOAD_RENDER);
-                        if (error == FT_Err_Invalid_Character_Code)
+                        // Grab the actual unicode glyph, searching through all fallbacks if we need to.
+                        // faces[0] is always guaranteed to be valid, since that's our original non-fallback
+                        // fontface. If none of the fonts has this glyph, then we fall back even further to
+                        // the original font selected, and display the unicode error glyph.
+                        FT_Face *face = (FT_Face *)fontface->faces[0];
+                        for (int i = 0; i < MAX_FALLBACK_SIZE; i++)
                         {
-                            error = FT_Load_Char(*face, '?', FT_LOAD_RENDER);
+                            if (fontface->faces[i] != 0)
+                            {
+                                FT_UInt glyph_index = FT_Get_Char_Index(*((FT_Face *)fontface->faces[i]), *text);
+                                if (glyph_index != 0)
+                                {
+                                    // This font has this glyph. Use this instead of the original.
+                                    face = (FT_Face *)fontface->faces[i];
+                                    break;
+                                }
+                            }
                         }
+                        int error = FT_Load_Char(*face, *text, FT_LOAD_RENDER);
                         if (error)
                         {
                             return error;

@@ -7,7 +7,8 @@ extern "C" {
 
 #include <stdint.h>
 
-#define FONT_CACHE_SIZE 256
+#define FONT_CACHE_SIZE 1024
+#define MAX_FALLBACK_SIZE 10
 
 typedef struct
 {
@@ -24,7 +25,7 @@ typedef struct
 
 typedef struct
 {
-    void *face;
+    void **faces;
     unsigned int lineheight;
     font_cache_entry_t **cache;
     unsigned int cachesize;
@@ -39,6 +40,10 @@ font_t *video_font_add(void *buffer, unsigned int size);
 
 // Discard a previously loaded fontface.
 void video_font_disard(font_t *fontface);
+
+// Add a fallback fontface to a previously created font for rendering
+// characters that do not appear in the original font.
+int video_font_add_fallback(font_t *fontface, void *buffer, unsigned int size);
 
 // Set the pixel size for a particular font
 int video_font_set_size(font_t *fontface, unsigned int size);
