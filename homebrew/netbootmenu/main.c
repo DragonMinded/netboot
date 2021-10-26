@@ -27,6 +27,12 @@ void main()
     state.config = get_config();
     state.test_error_counter = 0.0;
 
+    // Allow a force override of number of players on the cabinet.
+    if (state.config->force_players != 0)
+    {
+        settings.system.players = state.config->force_players;
+    }
+
     // Attach our fonts
     extern uint8_t *dejavusans_ttf_data;
     extern unsigned int dejavusans_ttf_len;

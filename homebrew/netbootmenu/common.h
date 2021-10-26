@@ -13,6 +13,8 @@ extern "C" {
 #define max(a,b) (((a) > (b)) ? (a) : (b))
 #endif
 
+void host_printf(char *msg, ...);
+
 #ifdef __cplusplus
 }
 #endif

@@ -39,6 +39,7 @@ typedef struct __attribute__((__packed__))
     uint8_t joy2_vmax;
     uint32_t fallback_font_offset;
     uint32_t fallback_font_size;
+    uint32_t force_players;
 } config_t;
 
 typedef struct

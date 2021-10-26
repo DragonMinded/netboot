@@ -7,11 +7,12 @@ import subprocess
 import sys
 import time
 import yaml
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
-from arcadeutils import FileBytes
+from arcadeutils import FileBytes, BinaryDiff
 from naomi import NaomiRom, NaomiRomRegionEnum, add_or_update_section
 from netdimm import NetDimm, NetDimmException, PeekPokeTypeEnum
+from netboot import PatchManager
 
 
 # The root of the repo.
@@ -281,6 +282,20 @@ def receive_message(netdimm: NetDimm) -> Optional[Message]:
     return Message(msgid, msgdata)
 
 
+class GameSettings:
+    def __init__(
+        self,
+        enabled_patches: Set[str],
+    ):
+        self.enabled_patches = enabled_patches
+
+    @staticmethod
+    def default() -> "GameSettings":
+        return GameSettings(
+            enabled_patches=set(),
+        )
+
+
 class Settings:
     def __init__(
         self,
@@ -290,6 +305,7 @@ class Settings:
         use_filenames: bool,
         joy1_calibration: List[int],
         joy2_calibration: List[int],
+        game_settings: Dict[str, GameSettings],
     ):
         self.last_game_file = last_game_file
         self.enable_analog = enable_analog
@@ -297,6 +313,7 @@ class Settings:
         self.use_filenames = use_filenames
         self.joy1_calibration = joy1_calibration
         self.joy2_calibration = joy2_calibration
+        self.game_settings = game_settings
 
 
 def settings_load(settings_file: str, ip: str) -> Settings:
@@ -313,6 +330,7 @@ def settings_load(settings_file: str, ip: str) -> Settings:
         use_filenames=False,
         joy1_calibration=[0x80, 0x80, 0x50, 0xB0, 0x50, 0xB0],
         joy2_calibration=[0x80, 0x80, 0x50, 0xB0, 0x50, 0xB0],
+        game_settings={},
     )
 
     if isinstance(data, dict):
@@ -339,6 +357,16 @@ def settings_load(settings_file: str, ip: str) -> Settings:
                     calib = data['joy2_calibration']
                     if isinstance(calib, list) and len(calib) == 6:
                         settings.joy2_calibration = calib
+                if 'game_settings' in data:
+                    gs = data['game_settings']
+                    if isinstance(gs, dict):
+                        for game, gamesettings in gs.items():
+                            settings.game_settings[game] = GameSettings.default()
+                            if isinstance(gamesettings, dict):
+                                if 'enabled_patches' in gamesettings:
+                                    enabled_patches = gamesettings['enabled_patches']
+                                    if isinstance(enabled_patches, list):
+                                        settings.game_settings[game].enabled_patches = {str(p) for p in enabled_patches}
 
     return settings
 
@@ -357,7 +385,14 @@ def settings_save(settings_file: str, ip: str, settings: Settings) -> None:
         'system_region': settings.system_region.value,
         'joy1_calibration': settings.joy1_calibration,
         'joy2_calibration': settings.joy2_calibration,
+        'game_settings': {},
     }
+
+    for game, gamesettings in settings.game_settings.items():
+        gamedict = {
+            'enabled_patches': list(gamesettings.enabled_patches),
+        }
+        data[ip]['game_settings'][game] = gamedict
 
     with open(settings_file, "w") as fp:
         yaml.dump(data, fp)
@@ -368,6 +403,10 @@ MESSAGE_LOAD_SETTINGS: int = 0x1001
 MESSAGE_LOAD_SETTINGS_ACK: int = 0x1002
 MESSAGE_SAVE_CONFIG: int = 0x1003
 MESSAGE_SAVE_CONFIG_ACK: int = 0x1004
+MESSAGE_LOAD_SETTINGS_DATA: int = 0x1005
+MESSAGE_HOST_PRINT: int = 0x1006
+MESSAGE_SAVE_SETTINGS_DATA: int = 0x1007
+MESSAGE_SAVE_SETTINGS_ACK: int = 0x1008
 SETTINGS_SIZE: int = 64
 
 
@@ -408,9 +447,22 @@ def main() -> int:
         help='The settings file we will use to store persistent settings. Defaults to %(default)s.',
     )
     parser.add_argument(
+        "--patchdir",
+        metavar="PATCHDIR",
+        type=str,
+        default=os.path.join(root, 'patches'),
+        help='The directory of patches we might want to apply to games. Defaults to %(default)s.',
+    )
+    parser.add_argument(
         '--force-analog',
         action="store_true",
         help="Force-enable analog control inputs. Use this if you have no digital controls and cannot set up analog options in the test menu.",
+    )
+    parser.add_argument(
+        '--force-players',
+        type=int,
+        default=0,
+        help="Force set the number of players for this cabinet. Valid values are 1-4. Use this if you do not want to set the player number in the system test menu.",
     )
     parser.add_argument(
         '--force-use-filenames',
@@ -464,6 +516,11 @@ def main() -> int:
     if args.force_use_filenames:
         settings.use_filenames = True
         settings_save(args.menu_settings_file, args.ip, settings)
+
+    force_players = None
+    if args.force_players is not None:
+        if args.force_players >= 1 and args.force_players <= 4:
+            force_players = args.force_players
 
     # Intentionally rebuild the menu every loop if we are in persistent mode, so that
     # changes to the ROM directory can be reflected on subsequent menu sends.
@@ -523,7 +580,7 @@ def main() -> int:
                 fallback_data = fp.read()
 
         config = struct.pack(
-            "<IIIIIIIBBBBBBBBBBBBII",
+            "<IIIIIIIBBBBBBBBBBBBIII",
             SETTINGS_SIZE,
             len(games),
             1 if settings.enable_analog else 0,
@@ -545,6 +602,7 @@ def main() -> int:
             settings.joy2_calibration[5],
             SETTINGS_SIZE + len(gamesconfig) if fallback_data is not None else 0,
             len(fallback_data) if fallback_data is not None else 0,
+            force_players if (force_players is not None) else 0,
         )
         if len(config) < SETTINGS_SIZE:
             config = config + (b"\0" * (SETTINGS_SIZE - len(config)))
@@ -580,6 +638,9 @@ def main() -> int:
             print("Talking to net dimm to wait for ROM selection...")
             time.sleep(5)
 
+            last_game_selection: Optional[int] = None
+            last_game_patches: List[Tuple[str, str]] = []
+
             try:
                 # Always show game send progress.
                 netdimm = NetDimm(args.ip, log=print)
@@ -612,6 +673,63 @@ def main() -> int:
                                 print(f"Requested settings for {games[index][1]}...")
                                 send_message(netdimm, Message(MESSAGE_LOAD_SETTINGS_ACK, msg.data))
 
+                                # Grab the configured settings for this game.
+                                gamesettings = settings.game_settings.get(filename, GameSettings.default())
+                                last_game_selection = index
+
+                                # First, gather up the patches which might be applicable.
+                                patchman = PatchManager([args.patchdir])
+                                patchfiles = patchman.patches_for_game(filename)
+                                patches = sorted([(p, patchman.patch_name(p)) for p in patchfiles], key=lambda p: p[1])
+                                last_game_patches = patches
+
+                                # Grab any EEPROM settings which might be applicable.
+
+                                # Now, create the message back to the Naomi.
+                                response = struct.pack("<II", index, len(patches))
+                                for patch in patches:
+                                    response += struct.pack("<I", 1 if (patch[0] in gamesettings.enabled_patches) else 0)
+                                    patchname = patch[1].encode('utf-8')
+                                    if len(patchname) < 60:
+                                        patchname = patchname + (b"\0" * (60 - len(patchname)))
+                                    response += patchname[:60]
+
+                                # TODO: system settings
+                                response += struct.pack("<I", 0)
+
+                                # TODO: game settings
+                                response += struct.pack("<I", 0)
+                                send_message(netdimm, Message(MESSAGE_LOAD_SETTINGS_DATA, response))
+
+                            elif msg.id == MESSAGE_SAVE_SETTINGS_DATA:
+                                index, patchlen = struct.unpack("<II", msg.data[0:8])
+                                msgdata = msg.data[8:]
+
+                                if index == last_game_selection:
+                                    filename = games[index][0]
+                                    gamesettings = settings.game_settings.get(filename, GameSettings.default())
+                                    last_game_selection = None
+
+                                    print(f"Received updated settings for {games[index][1]}...")
+
+                                    # Grab the updated patches.
+                                    if patchlen > 0:
+                                        patches_enabled = list(struct.unpack("<" + ("I" * patchlen), msgdata[0:(4 * patchlen)]))
+                                        msgdata = msgdata[(4 * patchlen):]
+
+                                        if patchlen == len(last_game_patches):
+                                            new_patches: Set[str] = set()
+                                            for i in range(patchlen):
+                                                if patches_enabled[i] != 0:
+                                                    new_patches.add(last_game_patches[i][0])
+                                            gamesettings.enabled_patches = new_patches
+                                    last_game_patches = []
+
+                                    # Save the final updates.
+                                    settings.game_settings[filename] = gamesettings
+                                    settings_save(args.menu_settings_file, args.ip, settings)
+                                send_message(netdimm, Message(MESSAGE_SAVE_SETTINGS_ACK))
+
                             elif msg.id == MESSAGE_SAVE_CONFIG:
                                 if len(msg.data) == SETTINGS_SIZE:
                                     (
@@ -637,6 +755,8 @@ def main() -> int:
                                     settings_save(args.menu_settings_file, args.ip, settings)
 
                                     send_message(netdimm, Message(MESSAGE_SAVE_CONFIG_ACK))
+                            elif msg.id == MESSAGE_HOST_PRINT:
+                                print(msg.data.decode('utf-8'))
 
             except NetDimmException:
                 # Mark failure so we don't try to wait for power down below.
@@ -653,7 +773,22 @@ def main() -> int:
                 netdimm = NetDimm(args.ip, log=print)
 
                 with open(filename, "rb") as fp:
+                    # First, grab a handle to the data itself.
                     gamedata = FileBytes(fp)
+                    gamesettings = settings.game_settings.get(filename, GameSettings.default())
+
+                    patchman = PatchManager([args.patchdir])
+                    for patchfile in gamesettings.enabled_patches:
+                        print(f"Applying patch {patchman.patch_name(patchfile)} to game...")
+                        with open(patchfile, "r") as pp:
+                            differences = pp.readlines()
+                            differences = [d.strip() for d in differences if d.strip()]
+                            try:
+                                gamedata = BinaryDiff.patch(gamedata, differences)
+                            except Exception as e:
+                                print(f"Could not patch {filename} with {patch}: {str(e)}", file=sys.stderr)
+
+                    # Finally, send it!.
                     netdimm.send(gamedata, disable_crc_check=True)
                     netdimm.reboot()
             except NetDimmException:

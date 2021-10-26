@@ -10,14 +10,259 @@
 #include "message.h"
 #include "controls.h"
 
+#define READ_ONLY_ALWAYS -1
+#define READ_ONLY_NEVER -2
+
+typedef struct
+{
+    unsigned int enabled;
+    char description[60];
+} patch_t;
+
+typedef struct
+{
+    int setting;
+    unsigned int value_count;
+    uint32_t *values;
+    unsigned int negate;
+} read_only_t;
+
+typedef struct
+{
+    uint32_t value;
+    char description[60];
+} value_t;
+
+typedef struct
+{
+    char name[64];
+    unsigned int value_count;
+    value_t *values;
+    uint32_t current;
+    read_only_t read_only;
+} setting_t;
+
+typedef struct
+{
+    unsigned int selected_game;
+    unsigned int patch_count;
+    patch_t *patches;
+    unsigned int system_settings_count;
+    setting_t *system_settings;
+    unsigned int game_settings_count;
+    setting_t *game_settings;
+} game_options_t;
+
 static int selected_game = -1;
+static int expecting_boot = 0;
+static game_options_t *game_options = 0;
+
+void free_setting(setting_t *setting)
+{
+    if (setting->values)
+    {
+        free(setting->values);
+    }
+
+    if (setting->read_only.values)
+    {
+        free(setting->read_only.values);
+    }
+}
+
+int parse_setting(uint8_t *data, unsigned int length, setting_t *setting, unsigned int *expected_length)
+{
+    host_printf("TODO!!");
+    return 0;
+}
+
+void free_game_options(game_options_t *parsed_options)
+{
+    for (unsigned int fs = 0; fs < parsed_options->game_settings_count; fs++)
+    {
+        free_setting(&parsed_options->game_settings[fs]);
+    }
+
+    if (parsed_options->game_settings)
+    {
+        free(parsed_options->game_settings);
+    }
+
+    for (unsigned int fs = 0; fs < parsed_options->system_settings_count; fs++)
+    {
+        free_setting(&parsed_options->system_settings[fs]);
+    }
+
+    if (parsed_options->system_settings)
+    {
+        free(parsed_options->system_settings);
+    }
+    if (parsed_options->patches)
+    {
+        free(parsed_options->patches);
+    }
+
+    free(parsed_options);
+}
+
+game_options_t *parse_game_options(uint8_t *data, unsigned int length)
+{
+    game_options_t *parsed_options = malloc(sizeof(game_options_t));
+    memset(parsed_options, 0, sizeof(game_options_t));
+    unsigned int expected_length = 0;
+
+    if (length < (expected_length + 4))
+    {
+        host_printf("Not enough data for selected game!");
+        free(parsed_options);
+        return 0;
+    }
+
+    memcpy(&parsed_options->selected_game, &data[expected_length], 4);
+    expected_length += 4;
+
+    if (length < (expected_length + 4))
+    {
+        host_printf("Not enough data for patch count!");
+        free(parsed_options);
+        return 0;
+    }
+
+    memcpy(&parsed_options->patch_count, &data[expected_length], 4);
+    expected_length += 4;
+
+    if (parsed_options->patch_count > 0)
+    {
+        parsed_options->patches = malloc(sizeof(patch_t) * parsed_options->patch_count);
+
+        for (unsigned int patchno = 0; patchno < parsed_options->patch_count; patchno++)
+        {
+            if (length < (expected_length + 64))
+            {
+                host_printf("Not enough data for patch %d!", patchno);
+                free(parsed_options->patches);
+                free(parsed_options);
+                return 0;
+            }
+
+            memcpy(&parsed_options->patches[patchno].enabled, &data[expected_length], 4);
+            memcpy(&parsed_options->patches[patchno].description, &data[expected_length + 4], 60);
+            expected_length += 64;
+        }
+    }
+
+    if (length < (expected_length + 4))
+    {
+        host_printf("Not enough data for system settings count!");
+        if (parsed_options->patches)
+        {
+            free(parsed_options->patches);
+        }
+        free(parsed_options);
+        return 0;
+    }
+
+    memcpy(&parsed_options->system_settings_count, &data[expected_length], 4);
+    expected_length += 4;
+
+    if (parsed_options->system_settings_count > 0)
+    {
+        parsed_options->system_settings = malloc(sizeof(setting_t) * parsed_options->system_settings_count);
+
+        for (unsigned int settingno = 0; settingno < parsed_options->system_settings_count; settingno ++)
+        {
+            if (parse_setting(data, length, &parsed_options->system_settings[settingno], &expected_length) == 0)
+            {
+                host_printf("Not enough data for system setting %d!", settingno);
+
+                for (unsigned int fs = 0; fs < settingno; fs++)
+                {
+                    free_setting(&parsed_options->system_settings[fs]);
+                }
+
+                free(parsed_options->system_settings);
+                if (parsed_options->patches)
+                {
+                    free(parsed_options->patches);
+                }
+                free(parsed_options);
+            }
+        }
+    }
+
+    memcpy(&parsed_options->game_settings_count, &data[expected_length], 4);
+    expected_length += 4;
+
+    if (parsed_options->game_settings_count > 0)
+    {
+        parsed_options->game_settings = malloc(sizeof(setting_t) * parsed_options->game_settings_count);
+
+        for (unsigned int settingno = 0; settingno < parsed_options->game_settings_count; settingno ++)
+        {
+            if (parse_setting(data, length, &parsed_options->game_settings[settingno], &expected_length) == 0)
+            {
+                host_printf("Not enough data for game setting %d!", settingno);
+
+                for (unsigned int fs = 0; fs < settingno; fs++)
+                {
+                    free_setting(&parsed_options->game_settings[fs]);
+                }
+
+                free(parsed_options->game_settings);
+
+                for (unsigned int fs = 0; fs < parsed_options->system_settings_count; fs++)
+                {
+                    free_setting(&parsed_options->system_settings[fs]);
+                }
+
+                if (parsed_options->system_settings)
+                {
+                    free(parsed_options->system_settings);
+                }
+                if (parsed_options->patches)
+                {
+                    free(parsed_options->patches);
+                }
+                free(parsed_options);
+            }
+        }
+    }
+
+    return parsed_options;
+}
+
+void send_game_options(game_options_t *parsed_options)
+{
+    unsigned int total_length = 8 + (parsed_options->patch_count * 4);
+    unsigned int current_loc = 0;
+    uint8_t *senddata = malloc(total_length);
+
+    // Basic stuff.
+    memcpy(&senddata[current_loc], &parsed_options->selected_game, 4);
+    current_loc += 4;
+
+    memcpy(&senddata[current_loc], &parsed_options->patch_count, 4);
+    current_loc += 4;
+
+    // Now, send back the patch selection.
+    for (unsigned int patchno = 0; patchno < parsed_options->patch_count; patchno++)
+    {
+        memcpy(&senddata[current_loc], &parsed_options->patches[patchno].enabled, 4);
+        current_loc += 4;
+    }
+
+    // Send it and free our buffer.
+    message_send(MESSAGE_SAVE_SETTINGS_DATA, senddata, total_length);
+    free(senddata);
+}
 
 #define SCREEN_MAIN_MENU 0
 #define SCREEN_COMM_ERROR 1
 #define SCREEN_GAME_SETTINGS_LOAD 2
 #define SCREEN_GAME_SETTINGS 3
-#define SCREEN_CONFIGURATION 4
-#define SCREEN_CONFIGURATION_SAVE 5
+#define SCREEN_GAME_SETTINGS_SAVE 4
+#define SCREEN_CONFIGURATION 5
+#define SCREEN_CONFIGURATION_SAVE 6
 
 #define MAX_WAIT_FOR_COMMS 3.0
 #define MAX_WAIT_FOR_SAVE 5.0
@@ -349,6 +594,24 @@ unsigned int game_settings_load(state_t *state, int reinit)
                     ack_received = 1;
                 }
             }
+            if (type == MESSAGE_LOAD_SETTINGS_DATA)
+            {
+                game_options = parse_game_options(data, length);
+                if (game_options == 0)
+                {
+                    // Uh oh, failed to parse data.
+                    new_screen = SCREEN_COMM_ERROR;
+                    host_printf("Failed to parse game settings!");
+                }
+                if (game_options->selected_game != selected_game)
+                {
+                    // Uh oh, failed to parse data.
+                    new_screen = SCREEN_COMM_ERROR;
+                    host_printf("Wrong game settings returned!");
+                }
+
+                new_screen = SCREEN_GAME_SETTINGS;
+            }
 
             // Wipe any data that we need.
             if (data != 0)
@@ -371,9 +634,19 @@ unsigned int game_settings_load(state_t *state, int reinit)
 
 unsigned int game_settings(state_t *state, int reinit)
 {
+    static unsigned int cursor = 0;
+    static unsigned int total = 0;
+    static unsigned int top = 0;
+    static unsigned int maxoptions = 0;
+
     if (reinit)
     {
-        // TODO
+        cursor = 0;
+        top = 0;
+        maxoptions = (video_height() - (24 + 16 + 21 + 21 + 21)) / 21;
+
+        // Calculate total options.
+        total = game_options->patch_count + game_options->system_settings_count + game_options->game_settings_count + 3;
     }
 
     // If we need to switch screens.
@@ -385,8 +658,275 @@ unsigned int game_settings(state_t *state, int reinit)
         // Display error message about not going into settings now.
         state->test_error_counter = state->animation_counter;
     }
+    else if(controls.up_pressed)
+    {
+        if (cursor > 0)
+        {
+            cursor--;
+        }
+    }
+    else if(controls.down_pressed)
+    {
+        if (cursor < (total - 1))
+        {
+            cursor++;
+        }
+    }
+    else if(controls.left_pressed)
+    {
+        /*if (options[cursor] > 0)
+        {
+            options[cursor]--;
+        }*/
+    }
+    else if(controls.right_pressed)
+    {
+        /*if (options[cursor] < maximums[cursor])
+        {
+            options[cursor]++;
+        }*/
+    }
+    else if(controls.start_pressed)
+    {
+        if (cursor < game_options->patch_count)
+        {
+            // Toggle enabled patch.
+            unsigned int patchcursor = cursor;
+            game_options->patches[patchcursor].enabled = game_options->patches[patchcursor].enabled ? 0 : 1;
+        }
+        else if (cursor < (game_options->patch_count + game_options->system_settings_count))
+        {
+            // TODO
+            //unsigned int systemcursor = cursor - game_options->patch_count;
+        }
+        else if (cursor < (game_options->patch_count + game_options->system_settings_count + game_options->game_settings_count))
+        {
+            // TODO
+            //unsigned int gamecursor = cursor - (game_options->patch_count - game_options->system_settings_count);
+        }
+        else
+        {
+            unsigned int menucursor = cursor - (game_options->patch_count + game_options->system_settings_count + game_options->game_settings_count);
+            switch (menucursor)
+            {
+                case 0:
+                {
+                    // Send our updated options back to the host.
+                    send_game_options(game_options);
 
-    video_draw_text(video_width() / 2 - 100, 100, state->font_18pt, rgb(255, 255, 0), "TODO...");
+                    // Send a request to boot the game.
+                    message_send(MESSAGE_SELECTION, &game_options->selected_game, 4);
+                    expecting_boot = 1;
+                    new_screen = SCREEN_GAME_SETTINGS_SAVE;
+
+                    break;
+                }
+                case 1:
+                {
+                    // Send our updated options back to the host.
+                    send_game_options(game_options);
+                    expecting_boot = 0;
+                    new_screen = SCREEN_GAME_SETTINGS_SAVE;
+
+                    break;
+                }
+                case 2:
+                {
+                    // Just go back to the main menu.
+                    selected_game = game_options->selected_game;
+                    new_screen = SCREEN_MAIN_MENU;
+
+                    break;
+                }
+            }
+        }
+    }
+
+    // Actually draw the menu
+    {
+        video_draw_text(video_width() / 2 - 70, 22, state->font_18pt, rgb(0, 255, 255), "Game Configuration");
+
+        for (unsigned int option = top; option < top + maxoptions; option++)
+        {
+            if (option >= total)
+            {
+                // Ran out of options to display.
+                break;
+            }
+
+            // Draw cursor itself.
+            if (option == cursor)
+            {
+                video_draw_sprite(24, 24 + 21 + 21 + ((option - top) * 21), cursor_png_width, cursor_png_height, cursor_png_data);
+            }
+
+            uint32_t option_color = (option == cursor ? rgb(255, 255, 20) : rgb(255, 255, 255));
+
+            // Draw the menu entry itself.
+            if (option < game_options->patch_count)
+            {
+                unsigned int patchoption = option;
+
+                video_draw_character(
+                    48,
+                    22 + 21 + 21 + ((option - top) * 21),
+                    state->font_18pt,
+                    option_color,
+                    0x2610   // Ballot box unicode glyph.
+                );
+
+                if (game_options->patches[patchoption].enabled)
+                {
+                    video_draw_character(
+                        48 + 2,
+                        22 + 21 + 21 + ((option - top) * 21),
+                        state->font_18pt,
+                        option_color,
+                        0x2713  // Checkbox unicode glyph.
+                    );
+                }
+
+                video_draw_text(
+                    48 + 24,
+                    22 + 21 + 21 + ((option - top) * 21),
+                    state->font_18pt,
+                    option_color,
+                    game_options->patches[patchoption].description
+                );
+            }
+            else if (option < (game_options->patch_count + game_options->system_settings_count))
+            {
+                // TODO
+                //unsigned int systemoption = option - game_options->patch_count;
+            }
+            else if (option < (game_options->patch_count + game_options->system_settings_count + game_options->game_settings_count))
+            {
+                // TODO
+                //unsigned int gameoption = option - (game_options->patch_count - game_options->system_settings_count);
+            }
+            else
+            {
+                unsigned int menuoption = option - (game_options->patch_count + game_options->system_settings_count + game_options->game_settings_count);
+                switch (menuoption)
+                {
+                    case 0:
+                        video_draw_text(
+                            48,
+                            22 + 21 + 21 + ((option - top) * 21),
+                            state->font_18pt,
+                            option_color,
+                            "save and launch game"
+                        );
+                        break;
+                    case 1:
+                        video_draw_text(
+                            48,
+                            22 + 21 + 21 + ((option - top) * 21),
+                            state->font_18pt,
+                            option_color,
+                            "save and go back to main menu"
+                        );
+                        break;
+                    case 2:
+                        video_draw_text(
+                            48,
+                            22 + 21 + 21 + ((option - top) * 21),
+                            state->font_18pt,
+                            option_color,
+                            "go back to main menu without saving"
+                        );
+                        break;
+                    default:
+                        video_draw_text(
+                            48,
+                            22 + 21 + 21 + ((option - top) * 21),
+                            state->font_18pt,
+                            option_color,
+                            "WTF?"
+                        );
+                        break;
+                }
+            }
+        }
+
+        // Draw asterisk for some settings.
+        if (game_options->game_settings_count == 0)
+        {
+            video_draw_text(48, 22 + 21 + 21 + (maxoptions * 21), state->font_12pt, rgb(255, 255, 255), "Game EEPROM settings are not available for this game!");
+        }
+    }
+
+    if (new_screen != SCREEN_GAME_SETTINGS)
+    {
+        free_game_options(game_options);
+        game_options = 0;
+    }
+
+    return new_screen;
+}
+
+unsigned int game_settings_save(state_t *state, int reinit)
+{
+    static double load_start = 0.0;
+    static double boot_start = 0.0;
+
+    if (reinit)
+    {
+        // Attempt to fetch the game settings for this game.
+        load_start = state->animation_counter;
+        boot_start = 0.0;
+    }
+
+    // If we need to switch screens.
+    unsigned int new_screen = SCREEN_GAME_SETTINGS_SAVE;
+
+    controls_t controls = get_controls(state, reinit);
+    if (controls.test_pressed)
+    {
+        // Display error message about not going into settings now.
+        state->test_error_counter = state->animation_counter;
+    }
+
+    // Check to see if we got a response in time.
+    {
+        uint16_t type = 0;
+        uint8_t *data = 0;
+        unsigned int length = 0;
+        if (message_recv(&type, (void *)&data, &length) == 0)
+        {
+            if (type == MESSAGE_SAVE_SETTINGS_ACK && length == 0)
+            {
+                // Successfully acknowledged, time to go back to main screen.
+                if (expecting_boot)
+                {
+                    boot_start = state->animation_counter;
+                }
+                else
+                {
+                    new_screen = SCREEN_MAIN_MENU;
+                }
+            }
+
+            // Wipe any data that we need.
+            if (data != 0)
+            {
+                free(data);
+            }
+        }
+
+        if (((state->animation_counter - load_start) >= MAX_WAIT_FOR_SAVE))
+        {
+            // Uh oh, no ack.
+            new_screen = SCREEN_COMM_ERROR;
+        }
+        if (boot_start > 0.0 && ((state->animation_counter - boot_start) >= MAX_WAIT_FOR_COMMS))
+        {
+            // Uh oh, no boot.
+            new_screen = SCREEN_COMM_ERROR;
+        }
+    }
+
+    video_draw_text(video_width() / 2 - 100, 100, state->font_18pt, rgb(0, 255, 0), "Saving game settings...");
 
     return new_screen;
 }
@@ -546,7 +1086,6 @@ unsigned int configuration(state_t *state, int reinit)
             state->config->joy2_hmax = joy2_hmax;
             state->config->joy2_vmin = joy2_vmin;
             state->config->joy2_vmax = joy2_vmax;
-
 
             // Send back to PC.
             message_send(MESSAGE_SAVE_CONFIG, state->config, 64);
@@ -908,6 +1447,9 @@ void draw_screen(state_t *state)
             break;
         case SCREEN_GAME_SETTINGS:
             newscreen = game_settings(state, curscreen != oldscreen);
+            break;
+        case SCREEN_GAME_SETTINGS_SAVE:
+            newscreen = game_settings_save(state, curscreen != oldscreen);
             break;
         case SCREEN_COMM_ERROR:
             newscreen = comm_error(state, curscreen != oldscreen);
