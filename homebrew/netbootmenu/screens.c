@@ -470,6 +470,11 @@ unsigned int main_menu(state_t *state, int reinit)
                 memcpy(&sending_game_size, &data[0], 4);
                 new_screen = SCREEN_GAME_LOAD;
             }
+            else
+            {
+                // Unexpected packet?
+                host_printf("Unexpected packet %04X!", type);
+            }
 
             // Wipe any data that we need.
             if (data != 0)
@@ -635,6 +640,11 @@ unsigned int game_settings_load(state_t *state, int reinit)
                 memcpy(&sending_game_size, &data[0], 4);
                 new_screen = SCREEN_GAME_LOAD;
             }
+            else
+            {
+                // Unexpected packet?
+                host_printf("Unexpected packet %04X!", type);
+            }
 
             // Wipe any data that we need.
             if (data != 0)
@@ -779,6 +789,11 @@ unsigned int game_settings(state_t *state, int reinit)
                 // Grab the current progress so we can display it.
                 memcpy(&sending_game_size, &data[0], 4);
                 new_screen = SCREEN_GAME_LOAD;
+            }
+            else
+            {
+                // Unexpected packet?
+                host_printf("Unexpected packet %04X!", type);
             }
 
             // Wipe any data that we need.
@@ -960,6 +975,11 @@ unsigned int game_settings_save(state_t *state, int reinit)
                 // Grab the current progress so we can display it.
                 memcpy(&sending_game_size, &data[0], 4);
                 new_screen = SCREEN_GAME_LOAD;
+            }
+            else
+            {
+                // Unexpected packet?
+                host_printf("Unexpected packet %04X!", type);
             }
 
             // Wipe any data that we need.
@@ -1317,6 +1337,11 @@ unsigned int configuration(state_t *state, int reinit)
                 memcpy(&sending_game_size, &data[0], 4);
                 new_screen = SCREEN_GAME_LOAD;
             }
+            else
+            {
+                // Unexpected packet?
+                host_printf("Unexpected packet %04X!", type);
+            }
 
             // Wipe any data that we need.
             if (data != 0)
@@ -1487,6 +1512,11 @@ unsigned int configuration_save(state_t *state, int reinit)
                 memcpy(&sending_game_size, &data[0], 4);
                 new_screen = SCREEN_GAME_LOAD;
             }
+            else
+            {
+                // Unexpected packet?
+                host_printf("Unexpected packet %04X!", type);
+            }
 
             // Wipe any data that we need.
             if (data != 0)
@@ -1564,6 +1594,11 @@ unsigned int game_load(state_t *state, int reinit)
                 memcpy(&game_size, &data[0], 4);
                 memcpy(&game_progress, &data[4], 4);
             }
+            else
+            {
+                // Unexpected packet?
+                host_printf("Unexpected packet %04X!", type);
+            }
 
             // Wipe any data that we need.
             if (data != 0)
@@ -1597,7 +1632,7 @@ unsigned int game_load(state_t *state, int reinit)
         }
 
         metrics = video_get_text_metrics(state->font_12pt, "%d%%", actual_percent);
-        video_draw_text((video_width() - metrics.width) / 2, 154, state->font_12pt, rgb(255, 255, 255), "%d%%", actual_percent);
+        video_draw_text((video_width() - metrics.width) / 2, 153, state->font_12pt, rgb(255, 255, 255), "%d%%", actual_percent);
     }
 
     return new_screen;
