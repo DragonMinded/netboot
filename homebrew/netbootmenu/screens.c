@@ -292,19 +292,30 @@ void display_test_error(state_t *state)
         rgb(255, 0, 0)
     );
 
+    char *cannot_edit = "Cannot edit menu settings on this screen!";
+    char *please_edit = "Please edit settings from the main menu only!";
+
+    font_metrics_t metrics = video_get_text_metrics(
+        state->font_12pt,
+        cannot_edit
+    );
     video_draw_text(
-        halfwidth - (ERROR_BOX_WIDTH / 2) + 22,
+        halfwidth - (metrics.width / 2),
         ERROR_BOX_TOP + 10,
         state->font_12pt,
         rgb(255, 0, 0),
-        "Cannot edit menu settings on this screen!"
+        cannot_edit
+    );
+    metrics = video_get_text_metrics(
+        state->font_12pt,
+        please_edit
     );
     video_draw_text(
-        halfwidth - (ERROR_BOX_WIDTH / 2) + 12,
+        halfwidth - (metrics.width / 2),
         ERROR_BOX_TOP + 25,
         state->font_12pt,
         rgb(255, 0, 0),
-        "Please edit settings from the main menu only!"
+        please_edit
     );
 }
 
@@ -639,7 +650,9 @@ unsigned int game_settings_load(state_t *state, int reinit)
         }
     }
 
-    video_draw_text(video_width() / 2 - 100, 100, state->font_18pt, rgb(0, 255, 0), "Fetching game settings...");
+    char * fetching = "Fetching game settings...";
+    font_metrics_t metrics = video_get_text_metrics(state->font_18pt, fetching);
+    video_draw_text((video_width() - metrics.width) / 2, 100, state->font_18pt, rgb(0, 255, 0), fetching);
 
     return new_screen;
 }
@@ -778,7 +791,9 @@ unsigned int game_settings(state_t *state, int reinit)
 
     // Actually draw the menu
     {
-        video_draw_text(video_width() / 2 - 70, 22, state->font_18pt, rgb(0, 255, 255), "Game Configuration");
+        char *config_str = "Game Configuration";
+        font_metrics_t metrics = video_get_text_metrics(state->font_18pt, config_str);
+        video_draw_text((video_width() - metrics.width) / 2, 22, state->font_18pt, rgb(0, 255, 255), config_str);
 
         for (unsigned int option = top; option < top + maxoptions; option++)
         {
@@ -966,7 +981,9 @@ unsigned int game_settings_save(state_t *state, int reinit)
         }
     }
 
-    video_draw_text(video_width() / 2 - 100, 100, state->font_18pt, rgb(0, 255, 0), "Saving game settings...");
+    char *saving_str = "Saving game settings...";
+    font_metrics_t metrics = video_get_text_metrics(state->font_18pt, saving_str);
+    video_draw_text((video_width() - metrics.width) / 2, 100, state->font_18pt, rgb(0, 255, 0), saving_str);
 
     return new_screen;
 }
@@ -987,16 +1004,17 @@ unsigned int comm_error(state_t *state, int reinit)
         state->test_error_counter = state->animation_counter;
     }
 
-    video_draw_text(video_width() / 2 - 50, 100, state->font_18pt, rgb(255, 0, 0), "Comm Error!");
-    video_draw_text(
-        video_width() / 2 - 130,
-        130,
-        state->font_12pt,
-        rgb(255, 255, 255),
+    char *comm_error = "Communication Error!";
+    char *message = (
         "We seem to have lost communication with the\n"
         "controlling software! Cycle your cabinet power\n"
         "and run the menu software to try again!"
     );
+
+    font_metrics_t metrics = video_get_text_metrics(state->font_18pt, comm_error);
+    video_draw_text((video_width() - metrics.width) / 2, 100, state->font_18pt, rgb(255, 0, 0), comm_error);
+    metrics = video_get_text_metrics(state->font_12pt, message);
+    video_draw_text((video_width() - metrics.width) / 2, 130, state->font_12pt, rgb(255, 255, 255), message);
 
     return SCREEN_COMM_ERROR;
 }
@@ -1310,7 +1328,9 @@ unsigned int configuration(state_t *state, int reinit)
 
     // Actually draw the menu
     {
-        video_draw_text(video_width() / 2 - 70, 22, state->font_18pt, rgb(0, 255, 255), "Menu Configuration");
+        char *menuconfig = "Menu Configuration";
+        font_metrics_t metrics = video_get_text_metrics(state->font_18pt, menuconfig);
+        video_draw_text((video_width() - metrics.width) / 2, 22, state->font_18pt, rgb(0, 255, 255), menuconfig);
 
         for (unsigned int option = top; option < top + maxoptions; option++)
         {
@@ -1482,7 +1502,9 @@ unsigned int configuration_save(state_t *state, int reinit)
         }
     }
 
-    video_draw_text(video_width() / 2 - 100, 100, state->font_18pt, rgb(0, 255, 0), "Saving configuration...");
+    char *saving_str = "Saving configuration...";
+    font_metrics_t metrics = video_get_text_metrics(state->font_18pt, saving_str);
+    video_draw_text((video_width() - metrics.width) / 2, 100, state->font_18pt, rgb(0, 255, 0), saving_str);
 
     return new_screen;
 }
@@ -1559,7 +1581,9 @@ unsigned int game_load(state_t *state, int reinit)
 
     // Draw the progress bar and percentage.
     {
-        video_draw_text(video_width() / 2 - 100, 100, state->font_18pt, rgb(255, 255, 255), "Loading game...");
+        char *loading_game = "Loading game...";
+        font_metrics_t metrics = video_get_text_metrics(state->font_18pt, loading_game);
+        video_draw_text((video_width() - metrics.width) / 2, 100, state->font_18pt, rgb(255, 255, 255), loading_game);
         video_fill_box(50, 150, 50 + width, 170, rgb(32, 32, 32));
         video_draw_box(50, 150, 50 + width, 170, rgb(255, 255, 255));
 
@@ -1572,7 +1596,8 @@ unsigned int game_load(state_t *state, int reinit)
             actual_percent = (int)(((double)game_progress / (double)game_size) * 100);
         }
 
-        video_draw_text(video_width() / 2 - 10, 154, state->font_12pt, rgb(255, 255, 255), "%d%%", actual_percent);
+        metrics = video_get_text_metrics(state->font_12pt, "%d%%", actual_percent);
+        video_draw_text((video_width() - metrics.width) / 2, 154, state->font_12pt, rgb(255, 255, 255), "%d%%", actual_percent);
     }
 
     return new_screen;

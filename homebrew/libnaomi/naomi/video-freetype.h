@@ -32,6 +32,12 @@ typedef struct
     unsigned int cacheloc;
 } font_t;
 
+typedef struct
+{
+    unsigned int width;
+    unsigned int height;
+} font_metrics_t;
+
 // API that can be used with the video library as well as the freetype
 // library to render text to the screen.
 
@@ -53,10 +59,18 @@ int video_font_set_size(font_t *fontface, unsigned int size);
 // orientation aware.
 int video_draw_character(int x, int y, font_t *fontface, uint32_t color, int ch);
 
+// Given a previously set up font, return the metrics for a character.
+// Much like the above draw character function, this is unicode aware.
+font_metrics_t video_get_character_metrics(font_t *fontface, int ch);
+
 // Given a previously set up font, draw a string. Unlike the debug
 // character draw routines, this is unicode aware. It is also monitor
 // orientation aware. It also takes standard printf-style format strings.
 int video_draw_text(int x, int y, font_t *fontface, uint32_t color, const char * const msg, ...);
+
+// Given a previously set up font, return the metrics for a string.
+// Much like the above draw text function, this is unicode aware.
+font_metrics_t video_get_text_metrics(font_t *fontface, const char *msg, ...);
 
 #ifdef __cplusplus
 }

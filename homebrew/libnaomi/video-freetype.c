@@ -554,7 +554,6 @@ int __video_draw_text( int x, int y, font_t *fontface, uint32_t color, const cha
     }
 }
 
-
 int video_draw_text(int x, int y, font_t *fontface, uint32_t color, const char * const msg, ...)
 {
     if (msg)
@@ -571,5 +570,241 @@ int video_draw_text(int x, int y, font_t *fontface, uint32_t color, const char *
     {
         return 0;
     }
+}
+
+font_metrics_t video_get_character_metrics(font_t *fontface, int ch)
+{
+    font_metrics_t metrics;
+    metrics.width = 0;
+    metrics.height = 0;
+
+    if (fontface)
+    {
+        font_cache_entry_t *entry = __cache_lookup(fontface, ch);
+        unsigned int lineheight = fontface->lineheight;
+
+        if (entry)
+        {
+            metrics.width = entry->advancex;
+            metrics.height = lineheight;
+        }
+        else
+        {
+            // Grab the actual unicode glyph, searching through all fallbacks if we need to.
+            // faces[0] is always guaranteed to be valid, since that's our original non-fallback
+            // fontface. If none of the fonts has this glyph, then we fall back even further to
+            // the original font selected, and display the unicode error glyph.
+            FT_Face *face = (FT_Face *)fontface->faces[0];
+            for (int i = 0; i < MAX_FALLBACK_SIZE; i++)
+            {
+                if (fontface->faces[i] != 0)
+                {
+                    FT_UInt glyph_index = FT_Get_Char_Index( *((FT_Face *)fontface->faces[i]), ch );
+                    if (glyph_index != 0)
+                    {
+                        // This font has this glyph. Use this instead of the original.
+                        face = (FT_Face *)fontface->faces[i];
+                        break;
+                    }
+                }
+            }
+            int error = FT_Load_Char(*face, ch, FT_LOAD_RENDER);
+            if (error)
+            {
+                return metrics;
+            }
+
+            // Copy it out onto our buffer.
+            FT_GlyphSlot slot = (*face)->glyph;
+            metrics.width = slot->advance.x >> 6;
+            metrics.height = lineheight;
+
+            // Add it to the cache so we can render faster next time.
+            if (fontface->cacheloc < fontface->cachesize)
+            {
+                entry = __cache_create(
+                    ch,
+                    slot->advance.x >> 6,
+                    slot->advance.y >> 6,
+                    slot->bitmap_left,
+                    slot->bitmap_top,
+                    slot->bitmap.width,
+                    slot->bitmap.rows,
+                    slot->bitmap.pixel_mode,
+                    slot->bitmap.buffer
+                 );
+                __cache_add(fontface, entry);
+            }
+        }
+    }
+
+    return metrics;
+}
+
+font_metrics_t __video_calc_text(font_t *fontface, const char * const msg )
+{
+    font_metrics_t metrics;
+    metrics.width = 0;
+    metrics.height = 0;
+
+    if( msg == 0 ) { return metrics; }
+
+    int tx = 0;
+    int ty = 0;
+    uint32_t *text = utf8_convert(msg);
+
+    if (text)
+    {
+        uint32_t *freeptr = text;
+        unsigned int lineheight = fontface->lineheight;
+
+        while( *text )
+        {
+            switch( *text )
+            {
+                case '\r':
+                case '\n':
+                {
+                    // Make sure to remember the maximum line width for this line.
+                    metrics.width = metrics.width > tx ? metrics.width : tx;
+                    metrics.height = ty + lineheight;
+                    tx = 0;
+                    ty += lineheight;
+                    break;
+                }
+                case '\t':
+                {
+                    font_cache_entry_t *entry = __cache_lookup(fontface, *text);
+                    if (entry)
+                    {
+                        tx += entry->advancex * 5;
+                        tx += entry->advancey * 5;
+                    }
+                    else
+                    {
+                        // Every font should have a space, I'm not doing a fallack for that one.
+                        FT_Face *face = (FT_Face *)fontface->faces[0];
+                        int error = FT_Load_Char(*face, ' ', FT_LOAD_RENDER);
+                        if (error)
+                        {
+                            return metrics;
+                        }
+
+                        FT_GlyphSlot slot = (*face)->glyph;
+                        tx += (slot->advance.x >> 6) * 5;
+                        ty += (slot->advance.y >> 6) * 5;
+
+                        // Add it to the cache so we can render faster next time.
+                        if (fontface->cacheloc < fontface->cachesize)
+                        {
+                            entry = __cache_create(
+                                *text,
+                                slot->advance.x >> 6,
+                                slot->advance.y >> 6,
+                                slot->bitmap_left,
+                                slot->bitmap_top,
+                                slot->bitmap.width,
+                                slot->bitmap.rows,
+                                slot->bitmap.pixel_mode,
+                                slot->bitmap.buffer
+                             );
+                            __cache_add(fontface, entry);
+                        }
+                    }
+                    metrics.width = metrics.width > tx ? metrics.width : tx;
+                    metrics.height = ty + lineheight;
+                    break;
+                }
+                default:
+                {
+                    font_cache_entry_t *entry = __cache_lookup(fontface, *text);
+                    if (entry)
+                    {
+                        // Advance the pen based on this glyph.
+                        tx += entry->advancex;
+                        ty += entry->advancey;
+                    }
+                    else
+                    {
+                        // Grab the actual unicode glyph, searching through all fallbacks if we need to.
+                        // faces[0] is always guaranteed to be valid, since that's our original non-fallback
+                        // fontface. If none of the fonts has this glyph, then we fall back even further to
+                        // the original font selected, and display the unicode error glyph.
+                        FT_Face *face = (FT_Face *)fontface->faces[0];
+                        for (int i = 0; i < MAX_FALLBACK_SIZE; i++)
+                        {
+                            if (fontface->faces[i] != 0)
+                            {
+                                FT_UInt glyph_index = FT_Get_Char_Index(*((FT_Face *)fontface->faces[i]), *text);
+                                if (glyph_index != 0)
+                                {
+                                    // This font has this glyph. Use this instead of the original.
+                                    face = (FT_Face *)fontface->faces[i];
+                                    break;
+                                }
+                            }
+                        }
+                        int error = FT_Load_Char(*face, *text, FT_LOAD_RENDER);
+                        if (error)
+                        {
+                            return metrics;
+                        }
+
+                        // Copy it out onto our buffer.
+                        FT_GlyphSlot slot = (*face)->glyph;
+
+                        // Add it to the cache so we can render faster next time.
+                        if (fontface->cacheloc < fontface->cachesize)
+                        {
+                            entry = __cache_create(
+                                *text,
+                                slot->advance.x >> 6,
+                                slot->advance.y >> 6,
+                                slot->bitmap_left,
+                                slot->bitmap_top,
+                                slot->bitmap.width,
+                                slot->bitmap.rows,
+                                slot->bitmap.pixel_mode,
+                                slot->bitmap.buffer
+                             );
+                            __cache_add(fontface, entry);
+                        }
+
+                        // Advance the pen based on this glyph.
+                        tx += (slot->advance.x >> 6);
+                        ty += (slot->advance.y >> 6);
+                    }
+                    metrics.width = metrics.width > tx ? metrics.width : tx;
+                    metrics.height = ty + lineheight;
+                    break;
+                }
+            }
+
+            text++;
+        }
+
+        free(freeptr);
+    }
+
+    return metrics;
+}
+
+font_metrics_t video_get_text_metrics(font_t *fontface, const char * const msg, ...)
+{
+    if (msg)
+    {
+        static char buffer[2048];
+        va_list args;
+        va_start(args, msg);
+        vsnprintf(buffer, 2047, msg, args);
+        va_end(args);
+
+        return __video_calc_text(fontface, buffer);
+    }
+
+    font_metrics_t metrics;
+    metrics.width = 0;
+    metrics.height = 0;
+    return metrics;
 }
 #endif
