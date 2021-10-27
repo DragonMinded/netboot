@@ -267,8 +267,8 @@ void send_game_options(game_options_t *parsed_options)
 #define SCREEN_CONFIGURATION_SAVE 6
 #define SCREEN_GAME_LOAD 7
 
-#define MAX_WAIT_FOR_COMMS 3.0
-#define MAX_WAIT_FOR_SAVE 5.0
+#define MAX_WAIT_FOR_COMMS 5.0
+#define MAX_WAIT_FOR_SAVE 8.0
 
 #define ERROR_BOX_WIDTH 300
 #define ERROR_BOX_HEIGHT 50
@@ -393,65 +393,68 @@ unsigned int main_menu(state_t *state, int reinit)
     }
     else
     {
-        if (controls.start_pressed)
+        if (count > 0)
         {
-            // Possibly long-pressing to get into game settings menu.
+            if (controls.start_pressed)
+            {
+                // Possibly long-pressing to get into game settings menu.
+                if (!controls_locked)
+                {
+                    controls_locked = 1;
+                    if (booting == 0 && holding == 0)
+                    {
+                        holding = 1;
+                        holding_animation = state->animation_counter;
+                    }
+                }
+            }
+            if (controls.start_released)
+            {
+                if (booting == 0 && holding == 1)
+                {
+                    // Made a selection!
+                    booting = 1;
+                    holding = 0;
+                    booting_animation = state->animation_counter;
+                    message_send(MESSAGE_SELECTION, &cursor, 4);
+                }
+                else if(booting == 1)
+                {
+                    // Ignore everything, we're waiting to boot at this point.
+                }
+                else
+                {
+                    // Somehow got here, maybe start held on another screen?
+                    booting = 0;
+                    holding = 0;
+                    controls_locked = 0;
+                }
+            }
             if (!controls_locked)
             {
-                controls_locked = 1;
-                if (booting == 0 && holding == 0)
+                if (controls.up_pressed)
                 {
-                    holding = 1;
-                    holding_animation = state->animation_counter;
+                    // Moved cursor up.
+                    if (cursor > 0)
+                    {
+                        cursor --;
+                    }
+                    if (cursor < top)
+                    {
+                        top = cursor;
+                    }
                 }
-            }
-        }
-        if (controls.start_released)
-        {
-            if (booting == 0 && holding == 1)
-            {
-                // Made a selection!
-                booting = 1;
-                holding = 0;
-                booting_animation = state->animation_counter;
-                message_send(MESSAGE_SELECTION, &cursor, 4);
-            }
-            else if(booting == 1)
-            {
-                // Ignore everything, we're waiting to boot at this point.
-            }
-            else
-            {
-                // Somehow got here, maybe start held on another screen?
-                booting = 0;
-                holding = 0;
-                controls_locked = 0;
-            }
-        }
-        if (!controls_locked)
-        {
-            if (controls.up_pressed)
-            {
-                // Moved cursor up.
-                if (cursor > 0)
+                else if (controls.down_pressed)
                 {
-                    cursor --;
-                }
-                if (cursor < top)
-                {
-                    top = cursor;
-                }
-            }
-            else if (controls.down_pressed)
-            {
-                // Moved cursor down.
-                if (cursor < (count - 1))
-                {
-                    cursor ++;
-                }
-                if (cursor >= (top + maxgames))
-                {
-                    top = cursor - (maxgames - 1);
+                    // Moved cursor down.
+                    if (cursor < (count - 1))
+                    {
+                        cursor ++;
+                    }
+                    if (cursor >= (top + maxgames))
+                    {
+                        top = cursor - (maxgames - 1);
+                    }
                 }
             }
         }
@@ -485,6 +488,7 @@ unsigned int main_menu(state_t *state, int reinit)
     }
 
     // Now, render the actual list of games.
+    if (count > 0)
     {
         unsigned int scroll_indicator_move_amount[4] = { 1, 2, 1, 0 };
         int scroll_offset = scroll_indicator_move_amount[((int)(state->animation_counter * 4.0)) & 0x3];
@@ -568,6 +572,12 @@ unsigned int main_menu(state_t *state, int reinit)
         {
             video_draw_sprite(video_width() / 2 - 10, 24 + (maxgames * 21) + scroll_offset, dn_png_width, dn_png_height, dn_png_data);
         }
+    }
+    else
+    {
+        char * nogames = "No Naomi ROMs in ROM directory!";
+        font_metrics_t metrics = video_get_text_metrics(state->font_18pt, nogames);
+        video_draw_text((video_width() - metrics.width) / 2, (video_height() - metrics.height) / 2, state->font_18pt, rgb(255, 0, 0), nogames);
     }
 
     return new_screen;
