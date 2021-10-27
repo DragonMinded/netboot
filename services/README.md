@@ -49,6 +49,7 @@ If you want to always send the same game to your net dimm every single boot, no 
 
 ```
 sudo cp kiosk.service /etc/systemd/system/
+sudo systemctl enable kiosk
 ```
 
 Now, you can shut down the RPI, plug it into the net dimm and switch on the RPI and the target system at once. If all was setup properly you should see the game loading onto the net dimm and then booting when you are finished! It is recommended at this point to put your RPI root filesystem into read-only mode. Failure to do so can cause filesystem corruption over time as you turn the power off unexpectedly without shutting down. You can do so by running `sudo raspi-config` and activating "OverlayFS" in the menu. Be sure to do so after you've tested everything as this makes changes difficult!
@@ -60,6 +61,7 @@ If you want to see a menu on your arcade cabinet full of all of the ROMs you hav
 ```
 sudo mkdir /boot/roms
 sudo cp menu.service /etc/systemd/system/
+sudo systemctl enable menu
 ```
 
 Now, you can shut down the RPI, plug it into the net dimm and swithc on the RPI and the menu should appear. You can hit the test button on the main game list to configure the menu, and you can hold start on any game for 1+ second to enter the game configuration screen. It is recommended at this point to put your RPI root filesystem into read-only mode. Failure to do so can cause filesystem corruption over time as you turn the power off unexpectedly without shutting down. You can do so by running `sudo raspi-config` and activating "OverlayFS" in the menu. Be sure to do so after you've tested everything as this makes changes difficult!
