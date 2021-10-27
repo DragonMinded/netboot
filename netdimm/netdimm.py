@@ -603,6 +603,8 @@ class NetDimm:
             addr += curlen
             sequence += 1
 
+        if progress_callback:
+            progress_callback(addr, total)
         crc = (~crc) & 0xFFFFFFFF
         self.__print("length: %08x" % addr)
         self.__set_information(crc, addr)
