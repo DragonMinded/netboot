@@ -103,6 +103,11 @@ def main() -> int:
         action="store_true",
         help="Disable checking memory screen after upload and boot straight into the game",
     )
+    parser.add_argument(
+        '--disable-now-loading',
+        action="store_true",
+        help="Disable displaying the \"NOW LOADING...\" screen when sending the game",
+    )
 
     args = parser.parse_args()
 
@@ -140,7 +145,7 @@ def main() -> int:
                 data = patcher.data
 
         # Send the binary, reboot into the game.
-        netdimm.send(data, key, disable_crc_check=args.disable_crc)
+        netdimm.send(data, key, disable_crc_check=args.disable_crc, disable_now_loading=args.disable_now_loading)
         print("rebooting into game...", file=sys.stderr)
         netdimm.reboot()
         print("ok!", file=sys.stderr)

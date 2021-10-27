@@ -115,20 +115,28 @@ class NetDimm:
             self.version = info.firmware_version
             return info
 
-    def send(self, data: Union[bytes, FileBytes], key: Optional[bytes] = None, disable_crc_check: bool = False, progress_callback: Optional[Callable[[int, int], None]] = None) -> None:
+    def send(
+        self,
+        data: Union[bytes, FileBytes],
+        key: Optional[bytes] = None,
+        disable_crc_check: bool = False,
+        disable_now_loading: bool = False,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
+    ) -> None:
         with self.connection():
             # First, signal back to calling code that we've started
             if progress_callback:
                 progress_callback(0, len(data))
 
-            # Reboot and display "now loading..." on the cabinet screen
-            self.__set_host_mode(1)
+            if not disable_now_loading:
+                # Reboot and display "now loading..." on the cabinet screen
+                self.__set_host_mode(1)
 
-            # The official sega transfer tool update sleeps for 5 seconds
-            # here, presumably because the net dimm doesn't respond to
-            # packets while it is ressetting the target to display "now
-            # loading". However, our timeout is 10 seconds so this ends
-            # up working without that sleep in practice.
+                # The official sega transfer tool update sleeps for 5 seconds
+                # here, presumably because the net dimm doesn't respond to
+                # packets while it is ressetting the target to display "now
+                # loading". However, our timeout is 10 seconds so this ends
+                # up working without that sleep in practice.
 
             if key:
                 # Send the key that we're going to use to encrypt
