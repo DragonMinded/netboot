@@ -4,6 +4,7 @@
 import os
 import socket
 import struct
+import time
 import zlib
 from Crypto.Cipher import DES
 from contextlib import contextmanager
@@ -217,8 +218,11 @@ class NetDimm:
             # a function to receive a number of bytes with hard blocking
             res: List[bytes] = []
             left: int = num
+            start = time.time()
 
             while left > 0:
+                if time.time() - start > 10.0:
+                    raise NetDimmException("Could not receive data from NetDimm")
                 ret = self.sock.recv(left)
                 left -= len(ret)
                 res.append(ret)
