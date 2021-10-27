@@ -119,6 +119,10 @@ uint32_t video_get_pixel(int x, int y);
 // color between that starting and ending point. This is orientation-aware.
 void video_draw_line(int x0, int y0, int x1, int y1, uint32_t color);
 
+// Given a staring and ending x and y coodinate, draws a simple box with
+// the given color. This is orientation-aware.
+void video_draw_box(int x0, int y0, int x1, int y1, uint32_t color);
+
 // Given an x, y coordinate, a sprite width and height, and a packed chunk
 // of sprite data (should be video_depth() bytes per pixel in the sprite),
 // draws the sprite to the screen at that x, y position. This is orientation

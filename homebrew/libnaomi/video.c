@@ -474,6 +474,40 @@ void video_draw_line(int x0, int y0, int x1, int y1, uint32_t color)
     }
 }
 
+void video_draw_box(int x0, int y0, int x1, int y1, uint32_t color)
+{
+    int low_x;
+    int high_x;
+    int low_y;
+    int high_y;
+
+    if (x1 < x0)
+    {
+        low_x = x1;
+        high_x = x0;
+    }
+    else
+    {
+        low_x = x0;
+        high_x = x1;
+    }
+    if (y1 < y0)
+    {
+        low_y = y1;
+        high_y = y0;
+    }
+    else
+    {
+        low_y = y0;
+        high_y = y1;
+    }
+
+    video_draw_line(low_x, low_y, high_x, low_y, color);
+    video_draw_line(low_x, high_y, high_x, high_y, color);
+    video_draw_line(low_x, low_y, low_x, high_y, color);
+    video_draw_line(high_x, low_y, high_x, high_y, color);
+}
+
 void video_draw_debug_character( int x, int y, uint32_t color, char ch )
 {
     if (ch < 0x20 || ch > 0x7F)
