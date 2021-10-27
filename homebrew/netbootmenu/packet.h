@@ -36,6 +36,11 @@ int packetlib_recv(void *data, unsigned int *length);
 void *packetlib_peek(int packetno, unsigned int *length);
 void packetlib_discard(int packetno);
 
+void packetlib_write_scratch1(uint32_t data);
+void packetlib_write_scratch2(uint32_t data);
+uint32_t packetlib_read_scratch1();
+uint32_t packetlib_read_scratch2();
+
 packetlib_stats_t packetlib_stats();
 void packetlib_render_stats(char *buffer);
 

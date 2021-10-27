@@ -7,6 +7,7 @@
 #include "common.h"
 #include "config.h"
 #include "screens.h"
+#include "packet.h"
 #include "message.h"
 #include "controls.h"
 
@@ -55,6 +56,7 @@ typedef struct
 
 static int selected_game = -1;
 static int expecting_boot = 0;
+static int sending_game_size = 0;
 static game_options_t *game_options = 0;
 
 void free_setting(setting_t *setting)
@@ -263,6 +265,7 @@ void send_game_options(game_options_t *parsed_options)
 #define SCREEN_GAME_SETTINGS_SAVE 4
 #define SCREEN_CONFIGURATION 5
 #define SCREEN_CONFIGURATION_SAVE 6
+#define SCREEN_GAME_LOAD 7
 
 #define MAX_WAIT_FOR_COMMS 3.0
 #define MAX_WAIT_FOR_SAVE 5.0
@@ -281,30 +284,8 @@ void display_test_error(state_t *state)
         ERROR_BOX_TOP + ERROR_BOX_HEIGHT,
         rgb(32, 32, 32)
     );
-
-    video_draw_line(
+    video_draw_box(
         halfwidth - (ERROR_BOX_WIDTH / 2),
-        ERROR_BOX_TOP,
-        halfwidth + (ERROR_BOX_WIDTH / 2),
-        ERROR_BOX_TOP,
-        rgb(255, 0, 0)
-    );
-    video_draw_line(
-        halfwidth - (ERROR_BOX_WIDTH / 2),
-        ERROR_BOX_TOP + ERROR_BOX_HEIGHT,
-        halfwidth + (ERROR_BOX_WIDTH / 2),
-        ERROR_BOX_TOP + ERROR_BOX_HEIGHT,
-        rgb(255, 0, 0)
-    );
-    video_draw_line(
-        halfwidth - (ERROR_BOX_WIDTH / 2),
-        ERROR_BOX_TOP,
-        halfwidth - (ERROR_BOX_WIDTH / 2),
-        ERROR_BOX_TOP + ERROR_BOX_HEIGHT,
-        rgb(255, 0, 0)
-    );
-    video_draw_line(
-        halfwidth + (ERROR_BOX_WIDTH / 2),
         ERROR_BOX_TOP,
         halfwidth + (ERROR_BOX_WIDTH / 2),
         ERROR_BOX_TOP + ERROR_BOX_HEIGHT,
@@ -465,6 +446,28 @@ unsigned int main_menu(state_t *state, int reinit)
         }
     }
 
+    // See if we got any messages from the host.
+    {
+        uint16_t type = 0;
+        uint8_t *data = 0;
+        unsigned int length = 0;
+        if (message_recv(&type, (void *)&data, &length) == 0)
+        {
+            if (type == MESSAGE_LOAD_PROGRESS && length == 8)
+            {
+                // Grab the current progress so we can display it.
+                memcpy(&sending_game_size, &data[0], 4);
+                new_screen = SCREEN_GAME_LOAD;
+            }
+
+            // Wipe any data that we need.
+            if (data != 0)
+            {
+                free(data);
+            }
+        }
+    }
+
     // Now, render the actual list of games.
     {
         unsigned int scroll_indicator_move_amount[4] = { 1, 2, 1, 0 };
@@ -479,13 +482,16 @@ unsigned int main_menu(state_t *state, int reinit)
             {
                 // Held for 1 second, so lets go to game settings.
                 selected_game = cursor;
-                new_screen = SCREEN_GAME_SETTINGS_LOAD;
+                if (new_screen != SCREEN_GAME_LOAD)
+                {
+                    new_screen = SCREEN_GAME_SETTINGS_LOAD;
+                }
                 which = 9;
             }
             cursor_offset = cursor_move_amount[which];
         }
 
-        if (booting > 0)
+        if (booting > 0 && new_screen != SCREEN_GAME_LOAD)
         {
             if ((state->animation_counter - holding_animation) >= MAX_WAIT_FOR_COMMS)
             {
@@ -594,7 +600,7 @@ unsigned int game_settings_load(state_t *state, int reinit)
                     ack_received = 1;
                 }
             }
-            if (type == MESSAGE_LOAD_SETTINGS_DATA)
+            else if (type == MESSAGE_LOAD_SETTINGS_DATA)
             {
                 game_options = parse_game_options(data, length);
                 if (game_options == 0)
@@ -611,6 +617,12 @@ unsigned int game_settings_load(state_t *state, int reinit)
                 }
 
                 new_screen = SCREEN_GAME_SETTINGS;
+            }
+            else if (type == MESSAGE_LOAD_PROGRESS && length == 8)
+            {
+                // Grab the current progress so we can display it.
+                memcpy(&sending_game_size, &data[0], 4);
+                new_screen = SCREEN_GAME_LOAD;
             }
 
             // Wipe any data that we need.
@@ -738,6 +750,28 @@ unsigned int game_settings(state_t *state, int reinit)
 
                     break;
                 }
+            }
+        }
+    }
+
+    // See if we got any messages from the host.
+    {
+        uint16_t type = 0;
+        uint8_t *data = 0;
+        unsigned int length = 0;
+        if (message_recv(&type, (void *)&data, &length) == 0)
+        {
+            if (type == MESSAGE_LOAD_PROGRESS && length == 8)
+            {
+                // Grab the current progress so we can display it.
+                memcpy(&sending_game_size, &data[0], 4);
+                new_screen = SCREEN_GAME_LOAD;
+            }
+
+            // Wipe any data that we need.
+            if (data != 0)
+            {
+                free(data);
             }
         }
     }
@@ -905,6 +939,12 @@ unsigned int game_settings_save(state_t *state, int reinit)
                 {
                     new_screen = SCREEN_MAIN_MENU;
                 }
+            }
+            else if (type == MESSAGE_LOAD_PROGRESS && length == 8)
+            {
+                // Grab the current progress so we can display it.
+                memcpy(&sending_game_size, &data[0], 4);
+                new_screen = SCREEN_GAME_LOAD;
             }
 
             // Wipe any data that we need.
@@ -1246,6 +1286,28 @@ unsigned int configuration(state_t *state, int reinit)
         joy2_vmax = max(joy2_vmax, joy2_vcenter);
     }
 
+    // See if we got any messages from the host.
+    {
+        uint16_t type = 0;
+        uint8_t *data = 0;
+        unsigned int length = 0;
+        if (message_recv(&type, (void *)&data, &length) == 0)
+        {
+            if (type == MESSAGE_LOAD_PROGRESS && length == 8)
+            {
+                // Grab the current progress so we can display it.
+                memcpy(&sending_game_size, &data[0], 4);
+                new_screen = SCREEN_GAME_LOAD;
+            }
+
+            // Wipe any data that we need.
+            if (data != 0)
+            {
+                free(data);
+            }
+        }
+    }
+
     // Actually draw the menu
     {
         video_draw_text(video_width() / 2 - 70, 22, state->font_18pt, rgb(0, 255, 255), "Menu Configuration");
@@ -1380,6 +1442,13 @@ unsigned int configuration_save(state_t *state, int reinit)
     // If we need to switch screens.
     unsigned int new_screen = SCREEN_CONFIGURATION_SAVE;
 
+    controls_t controls = get_controls(state, reinit);
+    if (controls.test_pressed)
+    {
+        // Display error message about not going into settings now.
+        state->test_error_counter = state->animation_counter;
+    }
+
     // Check to see if we got a response in time.
     {
         uint16_t type = 0;
@@ -1391,6 +1460,12 @@ unsigned int configuration_save(state_t *state, int reinit)
             {
                 // Successfully acknowledged, time to go back to main screen.
                 new_screen = SCREEN_MAIN_MENU;
+            }
+            else if (type == MESSAGE_LOAD_PROGRESS && length == 8)
+            {
+                // Grab the current progress so we can display it.
+                memcpy(&sending_game_size, &data[0], 4);
+                new_screen = SCREEN_GAME_LOAD;
             }
 
             // Wipe any data that we need.
@@ -1408,6 +1483,97 @@ unsigned int configuration_save(state_t *state, int reinit)
     }
 
     video_draw_text(video_width() / 2 - 100, 100, state->font_18pt, rgb(0, 255, 0), "Saving configuration...");
+
+    return new_screen;
+}
+
+unsigned int game_load(state_t *state, int reinit)
+{
+    static double load_start = 0.0;
+    static int width = 0;
+    static int game_size = 0;
+    static int game_progress = 0;
+
+    if (reinit)
+    {
+        // Attempt to load the game to DIMM.
+        load_start = state->animation_counter;
+
+        // The size of our progress bar, minus 50 pixels on each side.
+        width = video_width() - 100;
+
+        game_size = sending_game_size;
+        game_progress = 0;
+    }
+
+    // If we need to switch screens.
+    unsigned int new_screen = SCREEN_GAME_LOAD;
+
+    controls_t controls = get_controls(state, reinit);
+    if (controls.test_pressed)
+    {
+        // Display error message about not going into settings now.
+        state->test_error_counter = state->animation_counter;
+    }
+
+    // Check the scratch registers in the comms code to see if we were updated on progress.
+    {
+        if (packetlib_read_scratch1() != game_progress)
+        {
+            // We got some progress, reset our timeout.
+            load_start = state->animation_counter;
+            game_progress = packetlib_read_scratch1();
+        }
+    }
+
+    // Check to see if we got a response in time.
+    {
+        uint16_t type = 0;
+        uint8_t *data = 0;
+        unsigned int length = 0;
+        if (message_recv(&type, (void *)&data, &length) == 0)
+        {
+            if (type == MESSAGE_LOAD_PROGRESS && length == 8)
+            {
+                // We got some progress, reset our timeout.
+                load_start = state->animation_counter;
+
+                // Grab the current progress so we can display it.
+                memcpy(&game_size, &data[0], 4);
+                memcpy(&game_progress, &data[4], 4);
+            }
+
+            // Wipe any data that we need.
+            if (data != 0)
+            {
+                free(data);
+            }
+        }
+
+        if (((state->animation_counter - load_start) >= MAX_WAIT_FOR_COMMS))
+        {
+            // Uh oh, no ack.
+            new_screen = SCREEN_COMM_ERROR;
+        }
+    }
+
+    // Draw the progress bar and percentage.
+    {
+        video_draw_text(video_width() / 2 - 100, 100, state->font_18pt, rgb(255, 255, 255), "Loading game...");
+        video_fill_box(50, 150, 50 + width, 170, rgb(32, 32, 32));
+        video_draw_box(50, 150, 50 + width, 170, rgb(255, 255, 255));
+
+        int actual_percent = 0;
+        if (game_size > 0)
+        {
+            int actual_width = (int)(((double)game_progress / (double)game_size) * (width - 2));
+            video_fill_box(51, 151, 51 + actual_width, 169, rgb(0, 0, 255));
+
+            actual_percent = (int)(((double)game_progress / (double)game_size) * 100);
+        }
+
+        video_draw_text(video_width() / 2 - 10, 154, state->font_12pt, rgb(255, 255, 255), "%d%%", actual_percent);
+    }
 
     return new_screen;
 }
@@ -1459,6 +1625,9 @@ void draw_screen(state_t *state)
             break;
         case SCREEN_CONFIGURATION_SAVE:
             newscreen = configuration_save(state, curscreen != oldscreen);
+            break;
+        case SCREEN_GAME_LOAD:
+            newscreen = game_load(state, curscreen != oldscreen);
             break;
         default:
             // Should never happen, but still, whatever.

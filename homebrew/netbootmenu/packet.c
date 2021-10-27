@@ -20,6 +20,8 @@ typedef struct
     unsigned int success_received;
     unsigned int cancelled_packets;
     unsigned int checksum_errors;
+    uint32_t scratch1;
+    uint32_t scratch2;
 } packetlib_state_t;
 
 static packetlib_state_t packetlib_state;
@@ -42,6 +44,8 @@ void packetlib_init()
     packetlib_state.success_received = 0;
     packetlib_state.cancelled_packets = 0;
     packetlib_state.checksum_errors = 0;
+    packetlib_state.scratch1 = 0;
+    packetlib_state.scratch2 = 0;
 
     // Attach our handlers for sending/receiving data.
     dimm_comms_attach_hooks(&peek_memory, &poke_memory);
@@ -387,6 +391,26 @@ void write_recv_status(uint32_t status)
     }
 }
 
+void packetlib_write_scratch1(uint32_t data)
+{
+    packetlib_state.scratch1 = data;
+}
+
+void packetlib_write_scratch2(uint32_t data)
+{
+    packetlib_state.scratch2 = data;
+}
+
+uint32_t packetlib_read_scratch1()
+{
+    return packetlib_state.scratch1;
+}
+
+uint32_t packetlib_read_scratch2()
+{
+    return packetlib_state.scratch2;
+}
+
 uint32_t peek_memory(unsigned int address, int size)
 {
     if (size == 4)
@@ -402,6 +426,14 @@ uint32_t peek_memory(unsigned int address, int size)
         else if ((address & 0xFFFFFF) == 0xC0DE30) {
             // Read status register.
             return read_recv_status();
+        }
+        else if ((address & 0xFFFFFF) == 0xC0DE40) {
+            // Read scratch register 1.
+            return packetlib_read_scratch1();
+        }
+        else if ((address & 0xFFFFFF) == 0xC0DE50) {
+            // Read scratch register 1.
+            return packetlib_read_scratch2();
         }
     }
 
@@ -425,6 +457,14 @@ void poke_memory(unsigned int address, int size, uint32_t data)
         else if ((address & 0xFFFFFF) == 0xC0DE30) {
             // Write status register.
             write_recv_status(data);
+        }
+        else if ((address & 0xFFFFFF) == 0xC0DE40) {
+            // Write scratch register 1.
+            packetlib_write_scratch1(data);
+        }
+        else if ((address & 0xFFFFFF) == 0xC0DE50) {
+            // Write scratch register 2.
+            packetlib_write_scratch2(data);
         }
     }
 }
