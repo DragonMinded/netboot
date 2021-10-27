@@ -1,0 +1,14 @@
+[Unit]
+Description=Net Dimm Kiosk Service
+After=network.target
+
+[Service]
+Type=simple
+Restart=always
+User=root
+Group=root
+WorkingDirectory=/home/pi/netboot/
+ExecStart=/home/pi/netboot/scripts/kiosk.sh
+
+[Install]
+WantedBy=multi-user.target
