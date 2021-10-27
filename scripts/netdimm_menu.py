@@ -635,7 +635,7 @@ def main() -> int:
                         print("Sending failed...")
 
         # Now, talk to the net dimm and exchange packets to handle settings and game selection.
-        selected_filename = None
+        selected_file = None
 
         if success:
             print("Talking to net dimm to wait for ROM selection...")
@@ -666,8 +666,24 @@ def main() -> int:
                                 # Wait a second for animation on the Naomi.
                                 time.sleep(1.0)
 
-                                # Remember selected filename.
-                                selected_filename = filename
+                                # First, grab a handle to the data itself.
+                                fp = open(filename, "rb")
+                                gamedata = FileBytes(fp)
+                                gamesettings = settings.game_settings.get(filename, GameSettings.default())
+
+                                patchman = PatchManager([args.patchdir])
+                                for patchfile in gamesettings.enabled_patches:
+                                    print(f"Applying patch {patchman.patch_name(patchfile)} to game...")
+                                    with open(patchfile, "r") as pp:
+                                        differences = pp.readlines()
+                                        differences = [d.strip() for d in differences if d.strip()]
+                                        try:
+                                            gamedata = BinaryDiff.patch(gamedata, differences)
+                                        except Exception as e:
+                                            print(f"Could not patch {filename} with {patchfile}: {str(e)}", file=sys.stderr)
+
+                                send_message(netdimm, Message(MESSAGE_LOAD_PROGRESS, struct.pack("<ii", len(gamedata), 0)))
+                                selected_file = gamedata
                                 break
 
                             elif msg.id == MESSAGE_LOAD_SETTINGS:
@@ -770,32 +786,36 @@ def main() -> int:
                 else:
                     print("Communicating failed...")
 
-        if success and selected_filename is not None:
+        if success and selected_file is not None:
             try:
                 # Always show game send progress.
                 netdimm = NetDimm(args.ip, log=print)
 
-                with open(filename, "rb") as fp:
-                    # First, grab a handle to the data itself.
-                    gamedata = FileBytes(fp)
-                    gamesettings = settings.game_settings.get(filename, GameSettings.default())
+                # Only want to send so many progress packets.
+                old_percent = -1
+                old_time = time.time()
 
-                    patchman = PatchManager([args.patchdir])
-                    for patchfile in gamesettings.enabled_patches:
-                        print(f"Applying patch {patchman.patch_name(patchfile)} to game...")
-                        with open(patchfile, "r") as pp:
-                            differences = pp.readlines()
-                            differences = [d.strip() for d in differences if d.strip()]
-                            try:
-                                gamedata = BinaryDiff.patch(gamedata, differences)
-                            except Exception as e:
-                                print(f"Could not patch {filename} with {patch}: {str(e)}", file=sys.stderr)
+                def progress_callback(loc: int, size: int) -> None:
+                    nonlocal old_percent
+                    nonlocal old_time
 
-                    # Finally, send it!.
-                    netdimm.send(gamedata, disable_crc_check=True)
-                    netdimm.reboot()
-            except NetDimmException:
+                    new_percent = int((loc / size) * 100)
+                    new_time = time.time()
+                    if new_percent != old_percent or (new_time - old_time) > 2.0:
+                        netdimm.poke(MENU_SCRATCH1_REGISTER, PeekPokeTypeEnum.TYPE_LONG, loc)
+                        old_percent = new_percent
+                        old_time = new_time
+
+                # Finally, send it!.
+                netdimm.send(selected_file, disable_crc_check=True, disable_now_loading=True, progress_callback=progress_callback)
+                netdimm.reboot()
+
+                # And clean up.
+                selected_file.handle.close()
+                selected_file = None
+            except NetDimmException as e:
                 # Mark failure so we don't try to wait for power down below.
+                print(str(e))
                 success = False
 
                 if args.persistent:
