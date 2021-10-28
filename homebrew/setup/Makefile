@@ -24,7 +24,7 @@ arm_target=arm-eabi
 sh_prefix  := /opt/toolchains/naomi/$(sh_target)
 arm_prefix := /opt/toolchains/naomi/$(arm_target)
 sh_binutils_ver=2.34
-sh_gcc_ver=9.3.0
+sh_gcc_ver=9.4.0
 newlib_ver=4.1.0
 gdb_ver=9.1
 insight_ver=6.8-1
@@ -33,7 +33,7 @@ insight_ver=6.8-1
 # particular CPU versions we need may not be available in
 # newer versions of GCC.
 arm_binutils_ver=2.34
-arm_gcc_ver=8.4.0
+arm_gcc_ver=8.5.0
 
 # Threading model, either posix or single-threaded.
 thread_model=single

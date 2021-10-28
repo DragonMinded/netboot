@@ -1,8 +1,8 @@
 #!/bin/sh
 
 # These version numbers are all that should ever have to be changed.
-export SH_GCC_VER=9.3.0
-export ARM_GCC_VER=8.4.0
+export SH_GCC_VER=9.4.0
+export ARM_GCC_VER=8.5.0
 export BINUTILS_VER=2.34
 export NEWLIB_VER=4.1.0
 export GMP_VER=6.1.0
