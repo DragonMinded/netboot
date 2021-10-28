@@ -25,7 +25,7 @@ sh_prefix  := /opt/toolchains/naomi/$(sh_target)
 arm_prefix := /opt/toolchains/naomi/$(arm_target)
 sh_binutils_ver=2.34
 sh_gcc_ver=9.3.0
-newlib_ver=3.3.0
+newlib_ver=4.1.0
 gdb_ver=9.1
 insight_ver=6.8-1
 
@@ -146,7 +146,7 @@ $(build_newlib): src_dir = newlib-$(newlib_ver)
 $(build_newlib): log = $(logdir)/$(build).log
 $(build_newlib): logdir
 	@echo "+++ Building $(src_dir) to $(build)..."
-	patch -N -p0 < newlib.patch || true
+	patch -N -p0 < newlib.patch
 	-mkdir -p $(build)
 	> $(log)
 	cd $(build); ../$(src_dir)/configure --target=$(target) --prefix=$(prefix) $(extra_configure_args) $(to_log)
