@@ -129,6 +129,9 @@ DATE = python3 $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/date.py
 # Set up various toolchain utilities.
 IMG2C = python3 $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/sprite.py
 
+# Set up library detection utility.
+libmissing = $(shell ${LD} -l$(1) 2>&1 | grep "cannot find" | wc -l)
+
 # A list of base libraries that should always link against ARM.
 ARMLIBS = -lgcc
 

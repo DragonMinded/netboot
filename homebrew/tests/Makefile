@@ -10,9 +10,16 @@ all: tests.bin
 # these files exist.
 SRCS += build/testsuite.c
 SRCS += build/aica_test.bin.o
+SRCS += dejavusans.ttf
 
 # Pick up base makefile rules common to all examples.
 include ../Makefile.base
+
+# Only link against freetype if it has itself been compiled.
+ifeq ($(call libmissing,freetype), 0)
+# Libraries that we want to link against.
+LIBS += -lfreetype -lbz2 -lz -lpng16
+endif
 
 # Auto-find test cases and add them to the binary.
 TEST_SOURCES := $(wildcard *.c)
