@@ -15,6 +15,8 @@ extern "C" {
 
 void host_printf(char *msg, ...);
 
+int zlib_decompress(uint8_t *compressed, unsigned int compressedlen, uint8_t *decompressed, unsigned int decompressedlen);
+
 #ifdef __cplusplus
 }
 #endif

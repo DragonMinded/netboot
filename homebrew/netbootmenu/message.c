@@ -87,6 +87,11 @@ int message_recv(uint16_t *type, void ** data, unsigned int *length)
     memset(seen_positions, 0, sizeof(uint8_t *) * MAX_OUTSTANDING_PACKETS);
     memset(seen_packet_lengths, 0, sizeof(uint16_t) * MAX_OUTSTANDING_PACKETS);
 
+    // Start by initializing outputs
+    *type = 0;
+    *data = 0;
+    *length = 0;
+
     for (unsigned int pkt = 0; pkt < MAX_OUTSTANDING_PACKETS; pkt++)
     {
         // Grab the potential packet we could receive.
@@ -241,6 +246,37 @@ int message_recv(uint16_t *type, void ** data, unsigned int *length)
         if (seen_positions[index])
         {
             free(seen_positions[index]);
+        }
+    }
+
+    // Now, possibly decompress the data.
+    if (success == 0 && (*data) != 0 && (*length) >= 4 && ((*type) & 0x8000) != 0)
+    {
+        unsigned int decompressed_length;
+        uint8_t *decompressed_data;
+        unsigned int compressed_length = *length;
+        uint8_t *compressed_data = (uint8_t *)(*data);
+
+        memcpy(&decompressed_length, &compressed_data[0], 4);
+        decompressed_data = malloc(decompressed_length);
+
+        if (zlib_decompress(&compressed_data[4], compressed_length - 4, decompressed_data, decompressed_length) == 0)
+        {
+            free(compressed_data);
+            *data = decompressed_data;
+            *length = decompressed_length;
+            *type = ((*type) & 0x7FFF);
+        }
+        else
+        {
+            free(compressed_data);
+            free(decompressed_data);
+            *type = 0;
+            *data = 0;
+            *length = 0;
+
+            // Failed to decompress somehow.
+            success = -6;
         }
     }
 

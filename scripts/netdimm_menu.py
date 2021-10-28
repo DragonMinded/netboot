@@ -7,6 +7,7 @@ import subprocess
 import sys
 import time
 import yaml
+import zlib
 from typing import Dict, List, Optional, Set, Tuple
 
 from arcadeutils import FileBytes, BinaryDiff
@@ -231,16 +232,25 @@ def send_message(netdimm: NetDimm, message: Message) -> bool:
     if send_sequence == 0:
         send_sequence = 1
 
-    total_length = len(message.data)
+    data = message.data
+    compressed = False
+    if data:
+        compresseddata = zlib.compress(data, level=9)
+        if (len(compresseddata) + 4) < len(data):
+            # Worth it to compress.
+            data = struct.pack("<I", len(data)) + compresseddata
+            compressed = True
+
+    total_length = len(data)
     if total_length == 0:
-        packetdata = struct.pack("<HHHH", message.id & 0xFFFF, send_sequence & 0xFFFF, 0, 0)
+        packetdata = struct.pack("<HHHH", (message.id & 0x7FFF) | (0x8000 if compressed else 0), send_sequence & 0xFFFF, 0, 0)
         if not send_packet(netdimm, packetdata):
             send_sequence = (send_sequence + 1) & 0xFFFF
             return False
     else:
         location = 0
-        for chunk in [message.data[i:(i + MAX_MESSAGE_DATA_LENGTH)] for i in range(0, total_length, MAX_MESSAGE_DATA_LENGTH)]:
-            packetdata = struct.pack("<HHHH", message.id & 0xFFFF, send_sequence & 0xFFFF, total_length & 0xFFFF, location & 0xFFFF) + chunk
+        for chunk in [data[i:(i + MAX_MESSAGE_DATA_LENGTH)] for i in range(0, total_length, MAX_MESSAGE_DATA_LENGTH)]:
+            packetdata = struct.pack("<HHHH", (message.id & 0x7FFF) | (0x8000 if compressed else 0), send_sequence & 0xFFFF, total_length & 0xFFFF, location & 0xFFFF) + chunk
             location += len(chunk)
 
             if not send_packet(netdimm, packetdata):
@@ -280,6 +290,18 @@ def receive_message(netdimm: NetDimm) -> Optional[Message]:
     # We have it all!
     msgdata = b"".join(pending_received_chunks[sequence][position] for position in range(0, total_length, MAX_MESSAGE_DATA_LENGTH))
     del pending_received_chunks[sequence]
+
+    if msgid & 0x8000 != 0:
+        # It was compressed.
+        if len(msgdata) >= 4:
+            uncompressed_length = struct.unpack("<I", msgdata[0:4])[0]
+            uncompressed_data = zlib.decompress(msgdata[4:])
+            if len(uncompressed_data) != uncompressed_length:
+                raise Exception("Decompress error!")
+            msgdata = uncompressed_data
+            msgid = msgid & 0x7FFF
+        else:
+            raise Exception("Decompress error!")
 
     return Message(msgid, msgdata)
 
