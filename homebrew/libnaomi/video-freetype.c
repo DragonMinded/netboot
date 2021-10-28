@@ -10,6 +10,10 @@
 #include "naomi/video.h"
 #include "video-internal.h"
 
+#ifndef min
+#define min(a,b) (((a) < (b)) ? (a) : (b))
+#endif
+
 FT_Library * __video_freetype_init()
 {
     static FT_Library library;
@@ -609,10 +613,22 @@ int video_draw_text(int x, int y, font_t *fontface, uint32_t color, const char *
         static char buffer[2048];
         va_list args;
         va_start(args, msg);
-        vsnprintf(buffer, 2047, msg, args);
+        int length = vsnprintf(buffer, 2047, msg, args);
         va_end(args);
 
-        return __video_draw_calc_text(x, y, fontface, color, buffer, 0, 1);
+        if (length > 0)
+        {
+            buffer[min(length, 2047)] = 0;
+            return __video_draw_calc_text(x, y, fontface, color, buffer, 0, 1);
+        }
+        else if (length == 0)
+        {
+            return 0;
+        }
+        else
+        {
+            return -1;
+        }
     }
     else
     {
@@ -643,20 +659,22 @@ font_metrics_t video_get_text_metrics(font_t *fontface, const char * const msg, 
         static char buffer[2048];
         va_list args;
         va_start(args, msg);
-        vsnprintf(buffer, 2047, msg, args);
+        int length = vsnprintf(buffer, 2047, msg, args);
         va_end(args);
 
         font_metrics_t metrics;
-        if (__video_draw_calc_text(0, 0, fontface, 0, buffer, &metrics, 0) == 0)
+        if (length > 0)
         {
-            return metrics;
+            buffer[min(length, 2047)] = 0;
+            if (__video_draw_calc_text(0, 0, fontface, 0, buffer, &metrics, 0) == 0)
+            {
+                return metrics;
+            }
         }
-        else
-        {
-            metrics.width = 0;
-            metrics.height = 0;
-            return metrics;
-        }
+
+        metrics.width = 0;
+        metrics.height = 0;
+        return metrics;
     }
     else
     {

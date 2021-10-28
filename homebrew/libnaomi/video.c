@@ -11,6 +11,11 @@
 #include "font.h"
 
 
+#ifndef min
+#define min(a,b) (((a) < (b)) ? (a) : (b))
+#endif
+
+
 // TODO: Need to support more than 640x480 framebuffer mode.
 // TODO: Need to support more than RGB1555 color.
 
@@ -785,10 +790,14 @@ void video_draw_debug_text(int x, int y, uint32_t color, const char * const msg,
     {
         va_list args;
         va_start(args, msg);
-        vsnprintf(buffer, 2047, msg, args);
+        int length = vsnprintf(buffer, 2047, msg, args);
         va_end(args);
 
-        __video_draw_debug_text(x, y, color, buffer);
+        if (length > 0)
+        {
+            buffer[min(length, 2047)] = 0;
+            __video_draw_debug_text(x, y, color, buffer);
+        }
     }
 }
 
