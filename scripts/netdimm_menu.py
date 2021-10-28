@@ -11,7 +11,8 @@ import zlib
 from typing import Dict, List, Optional, Set, Tuple
 
 from arcadeutils import FileBytes, BinaryDiff
-from naomi import NaomiRom, NaomiRomRegionEnum, add_or_update_section
+from naomi import NaomiRom, NaomiRomRegionEnum, NaomiSettingsPatcher, NaomiSettingsTypeEnum, get_default_trojan, add_or_update_section
+from naomi.settings import SettingsManager, Setting, ReadOnlyCondition, get_default_settings_directory
 from netdimm import NetDimm, NetDimmException, PeekPokeTypeEnum
 from netboot import PatchManager
 
@@ -227,7 +228,7 @@ MAX_MESSAGE_DATA_LENGTH: int = MAX_PACKET_LENGTH - MESSAGE_HEADER_LENGTH
 send_sequence: int = 1
 
 
-def send_message(netdimm: NetDimm, message: Message) -> bool:
+def send_message(netdimm: NetDimm, message: Message, verbose: bool = False) -> bool:
     global send_sequence
     if send_sequence == 0:
         send_sequence = 1
@@ -240,7 +241,10 @@ def send_message(netdimm: NetDimm, message: Message) -> bool:
             # Worth it to compress.
             data = struct.pack("<I", len(data)) + compresseddata
             compressed = True
+            if verbose:
+                print(f"Compressed {len(message.data)} down to {len(data)}")
 
+    t = time.time()
     total_length = len(data)
     if total_length == 0:
         packetdata = struct.pack("<HHHH", (message.id & 0x7FFF) | (0x8000 if compressed else 0), send_sequence & 0xFFFF, 0, 0)
@@ -257,6 +261,8 @@ def send_message(netdimm: NetDimm, message: Message) -> bool:
                 send_sequence = (send_sequence + 1) & 0xFFFF
                 return False
 
+    if verbose:
+        print(f"Packet transfer took {time.time() - t} seconds")
     send_sequence = (send_sequence + 1) & 0xFFFF
     return True
 
@@ -310,13 +316,16 @@ class GameSettings:
     def __init__(
         self,
         enabled_patches: Set[str],
+        eeprom: Optional[bytes],
     ):
         self.enabled_patches = enabled_patches
+        self.eeprom = eeprom
 
     @staticmethod
     def default() -> "GameSettings":
         return GameSettings(
             enabled_patches=set(),
+            eeprom=None,
         )
 
 
@@ -391,6 +400,10 @@ def settings_load(settings_file: str, ip: str) -> Settings:
                                     enabled_patches = gamesettings['enabled_patches']
                                     if isinstance(enabled_patches, list):
                                         settings.game_settings[game].enabled_patches = {str(p) for p in enabled_patches}
+                                if 'eeprom' in gamesettings:
+                                    eeprom = gamesettings['eeprom']
+                                    if isinstance(eeprom, list) and len(eeprom) == 128:
+                                        settings.game_settings[game].eeprom = bytes(eeprom)
 
     return settings
 
@@ -415,6 +428,7 @@ def settings_save(settings_file: str, ip: str, settings: Settings) -> None:
     for game, gamesettings in settings.game_settings.items():
         gamedict = {
             'enabled_patches': list(gamesettings.enabled_patches),
+            'eeprom': [x for x in gamesettings.eeprom] if gamesettings.eeprom is not None else None,
         }
         data[ip]['game_settings'][game] = gamedict
 
@@ -433,6 +447,9 @@ MESSAGE_SAVE_SETTINGS_DATA: int = 0x1007
 MESSAGE_SAVE_SETTINGS_ACK: int = 0x1008
 MESSAGE_LOAD_PROGRESS: int = 0x1009
 SETTINGS_SIZE: int = 64
+
+READ_ONLY_ALWAYS: int = -1
+READ_ONLY_NEVER: int = -2
 
 
 def main() -> int:
@@ -665,6 +682,8 @@ def main() -> int:
 
             last_game_selection: Optional[int] = None
             last_game_patches: List[Tuple[str, str]] = []
+            last_game_system_settings: List[Setting] = []
+            last_game_game_settings: List[Setting] = []
 
             try:
                 # Always show game send progress.
@@ -704,7 +723,7 @@ def main() -> int:
                                         except Exception as e:
                                             print(f"Could not patch {filename} with {patchfile}: {str(e)}", file=sys.stderr)
 
-                                send_message(netdimm, Message(MESSAGE_LOAD_PROGRESS, struct.pack("<ii", len(gamedata), 0)))
+                                send_message(netdimm, Message(MESSAGE_LOAD_PROGRESS, struct.pack("<ii", len(gamedata), 0)), verbose=verbose)
                                 selected_file = gamedata
                                 break
 
@@ -712,7 +731,7 @@ def main() -> int:
                                 index = struct.unpack("<I", msg.data)[0]
                                 filename = games[index][0]
                                 print(f"Requested settings for {games[index][1]}...")
-                                send_message(netdimm, Message(MESSAGE_LOAD_SETTINGS_ACK, msg.data))
+                                send_message(netdimm, Message(MESSAGE_LOAD_SETTINGS_ACK, msg.data), verbose=verbose)
 
                                 # Grab the configured settings for this game.
                                 gamesettings = settings.game_settings.get(filename, GameSettings.default())
@@ -725,26 +744,93 @@ def main() -> int:
                                 last_game_patches = patches
 
                                 # Grab any EEPROM settings which might be applicable.
+                                parsedsettings = None
+                                with open(filename, "rb") as fp:
+                                    data = FileBytes(fp)
+
+                                    eepromdata = gamesettings.eeprom
+                                    has_settings = True
+                                    if eepromdata is None:
+                                        # Possibly they edited the ROM directly, still let them edit the settings.
+                                        patcher = NaomiSettingsPatcher(data, get_default_trojan())
+                                        if patcher.type == NaomiSettingsTypeEnum.TYPE_EEPROM:
+                                            eepromdata = patcher.get_settings()
+                                        elif patcher.type == NaomiSettingsTypeEnum.TYPE_SRAM:
+                                            has_settings = False
+
+                                    if has_settings:
+                                        manager = SettingsManager(get_default_settings_directory())
+                                        if eepromdata is None:
+                                            # We need to make them up from scratch.
+                                            parsedsettings = manager.from_rom(patcher.rom, region=settings.system_region)
+                                        else:
+                                            # We have an eeprom to edit.
+                                            parsedsettings = manager.from_eeprom(eepromdata)
 
                                 # Now, create the message back to the Naomi.
-                                response = struct.pack("<II", index, len(patches))
+                                response = struct.pack("<IB", index, len(patches))
                                 for patch in patches:
-                                    response += struct.pack("<I", 1 if (patch[0] in gamesettings.enabled_patches) else 0)
-                                    patchname = patch[1].encode('utf-8')
-                                    if len(patchname) < 60:
-                                        patchname = patchname + (b"\0" * (60 - len(patchname)))
-                                    response += patchname[:60]
+                                    response += struct.pack("<B", 1 if (patch[0] in gamesettings.enabled_patches) else 0)
+                                    patchname = patch[1].encode('utf-8')[:255]
+                                    response += struct.pack("<B", len(patchname)) + patchname
 
-                                # TODO: system settings
-                                response += struct.pack("<I", 0)
+                                def make_setting(setting: Setting, setting_map: Dict[str, int]) -> bytes:
+                                    if setting.read_only is True:
+                                        # We don't encode this setting since its not visible.
+                                        return struct.pack("<BI", 0, setting.current or setting.default or 0)
 
-                                # TODO: game settings
-                                response += struct.pack("<I", 0)
-                                send_message(netdimm, Message(MESSAGE_LOAD_SETTINGS_DATA, response))
+                                    settingname = setting.name.encode('utf-8')[:255]
+                                    if len(settingname) == 0:
+                                        # We can't display this setting, it has no name!
+                                        return struct.pack("<BI", 0, setting.current or setting.default or 0)
+
+                                    settingdata = struct.pack("<B", len(settingname)) + settingname
+                                    if setting.values is not None:
+                                        settingdata += struct.pack("<I", len(setting.values))
+                                        for val, label in setting.values.items():
+                                            settingdata += struct.pack("<I", val)
+                                            valname = label.encode('utf-8')[:255]
+                                            settingdata += struct.pack("<B", len(valname)) + valname
+                                    else:
+                                        settingdata += struct.pack("<I", 0)
+
+                                    settingdata += struct.pack("<I", setting.current or setting.default or 0)
+
+                                    if setting.read_only is True:
+                                        settingdata += struct.pack("<i", READ_ONLY_ALWAYS)
+                                    elif setting.read_only is False:
+                                        settingdata += struct.pack("<i", READ_ONLY_NEVER)
+                                    elif isinstance(setting.read_only, ReadOnlyCondition):
+                                        settingdata += struct.pack("<iII", setting_map[setting.read_only.name], 1 if setting.read_only.negate else 0, len(setting.read_only.values))
+                                        for val in setting.read_only.values:
+                                            settingdata += struct.pack("<I", val)
+                                    else:
+                                        raise Exception("Logic error!")
+
+                                    return settingdata
+
+                                if has_settings and parsedsettings is not None:
+                                    # Construct system settings.
+                                    last_game_system_settings = parsedsettings.system.settings
+                                    response += struct.pack("<B", len(last_game_system_settings))
+                                    for setting in last_game_system_settings:
+                                        response += make_setting(setting, {s.name: i for (i, s) in enumerate(last_game_system_settings)})
+
+                                    # Construct game settings
+                                    last_game_game_settings = parsedsettings.game.settings
+                                    response += struct.pack("<B", len(last_game_game_settings))
+                                    for setting in last_game_game_settings:
+                                        response += make_setting(setting, {s.name: i for (i, s) in enumerate(last_game_game_settings)})
+                                else:
+                                    # This game has a SRAM chunk attached (atomiswave game), don't try to send settings.
+                                    response += struct.pack("<BB", 0, 0)
+
+                                # Send settings over.
+                                send_message(netdimm, Message(MESSAGE_LOAD_SETTINGS_DATA, response), verbose=verbose)
 
                             elif msg.id == MESSAGE_SAVE_SETTINGS_DATA:
-                                index, patchlen = struct.unpack("<II", msg.data[0:8])
-                                msgdata = msg.data[8:]
+                                index, patchlen = struct.unpack("<IB", msg.data[0:5])
+                                msgdata = msg.data[5:]
 
                                 if index == last_game_selection:
                                     filename = games[index][0]
@@ -755,8 +841,8 @@ def main() -> int:
 
                                     # Grab the updated patches.
                                     if patchlen > 0:
-                                        patches_enabled = list(struct.unpack("<" + ("I" * patchlen), msgdata[0:(4 * patchlen)]))
-                                        msgdata = msgdata[(4 * patchlen):]
+                                        patches_enabled = list(struct.unpack("<" + ("B" * patchlen), msgdata[0:(1 * patchlen)]))
+                                        msgdata = msgdata[(1 * patchlen):]
 
                                         if patchlen == len(last_game_patches):
                                             new_patches: Set[str] = set()
@@ -769,7 +855,7 @@ def main() -> int:
                                     # Save the final updates.
                                     settings.game_settings[filename] = gamesettings
                                     settings_save(args.menu_settings_file, args.ip, settings)
-                                send_message(netdimm, Message(MESSAGE_SAVE_SETTINGS_ACK))
+                                send_message(netdimm, Message(MESSAGE_SAVE_SETTINGS_ACK), verbose=verbose)
 
                             elif msg.id == MESSAGE_SAVE_CONFIG:
                                 if len(msg.data) == SETTINGS_SIZE:
@@ -795,7 +881,7 @@ def main() -> int:
                                     settings.joy2_calibration = joy2
                                     settings_save(args.menu_settings_file, args.ip, settings)
 
-                                    send_message(netdimm, Message(MESSAGE_SAVE_CONFIG_ACK))
+                                    send_message(netdimm, Message(MESSAGE_SAVE_CONFIG_ACK), verbose=verbose)
                             elif msg.id == MESSAGE_HOST_PRINT:
                                 print(msg.data.decode('utf-8'))
 

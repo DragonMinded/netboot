@@ -17,7 +17,7 @@
 typedef struct
 {
     unsigned int enabled;
-    char description[60];
+    char description[256];
 } patch_t;
 
 typedef struct
@@ -31,12 +31,12 @@ typedef struct
 typedef struct
 {
     uint32_t value;
-    char description[60];
+    char description[256];
 } value_t;
 
 typedef struct
 {
-    char name[64];
+    char name[256];
     unsigned int value_count;
     value_t *values;
     uint32_t current;
@@ -59,6 +59,19 @@ static int expecting_boot = 0;
 static int sending_game_size = 0;
 static game_options_t *game_options = 0;
 
+int find_setting_value(setting_t *setting, uint32_t value)
+{
+    for (unsigned int valno = 0; valno < setting->value_count; valno++)
+    {
+        if (setting->values[valno].value == value)
+        {
+            return valno;
+        }
+    }
+
+    return -1;
+}
+
 void free_setting(setting_t *setting)
 {
     if (setting->values)
@@ -74,8 +87,175 @@ void free_setting(setting_t *setting)
 
 int parse_setting(uint8_t *data, unsigned int length, setting_t *setting, unsigned int *expected_length)
 {
-    host_printf("TODO!!");
-    return 0;
+    memset(setting, 0, sizeof(setting_t));
+
+    if (length < ((*expected_length) + 1))
+    {
+        host_printf("Not enough data for setting name!");
+        return 0;
+    }
+
+    unsigned int settingnamelen = data[(*expected_length)];
+    *expected_length += 1;
+
+    if (settingnamelen == 0)
+    {
+        /* This setting is always invisible. */
+        setting->read_only.setting = READ_ONLY_ALWAYS;
+
+        /* We only need the current value just in case other settings depend on this one */
+        if (length < ((*expected_length) + 4))
+        {
+            host_printf("Not enough data for current value!");
+            return 0;
+        }
+
+        memcpy(&setting->current, &data[(*expected_length)], 4);
+        *expected_length += 4;
+
+        return 1;
+    }
+
+    if (length < ((*expected_length) + settingnamelen))
+    {
+        host_printf("Not enough data for setting name!");
+        return 0;
+    }
+
+    if (settingnamelen > 0)
+    {
+        memcpy(setting->name, &data[(*expected_length)], settingnamelen);
+    }
+    setting->name[settingnamelen] = 0;
+    *expected_length += settingnamelen;
+
+    if (length < ((*expected_length) + 4))
+    {
+        host_printf("Not enough data for number of values!");
+        return 0;
+    }
+
+    memcpy(&setting->value_count, &data[(*expected_length)], 4);
+    *expected_length += 4;
+
+    if (setting->value_count > 0)
+    {
+        setting->values = malloc(sizeof(value_t) * setting->value_count);
+
+        for (unsigned int valueno = 0; valueno < setting->value_count; valueno++)
+        {
+            if (length < ((*expected_length) + 5))
+            {
+                host_printf("Not enough data for setting value %d!", valueno);
+
+                free(setting->values);
+                return 0;
+            }
+
+            memcpy(&setting->values[valueno].value, &data[(*expected_length)], 4);
+            *expected_length += 4;
+
+            unsigned int valuenamelen = data[(*expected_length)];
+            *expected_length += 1;
+
+            if (length < ((*expected_length) + valuenamelen))
+            {
+                host_printf("Not enough data for setting value %d!", valueno);
+                free(setting->values);
+                return 0;
+            }
+
+            if (valuenamelen > 0)
+            {
+                memcpy(setting->values[valueno].description, &data[(*expected_length)], valuenamelen);
+            }
+            setting->values[valueno].description[valuenamelen] = 0;
+            *expected_length += valuenamelen;
+        }
+    }
+
+    if (length < ((*expected_length) + 4))
+    {
+        if (setting->values)
+        {
+            free(setting->values);
+        }
+
+        host_printf("Not enough data for current value!");
+        return 0;
+    }
+
+    memcpy(&setting->current, &data[(*expected_length)], 4);
+    *expected_length += 4;
+
+    if (length < ((*expected_length) + 4))
+    {
+        if (setting->values)
+        {
+            free(setting->values);
+        }
+
+        host_printf("Not enough data for read-only specifier!");
+        return 0;
+    }
+
+    memcpy(&setting->read_only.setting, &data[(*expected_length)], 4);
+    *expected_length += 4;
+
+    // See if we need to parse conditional read-only stuff.
+    if (setting->read_only.setting != READ_ONLY_ALWAYS && setting->read_only.setting != READ_ONLY_NEVER)
+    {
+        if (length < ((*expected_length) + 4))
+        {
+            if (setting->values)
+            {
+                free(setting->values);
+            }
+
+            host_printf("Not enough data for read-only negate specifier!");
+            return 0;
+        }
+
+        memcpy(&setting->read_only.negate, &data[(*expected_length)], 4);
+        *expected_length += 4;
+
+        if (length < ((*expected_length) + 4))
+        {
+            if (setting->values)
+            {
+                free(setting->values);
+            }
+
+            host_printf("Not enough data for read-only depdendent values count!");
+            return 0;
+        }
+
+        memcpy(&setting->read_only.value_count, &data[(*expected_length)], 4);
+        *expected_length += 4;
+
+        if (setting->read_only.value_count > 0)
+        {
+            setting->read_only.values = malloc(sizeof(uint32_t) * setting->read_only.value_count);
+
+            if (length < ((*expected_length) + (sizeof(uint32_t) * setting->read_only.value_count)))
+            {
+                if (setting->values)
+                {
+                    free(setting->values);
+                }
+                free(setting->read_only.values);
+
+                host_printf("Not enough data for read-only dependent values!");
+
+                return 0;
+            }
+
+            memcpy(setting->read_only.values, &data[(*expected_length)], sizeof(uint32_t) * setting->read_only.value_count);
+            *expected_length += sizeof(uint32_t) * setting->read_only.value_count;
+        }
+    }
+
+    return 1;
 }
 
 void free_game_options(game_options_t *parsed_options)
@@ -123,15 +303,15 @@ game_options_t *parse_game_options(uint8_t *data, unsigned int length)
     memcpy(&parsed_options->selected_game, &data[expected_length], 4);
     expected_length += 4;
 
-    if (length < (expected_length + 4))
+    if (length < (expected_length + 1))
     {
         host_printf("Not enough data for patch count!");
         free(parsed_options);
         return 0;
     }
 
-    memcpy(&parsed_options->patch_count, &data[expected_length], 4);
-    expected_length += 4;
+    parsed_options->patch_count = data[expected_length];
+    expected_length += 1;
 
     if (parsed_options->patch_count > 0)
     {
@@ -139,7 +319,7 @@ game_options_t *parse_game_options(uint8_t *data, unsigned int length)
 
         for (unsigned int patchno = 0; patchno < parsed_options->patch_count; patchno++)
         {
-            if (length < (expected_length + 64))
+            if (length < (expected_length + 2))
             {
                 host_printf("Not enough data for patch %d!", patchno);
                 free(parsed_options->patches);
@@ -147,13 +327,30 @@ game_options_t *parse_game_options(uint8_t *data, unsigned int length)
                 return 0;
             }
 
-            memcpy(&parsed_options->patches[patchno].enabled, &data[expected_length], 4);
-            memcpy(&parsed_options->patches[patchno].description, &data[expected_length + 4], 60);
-            expected_length += 64;
+            parsed_options->patches[patchno].enabled = data[expected_length];
+            expected_length += 1;
+
+            unsigned int patchnamelen = data[expected_length];
+            expected_length += 1;
+
+            if (length < (expected_length + patchnamelen))
+            {
+                host_printf("Not enough data for patch %d!", patchno);
+                free(parsed_options->patches);
+                free(parsed_options);
+                return 0;
+            }
+
+            if (patchnamelen > 0)
+            {
+                memcpy(parsed_options->patches[patchno].description, &data[expected_length], patchnamelen);
+            }
+            parsed_options->patches[patchno].description[patchnamelen] = 0;
+            expected_length += patchnamelen;
         }
     }
 
-    if (length < (expected_length + 4))
+    if (length < (expected_length + 1))
     {
         host_printf("Not enough data for system settings count!");
         if (parsed_options->patches)
@@ -164,8 +361,8 @@ game_options_t *parse_game_options(uint8_t *data, unsigned int length)
         return 0;
     }
 
-    memcpy(&parsed_options->system_settings_count, &data[expected_length], 4);
-    expected_length += 4;
+    parsed_options->system_settings_count = data[expected_length];
+    expected_length += 1;
 
     if (parsed_options->system_settings_count > 0)
     {
@@ -192,8 +389,23 @@ game_options_t *parse_game_options(uint8_t *data, unsigned int length)
         }
     }
 
-    memcpy(&parsed_options->game_settings_count, &data[expected_length], 4);
-    expected_length += 4;
+    if (length < (expected_length + 1))
+    {
+        host_printf("Not enough data for game settings count!");
+        if (parsed_options->system_settings)
+        {
+            free(parsed_options->system_settings);
+        }
+        if (parsed_options->patches)
+        {
+            free(parsed_options->patches);
+        }
+        free(parsed_options);
+        return 0;
+    }
+
+    parsed_options->game_settings_count = data[expected_length];
+    expected_length += 1;
 
     if (parsed_options->game_settings_count > 0)
     {
@@ -243,14 +455,14 @@ void send_game_options(game_options_t *parsed_options)
     memcpy(&senddata[current_loc], &parsed_options->selected_game, 4);
     current_loc += 4;
 
-    memcpy(&senddata[current_loc], &parsed_options->patch_count, 4);
-    current_loc += 4;
+    senddata[current_loc] = parsed_options->patch_count;
+    current_loc += 1;
 
     // Now, send back the patch selection.
     for (unsigned int patchno = 0; patchno < parsed_options->patch_count; patchno++)
     {
-        memcpy(&senddata[current_loc], &parsed_options->patches[patchno].enabled, 4);
-        current_loc += 4;
+        senddata[current_loc] = parsed_options->patches[patchno].enabled;
+        current_loc += 1;
     }
 
     // Send it and free our buffer.
@@ -683,6 +895,8 @@ unsigned int game_settings(state_t *state, int reinit)
     static unsigned int total = 0;
     static unsigned int top = 0;
     static unsigned int maxoptions = 0;
+    static unsigned int system_settings_count = 0;
+    static unsigned int game_settings_count = 0;
 
     if (reinit)
     {
@@ -691,7 +905,25 @@ unsigned int game_settings(state_t *state, int reinit)
         maxoptions = (video_height() - (24 + 16 + 21 + 21 + 21)) / 21;
 
         // Calculate total options.
-        total = game_options->patch_count + game_options->system_settings_count + game_options->game_settings_count + 3;
+        system_settings_count = 0;
+        for (unsigned int setting = 0; setting < game_options->system_settings_count; setting++)
+        {
+            if (game_options->system_settings[setting].read_only.setting != READ_ONLY_ALWAYS)
+            {
+                system_settings_count++;
+            }
+        }
+
+        game_settings_count = 0;
+        for (unsigned int setting = 0; setting < game_options->game_settings_count; setting++)
+        {
+            if (game_options->game_settings[setting].read_only.setting != READ_ONLY_ALWAYS)
+            {
+                game_settings_count++;
+            }
+        }
+
+        total = game_options->patch_count + system_settings_count + game_settings_count + 3;
     }
 
     // If we need to switch screens.
@@ -709,12 +941,20 @@ unsigned int game_settings(state_t *state, int reinit)
         {
             cursor--;
         }
+        if (cursor < top)
+        {
+            top = cursor;
+        }
     }
     else if(controls.down_pressed)
     {
         if (cursor < (total - 1))
         {
             cursor++;
+        }
+        if (cursor >= (top + maxoptions))
+        {
+            top = cursor - (maxoptions - 1);
         }
     }
     else if(controls.left_pressed)
@@ -739,19 +979,19 @@ unsigned int game_settings(state_t *state, int reinit)
             unsigned int patchcursor = cursor;
             game_options->patches[patchcursor].enabled = game_options->patches[patchcursor].enabled ? 0 : 1;
         }
-        else if (cursor < (game_options->patch_count + game_options->system_settings_count))
+        else if (cursor < (game_options->patch_count + system_settings_count))
         {
             // TODO
             //unsigned int systemcursor = cursor - game_options->patch_count;
         }
-        else if (cursor < (game_options->patch_count + game_options->system_settings_count + game_options->game_settings_count))
+        else if (cursor < (game_options->patch_count + system_settings_count + game_settings_count))
         {
             // TODO
             //unsigned int gamecursor = cursor - (game_options->patch_count - game_options->system_settings_count);
         }
         else
         {
-            unsigned int menucursor = cursor - (game_options->patch_count + game_options->system_settings_count + game_options->game_settings_count);
+            unsigned int menucursor = cursor - (game_options->patch_count + system_settings_count + game_settings_count);
             switch (menucursor)
             {
                 case 0:
@@ -820,6 +1060,14 @@ unsigned int game_settings(state_t *state, int reinit)
         font_metrics_t metrics = video_get_text_metrics(state->font_18pt, config_str);
         video_draw_text((video_width() - metrics.width) / 2, 22, state->font_18pt, rgb(0, 255, 255), config_str);
 
+        unsigned int scroll_indicator_move_amount[4] = { 1, 2, 1, 0 };
+        int scroll_offset = scroll_indicator_move_amount[((int)(state->animation_counter * 4.0)) & 0x3];
+
+        if (top > 0)
+        {
+            video_draw_sprite(video_width() / 2 - 10, 21 + 21 + 10 - scroll_offset, up_png_width, up_png_height, up_png_data);
+        }
+
         for (unsigned int option = top; option < top + maxoptions; option++)
         {
             if (option >= total)
@@ -868,19 +1116,97 @@ unsigned int game_settings(state_t *state, int reinit)
                     game_options->patches[patchoption].description
                 );
             }
-            else if (option < (game_options->patch_count + game_options->system_settings_count))
+            else if (option < (game_options->patch_count + system_settings_count))
             {
-                // TODO
-                //unsigned int systemoption = option - game_options->patch_count;
+                unsigned int systemoption = option - game_options->patch_count;
+                unsigned int counted = 0;
+                unsigned int actualoption = 0;
+
+                for (unsigned int setting = 0; setting < game_options->system_settings_count; setting++)
+                {
+                    if (game_options->system_settings[setting].read_only.setting == READ_ONLY_ALWAYS)
+                    {
+                        continue;
+                    }
+
+                    if (counted == systemoption)
+                    {
+                        actualoption = setting;
+                        break;
+                    }
+
+                    counted++;
+                }
+
+                int valno = find_setting_value(&game_options->system_settings[actualoption], game_options->system_settings[actualoption].current);
+                if (valno >= 0)
+                {
+                    video_draw_text(
+                        48,
+                        22 + 21 + 21 + ((option - top) * 21),
+                        state->font_18pt,
+                        option_color,
+                        "%s: %s", game_options->system_settings[actualoption].name, game_options->system_settings[actualoption].values[valno].description
+                    );
+                }
+                else
+                {
+                    video_draw_text(
+                        48,
+                        22 + 21 + 21 + ((option - top) * 21),
+                        state->font_18pt,
+                        option_color,
+                        "%s: ???", game_options->system_settings[actualoption].name
+                    );
+                }
             }
-            else if (option < (game_options->patch_count + game_options->system_settings_count + game_options->game_settings_count))
+            else if (option < (game_options->patch_count + system_settings_count + game_settings_count))
             {
-                // TODO
-                //unsigned int gameoption = option - (game_options->patch_count - game_options->system_settings_count);
+                unsigned int gameoption = option - (game_options->patch_count + system_settings_count);
+                unsigned int counted = 0;
+                unsigned int actualoption = 0;
+
+                for (unsigned int setting = 0; setting < game_options->game_settings_count; setting++)
+                {
+                    if (game_options->game_settings[setting].read_only.setting == READ_ONLY_ALWAYS)
+                    {
+                        continue;
+                    }
+
+                    if (counted == gameoption)
+                    {
+                        actualoption = setting;
+                        break;
+                    }
+
+                    counted++;
+                }
+
+                int valno = find_setting_value(&game_options->game_settings[actualoption], game_options->game_settings[actualoption].current);
+                if (valno >= 0)
+                {
+                    video_draw_text(
+                        48,
+                        22 + 21 + 21 + ((option - top) * 21),
+                        state->font_18pt,
+                        option_color,
+                        "%s: %s", game_options->game_settings[actualoption].name, game_options->game_settings[actualoption].values[valno].description
+                    );
+                }
+                else
+                {
+                    video_draw_text(
+                        48,
+                        22 + 21 + 21 + ((option - top) * 21),
+                        state->font_18pt,
+                        option_color,
+                        "%s: ???", game_options->game_settings[actualoption].name
+                    );
+                }
             }
             else
             {
-                unsigned int menuoption = option - (game_options->patch_count + game_options->system_settings_count + game_options->game_settings_count);
+                unsigned int menuoption = option - (game_options->patch_count + system_settings_count + game_settings_count);
                 switch (menuoption)
                 {
                     case 0:
@@ -923,10 +1249,9 @@ unsigned int game_settings(state_t *state, int reinit)
             }
         }
 
-        // Draw asterisk for some settings.
-        if (game_options->game_settings_count == 0)
+        if ((top + maxoptions) < total)
         {
-            video_draw_text(48, 22 + 21 + 21 + (maxoptions * 21), state->font_12pt, rgb(255, 255, 255), "Game EEPROM settings are not available for this game!");
+            video_draw_sprite(video_width() / 2 - 10, 24 + 21 + 21 + (maxoptions * 21) + scroll_offset, dn_png_width, dn_png_height, dn_png_data);
         }
     }
 
