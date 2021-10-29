@@ -12,7 +12,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from arcadeutils import FileBytes, BinaryDiff
 from naomi import NaomiRom, NaomiRomRegionEnum, NaomiSettingsPatcher, NaomiSettingsTypeEnum, get_default_trojan, add_or_update_section
-from naomi.settings import SettingsManager, Setting, ReadOnlyCondition, get_default_settings_directory
+from naomi.settings import SettingsManager, Setting, ReadOnlyCondition, SettingsWrapper, get_default_settings_directory
 from netdimm import NetDimm, NetDimmException, PeekPokeTypeEnum
 from netboot import PatchManager
 
@@ -692,8 +692,7 @@ def main() -> int:
 
             last_game_selection: Optional[int] = None
             last_game_patches: List[Tuple[str, str]] = []
-            last_game_system_settings: List[Setting] = []
-            last_game_game_settings: List[Setting] = []
+            last_game_parsed_settings: Optional[SettingsWrapper] = None
 
             try:
                 # Always show game send progress.
@@ -818,16 +817,16 @@ def main() -> int:
 
                                 if has_settings and parsedsettings is not None:
                                     # Construct system settings.
-                                    last_game_system_settings = parsedsettings.system.settings
-                                    response += struct.pack("<B", len(last_game_system_settings))
-                                    for setting in last_game_system_settings:
-                                        response += make_setting(setting, {s.name: i for (i, s) in enumerate(last_game_system_settings)})
+                                    last_game_parsed_settings = parsedsettings
+
+                                    response += struct.pack("<B", len(parsedsettings.system.settings))
+                                    for setting in parsedsettings.system.settings:
+                                        response += make_setting(setting, {s.name: i for (i, s) in enumerate(parsedsettings.system.settings)})
 
                                     # Construct game settings
-                                    last_game_game_settings = parsedsettings.game.settings
-                                    response += struct.pack("<B", len(last_game_game_settings))
-                                    for setting in last_game_game_settings:
-                                        response += make_setting(setting, {s.name: i for (i, s) in enumerate(last_game_game_settings)})
+                                    response += struct.pack("<B", len(parsedsettings.game.settings))
+                                    for setting in parsedsettings.game.settings:
+                                        response += make_setting(setting, {s.name: i for (i, s) in enumerate(parsedsettings.game.settings)})
                                 else:
                                     # This game has a SRAM chunk attached (atomiswave game), don't try to send settings.
                                     response += struct.pack("<BB", 0, 0)
@@ -858,6 +857,38 @@ def main() -> int:
                                                     new_patches.add(last_game_patches[i][0])
                                             gamesettings.enabled_patches = new_patches
                                     last_game_patches = []
+
+                                    # Grab system settings.
+                                    settinglen = struct.unpack("<B", msgdata[0:1])[0]
+                                    msgdata = msgdata[1:]
+
+                                    if settinglen > 0:
+                                        settings_values = list(struct.unpack("<" + ("I" * settinglen), msgdata[0:(4 * settinglen)]))
+                                        msgdata = msgdata[(4 * settinglen):]
+
+                                        if last_game_parsed_settings is not None:
+                                            if len(settings_values) == len(last_game_parsed_settings.system.settings):
+                                                for i, setting in enumerate(last_game_parsed_settings.system.settings):
+                                                    setting.current = settings_values[i]
+
+                                    # Grab game settings.
+                                    settinglen = struct.unpack("<B", msgdata[0:1])[0]
+                                    msgdata = msgdata[1:]
+
+                                    if settinglen > 0:
+                                        settings_values = list(struct.unpack("<" + ("I" * settinglen), msgdata[0:(4 * settinglen)]))
+                                        msgdata = msgdata[(4 * settinglen):]
+
+                                        if last_game_parsed_settings is not None:
+                                            if len(settings_values) == len(last_game_parsed_settings.game.settings):
+                                                for i, setting in enumerate(last_game_parsed_settings.game.settings):
+                                                    setting.current = settings_values[i]
+
+                                    if last_game_parsed_settings is not None:
+                                        manager = SettingsManager(get_default_settings_directory())
+                                        gamesettings.eeprom = manager.to_eeprom(last_game_parsed_settings)
+
+                                    last_game_parsed_settings = None
 
                                     # Save the final updates.
                                     settings.game_settings[filename] = gamesettings

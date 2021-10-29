@@ -447,7 +447,7 @@ game_options_t *parse_game_options(uint8_t *data, unsigned int length)
 
 void send_game_options(game_options_t *parsed_options)
 {
-    unsigned int total_length = 8 + (parsed_options->patch_count * 4);
+    unsigned int total_length = 5 + (parsed_options->patch_count * 1) + 1 + (parsed_options->system_settings_count * 4) + 1 + (parsed_options->game_settings_count * 4);
     unsigned int current_loc = 0;
     uint8_t *senddata = malloc(total_length);
 
@@ -463,6 +463,25 @@ void send_game_options(game_options_t *parsed_options)
     {
         senddata[current_loc] = parsed_options->patches[patchno].enabled;
         current_loc += 1;
+    }
+
+    // Now, send back the setting values.
+    senddata[current_loc] = parsed_options->system_settings_count;
+    current_loc += 1;
+
+    for (unsigned int setting = 0; setting < parsed_options->system_settings_count; setting++)
+    {
+        memcpy(&senddata[current_loc], &parsed_options->system_settings[setting].current, 4);
+        current_loc += 4;
+    }
+
+    senddata[current_loc] = parsed_options->game_settings_count;
+    current_loc += 1;
+
+    for (unsigned int setting = 0; setting < parsed_options->game_settings_count; setting++)
+    {
+        memcpy(&senddata[current_loc], &parsed_options->game_settings[setting].current, 4);
+        current_loc += 4;
     }
 
     // Send it and free our buffer.
