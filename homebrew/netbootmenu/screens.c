@@ -1773,7 +1773,6 @@ unsigned int configuration(state_t *state, int reinit)
     }
     else if (controls.start_pressed)
     {
-        // Test cycles as a safeguard.
         if (cursor == ((sizeof(options) / sizeof(options[0])) - 1))
         {
             // Exit without save.
@@ -1827,24 +1826,33 @@ unsigned int configuration(state_t *state, int reinit)
     {
         if(controls.up_pressed)
         {
-            if (cursor > 0)
+            int new_cursor = cursor - 1;
+            while (new_cursor >= 0 && disabled[new_cursor]) { new_cursor--; }
+
+            if (new_cursor >= 0)
             {
-                cursor--;
+                cursor = new_cursor;
             }
         }
         else if(controls.down_pressed)
         {
-            if (cursor < ((sizeof(options) / sizeof(options[0])) - 1))
+            int new_cursor = cursor + 1;
+            while (new_cursor < (sizeof(options) / sizeof(options[0])) && disabled[new_cursor]) { new_cursor++; }
+
+            if (new_cursor < (sizeof(options) / sizeof(options[0])))
             {
-                cursor++;
+                cursor = new_cursor;
             }
         }
         else if(controls.service_pressed)
         {
             // Service cycles as a safeguard.
-            if (cursor < ((sizeof(options) / sizeof(options[0])) - 1))
+            int new_cursor = cursor + 1;
+            while (new_cursor < (sizeof(options) / sizeof(options[0])) && disabled[new_cursor]) { new_cursor++; }
+
+            if (new_cursor < (sizeof(options) / sizeof(options[0])))
             {
-                cursor++;
+                cursor = new_cursor;
             }
             else
             {
