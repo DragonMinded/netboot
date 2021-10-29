@@ -118,6 +118,7 @@ else:
     # We want to install the 3rdparty parts of this repo (netdimm and naomi) together
     # as a set of packages to depend on.
     setup(
+        name='netbootutils',
         version=VERSION,
         description='Code and utilities for netbooting a Naomi/Triforce/Chihiro.',
         author='DragonMinded',
@@ -127,6 +128,8 @@ else:
             'netdimm',
             'naomi',
             'naomi.settings',
+            # Include settings definitions.
+            'naomi.settings.definitions',
             # Include default trojan.
             'homebrew.settingstrojan',
         ],
@@ -136,6 +139,12 @@ else:
             'dragoncurses',
         ],
         package_data={
+            # Make sure mypy sees us as typed.
+            "netdimm": ["py.typed", "README.md"],
+            "naomi": ["py.typed", "README.md"],
+            "naomi.settings": ["py.typed", "README.md"],
+            # Make sure to include all existing settings.
+            "naomi.settings.definitions": ["*.settings", "README.md"],
             # Make sure to actually include the trojan data.
             "homebrew.settingstrojan": ["settingstrojan.bin"],
         },
