@@ -48,6 +48,7 @@ typedef struct
     unsigned int selected_game;
     unsigned int patch_count;
     patch_t *patches;
+    unsigned int force_settings;
     unsigned int system_settings_count;
     setting_t *system_settings;
     unsigned int game_settings_count;
@@ -352,6 +353,20 @@ game_options_t *parse_game_options(uint8_t *data, unsigned int length)
 
     if (length < (expected_length + 1))
     {
+        host_printf("Not enough data for force settings option!");
+        if (parsed_options->patches)
+        {
+            free(parsed_options->patches);
+        }
+        free(parsed_options);
+        return 0;
+    }
+
+    parsed_options->force_settings = data[expected_length];
+    expected_length += 1;
+
+    if (length < (expected_length + 1))
+    {
         host_printf("Not enough data for system settings count!");
         if (parsed_options->patches)
         {
@@ -447,7 +462,7 @@ game_options_t *parse_game_options(uint8_t *data, unsigned int length)
 
 void send_game_options(game_options_t *parsed_options)
 {
-    unsigned int total_length = 5 + (parsed_options->patch_count * 1) + 1 + (parsed_options->system_settings_count * 4) + 1 + (parsed_options->game_settings_count * 4);
+    unsigned int total_length = 5 + (parsed_options->patch_count * 1) + 2 + (parsed_options->system_settings_count * 4) + 1 + (parsed_options->game_settings_count * 4);
     unsigned int current_loc = 0;
     uint8_t *senddata = malloc(total_length);
 
@@ -464,6 +479,10 @@ void send_game_options(game_options_t *parsed_options)
         senddata[current_loc] = parsed_options->patches[patchno].enabled;
         current_loc += 1;
     }
+
+    // Now send back the force setting option.
+    senddata[current_loc] = parsed_options->force_settings;
+    current_loc += 1;
 
     // Now, send back the setting values.
     senddata[current_loc] = parsed_options->system_settings_count;
@@ -917,6 +936,7 @@ unsigned int game_settings(state_t *state, int reinit)
     static unsigned int patch_count = 0;
     static unsigned int system_settings_count = 0;
     static unsigned int game_settings_count = 0;
+    static unsigned int force_option = 0;
     static uint8_t blocked[256];
 
     if (reinit)
@@ -955,10 +975,21 @@ unsigned int game_settings(state_t *state, int reinit)
             game_settings_count += 2;
         }
 
+        force_option = 1;
+        if (system_settings_count == 0 && game_settings_count == 0)
+        {
+            force_option = 0;
+        }
+
         patch_count = game_options->patch_count;
         if (patch_count)
         {
-            patch_count += 2;
+            // Room for the header, the space and the force game settings option.
+            patch_count += 2 + force_option;
+        } else
+        {
+            // Room for just the force game settings option.
+            patch_count += force_option;
         }
 
         total = patch_count + system_settings_count + game_settings_count + 3;
@@ -969,10 +1000,10 @@ unsigned int game_settings(state_t *state, int reinit)
         }
 
         // Adjust blocked settings so we can make the cursor jump past headings.
-        if (patch_count)
+        if (patch_count > force_option)
         {
             blocked[0] = 1;
-            blocked[patch_count - 1] = 1;
+            blocked[patch_count - (1 + force_option)] = 1;
         }
         if (system_settings_count)
         {
@@ -1008,11 +1039,12 @@ unsigned int game_settings(state_t *state, int reinit)
                 }
             }
 
-            blocked[actualsetting] = readonly;
+            blocked[actualsetting] = game_options->force_settings == 0 ? 1 : readonly;
             actualsetting += 1;
         }
         else if (whichsetting == READ_ONLY_NEVER)
         {
+            blocked[actualsetting] = game_options->force_settings == 0 ? 1 : 0;
             actualsetting += 1;
         }
     }
@@ -1036,11 +1068,12 @@ unsigned int game_settings(state_t *state, int reinit)
                 }
             }
 
-            blocked[actualsetting] = readonly;
+            blocked[actualsetting] = game_options->force_settings == 0 ? 1 : readonly;
             actualsetting += 1;
         }
         else if (whichsetting == READ_ONLY_NEVER)
         {
+            blocked[actualsetting] = game_options->force_settings == 0 ? 1 : 0;
             actualsetting += 1;
         }
     }
@@ -1252,6 +1285,10 @@ unsigned int game_settings(state_t *state, int reinit)
             {
                 game_options->patches[patchcursor].enabled = game_options->patches[patchcursor].enabled ? 0 : 1;
             }
+            else if ((patchcursor == -1 && game_options->patch_count == 0 && force_option != 0) || (force_option != 0 && patchcursor == (game_options->patch_count + 1)))
+            {
+                game_options->force_settings = game_options->force_settings ? 0 : 1;
+            }
         }
         else if (cursor < (patch_count + system_settings_count))
         {
@@ -1361,7 +1398,7 @@ unsigned int game_settings(state_t *state, int reinit)
             {
                 int patchoption = option - 1;
 
-                if (patchoption < 0)
+                if (game_options->patch_count > 0 && patchoption < 0)
                 {
                     video_draw_text(
                         48,
@@ -1399,6 +1436,36 @@ unsigned int game_settings(state_t *state, int reinit)
                         option_color,
                         game_options->patches[patchoption].description
                     );
+                }
+                else if ((patchoption == -1 && game_options->patch_count == 0 && force_option != 0) || (force_option != 0 && patchoption == (game_options->patch_count + 1)))
+                {
+                    video_draw_character(
+                        48,
+                        22 + 21 + 21 + ((option - top) * 21),
+                        state->font_18pt,
+                        option_color,
+                        0x2610   // Ballot box unicode glyph.
+                    );
+
+                    if (game_options->force_settings)
+                    {
+                        video_draw_character(
+                            48 + 2,
+                            22 + 21 + 21 + ((option - top) * 21),
+                            state->font_18pt,
+                            option_color,
+                            0x2713  // Checkbox unicode glyph.
+                        );
+                    }
+
+                    video_draw_text(
+                        48 + 24,
+                        22 + 21 + 21 + ((option - top) * 21),
+                        state->font_18pt,
+                        option_color,
+                        "force custom settings on boot"
+                    );
+
                 }
             }
             else if (option < (patch_count + system_settings_count))

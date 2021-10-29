@@ -326,15 +326,18 @@ class GameSettings:
     def __init__(
         self,
         enabled_patches: Set[str],
+        force_settings: bool,
         eeprom: Optional[bytes],
     ):
         self.enabled_patches = enabled_patches
+        self.force_settings = force_settings
         self.eeprom = eeprom
 
     @staticmethod
     def default() -> "GameSettings":
         return GameSettings(
             enabled_patches=set(),
+            force_settings=False,
             eeprom=None,
         )
 
@@ -414,6 +417,8 @@ def settings_load(settings_file: str, ip: str) -> Settings:
                                     eeprom = gamesettings['eeprom']
                                     if isinstance(eeprom, list) and len(eeprom) == 128:
                                         settings.game_settings[game].eeprom = bytes(eeprom)
+                                if 'force_settings' in gamesettings:
+                                    settings.game_settings[game].force_settings = bool(gamesettings['force_settings'])
 
     return settings
 
@@ -438,6 +443,7 @@ def settings_save(settings_file: str, ip: str, settings: Settings) -> None:
     for game, gamesettings in settings.game_settings.items():
         gamedict = {
             'enabled_patches': list(gamesettings.enabled_patches),
+            'force_settings': gamesettings.force_settings,
             'eeprom': [x for x in gamesettings.eeprom] if gamesettings.eeprom is not None else None,
         }
         data[ip]['game_settings'][game] = gamedict
@@ -731,7 +737,7 @@ def main() -> int:
                                             print(f"Could not patch {filename} with {patchfile}: {str(e)}", file=sys.stderr)
 
                                 # Now, attach any eeprom settings.
-                                if gamesettings.eeprom is not None:
+                                if gamesettings.force_settings and gamesettings.eeprom is not None:
                                     patcher = NaomiSettingsPatcher(gamedata, get_default_trojan())
                                     if patcher.type != NaomiSettingsTypeEnum.TYPE_SRAM:
                                         print(f"Applying EEPROM settings to {filename}...")
@@ -833,9 +839,14 @@ def main() -> int:
                                     return settingdata
 
                                 if has_settings and parsedsettings is not None:
-                                    # Construct system settings.
+                                    # Remember the settings we parsed so we can save them later.
                                     last_game_parsed_settings = parsedsettings
 
+                                    # Now add data for the force settings toggle.
+                                    totalsettings = len(parsedsettings.system.settings) + len(parsedsettings.game.settings)
+                                    response += struct.pack("<B", 1 if (totalsettings > 0 and gamesettings.force_settings) else 0)
+
+                                    # Construct system settings.
                                     response += struct.pack("<B", len(parsedsettings.system.settings))
                                     for setting in parsedsettings.system.settings:
                                         response += make_setting(setting, {s.name: i for (i, s) in enumerate(parsedsettings.system.settings)})
@@ -846,7 +857,7 @@ def main() -> int:
                                         response += make_setting(setting, {s.name: i for (i, s) in enumerate(parsedsettings.game.settings)})
                                 else:
                                     # This game has a SRAM chunk attached (atomiswave game), don't try to send settings.
-                                    response += struct.pack("<BB", 0, 0)
+                                    response += struct.pack("<BBB", 0, 0, 0)
 
                                 # Send settings over.
                                 send_message(netdimm, Message(MESSAGE_LOAD_SETTINGS_DATA, response), verbose=verbose)
@@ -876,8 +887,8 @@ def main() -> int:
                                     last_game_patches = []
 
                                     # Grab system settings.
-                                    settinglen = struct.unpack("<B", msgdata[0:1])[0]
-                                    msgdata = msgdata[1:]
+                                    force_settings, settinglen = struct.unpack("<BB", msgdata[0:2])
+                                    msgdata = msgdata[2:]
 
                                     if settinglen > 0:
                                         settings_values = list(struct.unpack("<" + ("I" * settinglen), msgdata[0:(4 * settinglen)]))
@@ -904,6 +915,9 @@ def main() -> int:
                                     if last_game_parsed_settings is not None:
                                         manager = SettingsManager(get_default_settings_directory())
                                         gamesettings.eeprom = manager.to_eeprom(last_game_parsed_settings)
+                                        gamesettings.force_settings = force_settings != 0
+                                    else:
+                                        gamesettings.force_settings = False
 
                                     last_game_parsed_settings = None
 
