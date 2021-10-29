@@ -109,15 +109,15 @@ def add_or_update_section(
 
 def __is_config(data: Union[bytes, FileBytes], index: int) -> bool:
     if all(x == 0xEE for x in data[index:(index + 4)]) and all(x == 0xEE for x in data[(index + 24):(index + 28)]):
-        _, _, sentinel, debug, _ = struct.unpack("<IIIII", data[(index + 4):(index + 24)])
-        if sentinel not in {0, 1, 0xCFCFCFCF} or debug not in {0, 1, 0xDDDDDDDD}:
+        _, _, _, debug, _ = struct.unpack("<IIIII", data[(index + 4):(index + 24)])
+        if debug not in {0, 1, 0xDDDDDDDD}:
             return False
         return True
     return False
 
 
-def __extract_config(data: Union[bytes, FileBytes], index: int) -> Tuple[int, int, bool, bool, Tuple[int, int, int]]:
-    original_start, trojan_start, sentinel, debug, date = struct.unpack("<IIIII", data[(index + 4):(index + 24)])
+def __extract_config(data: Union[bytes, FileBytes], index: int) -> Tuple[int, int, bool, Tuple[int, int, int]]:
+    original_start, trojan_start, _, debug, date = struct.unpack("<IIIII", data[(index + 4):(index + 24)])
 
     day = date % 100
     month = (date // 100) % 100
@@ -126,17 +126,15 @@ def __extract_config(data: Union[bytes, FileBytes], index: int) -> Tuple[int, in
     return (
         original_start,
         trojan_start,
-        sentinel != 0,
         debug != 0,
         (year, month, day),
     )
 
 
-def get_config(data: Union[bytes, FileBytes], *, start: Optional[int] = None, end: Optional[int] = None) -> Tuple[int, int, bool, bool, Tuple[int, int, int]]:
+def get_config(data: Union[bytes, FileBytes], *, start: Optional[int] = None, end: Optional[int] = None) -> Tuple[int, int, bool, Tuple[int, int, int]]:
     # Returns a tuple consisting of the original EXE start address and
-    # the desired trojan start address, whether sentinel mode is enabled
-    # and whether debug printing is enabled, and the date string of the
-    # trojan we're using.
+    # the desired trojan start address and whether debug printing is
+    # enabled, and the date string of the trojan we're using.
     if isinstance(data, bytes):
         for i in range(start or 0, (end or len(data)) - (28 - 1)):
             if __is_config(data, i):
@@ -256,13 +254,13 @@ def add_or_update_trojan(
     # Grab a safe-to-mutate cop of the trojan, get its current config.
     executable = header.main_executable
     exe = trojan[:]
-    _, location, _, _, _ = get_config(exe)
+    _, location, _, _ = get_config(exe)
 
     for sec in executable.sections:
         if sec.load_address == location:
             # Grab the old entrypoint from the existing modification since the ROM header
             # entrypoint will be the old trojan EXE.
-            entrypoint, _, _, _, _ = get_config(data, start=sec.offset, end=sec.offset + sec.length)
+            entrypoint, _, _, _ = get_config(data, start=sec.offset, end=sec.offset + sec.length)
             exe = patch_bytesequence(exe, 0xAA, struct.pack("<I", entrypoint))
             if datachunk:
                 exe = patch_bytesequence(exe, 0xBB, datachunk)
@@ -351,8 +349,7 @@ class NaomiSettingsDate:
 
 
 class NaomiSettingsInfo:
-    def __init__(self, sentinel: bool, debug: bool, date: Tuple[int, int, int]) -> None:
-        self.enable_sentinel = sentinel
+    def __init__(self, debug: bool, date: Tuple[int, int, int]) -> None:
         self.enable_debugging = debug
         self.date = NaomiSettingsDate(date[0], date[1], date[2])
 
@@ -451,9 +448,9 @@ class NaomiSettingsPatcher(Generic[BytesLike]):
                 try:
                     # Grab the old entrypoint from the existing modification since the ROM header
                     # entrypoint will be the old trojan EXE.
-                    _, _, sentinel, debug, date = get_config(self.__data, start=sec.offset, end=sec.offset + sec.length)
+                    _, _, debug, date = get_config(self.__data, start=sec.offset, end=sec.offset + sec.length)
 
-                    return NaomiSettingsInfo(sentinel, debug, date)
+                    return NaomiSettingsInfo(debug, date)
                 except Exception:
                     continue
 
@@ -506,7 +503,7 @@ class NaomiSettingsPatcher(Generic[BytesLike]):
             raise Exception("Logic error!")
         return None
 
-    def put_settings(self, settings: bytes, *, enable_sentinel: bool = False, enable_debugging: bool = False, verbose: bool = False) -> None:
+    def put_settings(self, settings: bytes, *, enable_debugging: bool = False, verbose: bool = False) -> None:
         # First, parse the ROM we were given.
         naomi = self.__rom or NaomiRom(self.__data)
 
@@ -545,7 +542,7 @@ class NaomiSettingsPatcher(Generic[BytesLike]):
                 self.__data,
                 self.__trojan,
                 1 if enable_debugging else 0,
-                1 if enable_sentinel else 0,
+                0,
                 datachunk=settings,
                 header=naomi,
                 verbose=verbose,

@@ -63,23 +63,33 @@ int eeprom_system_valid(uint8_t *data)
     }
 
     // All CRCs passed!
-	return 1;
+    return 1;
 }
 
 int eeprom_game_valid(uint8_t *data)
 {
     uint16_t expected = 0;
 
+    // Verify the lengths are correct.
+    if (data[GAME_CHUNK_1 + GAME_LEN_LOC_1] != data[GAME_CHUNK_1 + GAME_LEN_LOC_2])
+    {
+        return 0;
+    }
+    if (data[GAME_CHUNK_2 + GAME_LEN_LOC_1] != data[GAME_CHUNK_2 + GAME_LEN_LOC_2])
+    {
+        return 0;
+    }
+
     // Calculate first game chunk.
     memcpy(&expected, data + GAME_CHUNK_1 + GAME_CRC_LOC, GAME_CRC_SIZE);
-    if (expected != eeprom_crc(data + GAME_PAYLOAD, data[GAME_CHUNK_1 + GAME_LEN_LOC]))
+    if (expected != eeprom_crc(data + GAME_PAYLOAD, data[GAME_CHUNK_1 + GAME_LEN_LOC_1]))
     {
         return 0;
     }
 
     // Calculate second game chunk.
     memcpy(&expected, data + GAME_CHUNK_2 + GAME_CRC_LOC, GAME_CRC_SIZE);
-    if (expected != eeprom_crc(data + GAME_PAYLOAD + data[GAME_CHUNK_1 + GAME_LEN_LOC], data[GAME_CHUNK_2 + GAME_LEN_LOC]))
+    if (expected != eeprom_crc(data + GAME_PAYLOAD + data[GAME_CHUNK_1 + GAME_LEN_LOC_1], data[GAME_CHUNK_2 + GAME_LEN_LOC_1]))
     {
         return 0;
     }
@@ -95,6 +105,18 @@ int eeprom_valid(uint8_t *data)
         // Failed the system chunk.
         return 0;
     }
+
+    if (
+        data[GAME_CHUNK_1 + GAME_LEN_LOC_1] == 0xFF &&
+        data[GAME_CHUNK_1 + GAME_LEN_LOC_2] == 0xFF &&
+        data[GAME_CHUNK_2 + GAME_LEN_LOC_1] == 0xFF &&
+        data[GAME_CHUNK_2 + GAME_LEN_LOC_2] == 0xFF
+    )
+    {
+        // Game chunk is blank, this is a valid EEPROM.
+        return 1;
+    }
+
     if (eeprom_game_valid(data) == 0)
     {
         // Failed the game chunk.
@@ -190,7 +212,7 @@ void parse_eeprom(uint8_t *data, eeprom_t *eeprom)
     if (eeprom_game_valid(data))
     {
         // Game is valid, copy the data we care about.
-        eeprom->game.size = data[GAME_CHUNK_1 + GAME_LEN_LOC];
+        eeprom->game.size = data[GAME_CHUNK_1 + GAME_LEN_LOC_1];
         if (eeprom->game.size > MAXIMUM_GAME_SETTINGS_LENGTH) {
             eeprom->game.size = MAXIMUM_GAME_SETTINGS_LENGTH;
         }
@@ -303,12 +325,12 @@ void unparse_eeprom(uint8_t *data, eeprom_t *eeprom)
 
         // Now, copy the data to the right bytes.
         memcpy(&data[GAME_CHUNK_1 + GAME_CRC_LOC], &crc, GAME_CRC_SIZE);
-        data[GAME_CHUNK_1 + GAME_LEN_LOC] = size;
-        data[GAME_CHUNK_1 + GAME_LEN_LOC + 1] = size;
+        data[GAME_CHUNK_1 + GAME_LEN_LOC_1] = size;
+        data[GAME_CHUNK_1 + GAME_LEN_LOC_2] = size;
 
         memcpy(&data[GAME_CHUNK_2 + GAME_CRC_LOC], &crc, GAME_CRC_SIZE);
-        data[GAME_CHUNK_2 + GAME_LEN_LOC] = size;
-        data[GAME_CHUNK_2 + GAME_LEN_LOC + 1] = size;
+        data[GAME_CHUNK_2 + GAME_LEN_LOC_1] = size;
+        data[GAME_CHUNK_2 + GAME_LEN_LOC_2] = size;
 
         memcpy(&data[GAME_PAYLOAD], eeprom->game.data, size);
         memcpy(&data[GAME_PAYLOAD + size], eeprom->game.data, size);

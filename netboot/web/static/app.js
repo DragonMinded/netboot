@@ -203,7 +203,7 @@ Vue.component('settings', {
                 Settings definition file "{{ serial }}.settings" is missing.
                 As a result, we cannot display or edit game settings for this game!
             </span>
-            <span v-if="all_readonly()" class="italics">
+            <span v-if="settings.settings.length != 0 && all_readonly()" class="italics">
                 Settings definition file "{{ serial }}.settings" specifies no editable settings.
                 As a result, we cannot display or edit game settings for this game!
             </span>
@@ -233,7 +233,7 @@ Vue.component('patch', {
             </div>
             <div v-if="patch.type == 'settings'">
                 <input type="checkbox" :disabled="!enabled" v-bind:id="game.file + patch.file" v-model="patch.enabled" />
-                <label v-bind:for="game.file + patch.file">boot with custom settings enabled</label>
+                <label v-bind:for="game.file + patch.file">force custom settings on boot</label>
                 <settingscollection v-if="patch.enabled" v-bind:settings="patch.settings"></settingscollection>
             </div>
         </div>

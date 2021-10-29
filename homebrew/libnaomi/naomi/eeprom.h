@@ -100,6 +100,14 @@ uint8_t *eeprom_serial();
 #define SYSTEM_CHUNK_1 0
 #define SYSTEM_CHUNK_2 18
 
+// Location of the system chunk itself inside the EEPROM.
+#define SYSTEM_SECTION 0
+#define SYSTEM_LENGTH 36
+
+// Location of the game chunk itself inside the EEPROM.
+#define GAME_SECTION 36
+#define GAME_LENGTH 92
+
 // Location of various important data bits within system chunks.
 #define SYSTEM_CRC_LOC 0
 #define SYSTEM_CRC_SIZE 2
@@ -116,8 +124,8 @@ uint8_t *eeprom_serial();
 // Location of various important data bits within game chunks.
 #define GAME_CRC_LOC 0
 #define GAME_CRC_SIZE 2
-#define GAME_LEN_LOC 2
-#define GAME_LEN_SIZE 1
+#define GAME_LEN_LOC_1 2
+#define GAME_LEN_LOC_2 3
 
 // API for working with raw eeprom chunks.
 uint16_t eeprom_crc(uint8_t *data, unsigned int len);

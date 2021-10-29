@@ -738,7 +738,6 @@ def main() -> int:
                                         try:
                                             patcher.put_settings(
                                                 gamesettings.eeprom,
-                                                enable_sentinel=False,
                                                 enable_debugging=args.debug_mode,
                                                 verbose=verbose,
                                             )

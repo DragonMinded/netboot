@@ -50,11 +50,6 @@ def main() -> int:
         help='A different file to output to instead of updating the binary specified directly.',
     )
     attach_parser.add_argument(
-        '--enable-sentinel',
-        action='store_true',
-        help='Write a sentinel in main RAM to detect when the same game has had settings changed.',
-    )
-    attach_parser.add_argument(
         '--enable-debugging',
         action='store_true',
         help='Display debugging information to the screen instead of silently saving settings.',
@@ -135,11 +130,6 @@ def main() -> int:
         help='The region the Naomi which will boot this ROM is set to. Defaults to "japan".',
     )
     edit_parser.add_argument(
-        '--enable-sentinel',
-        action='store_true',
-        help='Write a sentinel in main RAM to detect when the same game has had settings changed.',
-    )
-    edit_parser.add_argument(
         '--enable-debugging',
         action='store_true',
         help='Display debugging information to the screen instead of silently saving settings.',
@@ -173,7 +163,7 @@ def main() -> int:
             if patcher.type != NaomiSettingsTypeEnum.TYPE_NONE and patcher.type != NaomiSettingsTypeEnum.TYPE_EEPROM:
                 print("Attached settings are not an EEPROM settings file! Perhaps you meant to use \"attach_sram\"?", file=sys.stderr)
                 return 1
-            patcher.put_settings(eeprom, enable_sentinel=args.enable_sentinel, enable_debugging=args.enable_debugging, verbose=True)
+            patcher.put_settings(eeprom, enable_debugging=args.enable_debugging, verbose=True)
 
             if args.output_file:
                 print(f"Added EEPROM settings to {args.output_file}.")
@@ -220,7 +210,6 @@ def main() -> int:
                 print("ROM does not have any EEPROM settings attached!")
             else:
                 print(f"ROM has EEPROM settings attached, with trojan version {info.date.year:04}-{info.date.month:02}-{info.date.day:02}!")
-                print(f"Settings change sentinel is {'enabled' if info.enable_sentinel else 'disabled'}.")
                 print(f"Debug printing is {'enabled' if info.enable_debugging else 'disabled'}.")
 
                 # Grab the actual EEPRom so we can print the settings within.
@@ -315,7 +304,6 @@ def main() -> int:
                 eepromdata = manager.to_eeprom(parsedsettings)
                 patcher.put_settings(
                     eepromdata,
-                    enable_sentinel=args.enable_sentinel,
                     enable_debugging=args.enable_debugging,
                     verbose=True,
                 )
