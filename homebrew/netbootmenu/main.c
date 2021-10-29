@@ -14,6 +14,10 @@ void main()
     eeprom_t settings;
     eeprom_read(&settings);
 
+    // Commit the settings again, so we can be sure to obliterate any old ones.
+    settings.game.size = 0;
+    eeprom_write(&settings);
+
     // Attach our communication handler for packet sending/receiving.
     packetlib_init();
 

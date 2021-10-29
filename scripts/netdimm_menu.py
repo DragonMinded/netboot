@@ -718,6 +718,7 @@ def main() -> int:
                                 gamedata = FileBytes(fp)
                                 gamesettings = settings.game_settings.get(filename, GameSettings.default())
 
+                                # Now, patch with selected patches.
                                 patchman = PatchManager([args.patchdir])
                                 for patchfile in gamesettings.enabled_patches:
                                     print(f"Applying patch {patchman.patch_name(patchfile)} to game...")
@@ -729,6 +730,23 @@ def main() -> int:
                                         except Exception as e:
                                             print(f"Could not patch {filename} with {patchfile}: {str(e)}", file=sys.stderr)
 
+                                # Now, attach any eeprom settings.
+                                if gamesettings.eeprom is not None:
+                                    patcher = NaomiSettingsPatcher(gamedata, get_default_trojan())
+                                    if patcher.type != NaomiSettingsTypeEnum.TYPE_SRAM:
+                                        print(f"Applying EEPROM settings to {filename}...")
+                                        try:
+                                            patcher.put_settings(
+                                                gamesettings.eeprom,
+                                                enable_sentinel=False,
+                                                enable_debugging=args.debug_mode,
+                                                verbose=verbose,
+                                            )
+                                            gamedata = patcher.data
+                                        except Exception as e:
+                                            print(f"Could not apply EEPROM settings to {filename}: {str(e)}", file=sys.stderr)
+
+                                # Finally, send it!
                                 send_message(netdimm, Message(MESSAGE_LOAD_PROGRESS, struct.pack("<ii", len(gamedata), 0)), verbose=verbose)
                                 selected_file = gamedata
                                 break
