@@ -514,7 +514,14 @@ class NetDimm:
         unknown, version, game_memory, dimm_memory, crc = struct.unpack("<HHHHI", response.data)
 
         # Extract version and size string.
-        version_str = f"{(version >> 8) & 0xFF}.{(version & 0xFF):02}"
+        version_high = (version >> 8) & 0xFF
+        version_low = (version & 0xFF)
+
+        vhigh_hex = hex(version_high)[2:]
+        vlow_hex = hex(version_low)[2:]
+        while len(vlow_hex) < 2:
+            vlow_hex = "0" + vlow_hex
+        version_str = f"{vhigh_hex}.{vlow_hex}"
         try:
             firmware_version = NetDimmVersionEnum(version_str)
         except ValueError:
