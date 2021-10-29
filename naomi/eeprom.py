@@ -199,7 +199,7 @@ class NaomiEEPRom(Generic[BytesLike]):
     def __init__(self, data: BytesLike) -> None:
         if len(data) != 128:
             raise NaomiEEPRomException("Invalid EEPROM length!")
-        if not self.validate(data, only_system=True):
+        if not self.validate(data):
             raise NaomiEEPRomException("Invalid EEPROM CRC!")
 
         self._data: Union[bytes, FileBytes]
@@ -241,7 +241,7 @@ class NaomiEEPRom(Generic[BytesLike]):
         return struct.pack("<H", final_crc)
 
     @staticmethod
-    def validate(data: Union[bytes, FileBytes], *, serial: Optional[bytes] = None, only_system: bool = False) -> bool:
+    def validate(data: Union[bytes, FileBytes], *, serial: Optional[bytes] = None) -> bool:
         # First, make sure its the right length.
         if len(data) != 128:
             return False
@@ -252,9 +252,7 @@ class NaomiEEPRom(Generic[BytesLike]):
 
         if not NaomiEEPRom.__validate_system(data):
             return False
-        if only_system:
-            return True
-        return NaomiEEPRom.__validate_game(data)
+        return NaomiEEPRom.__validate_game(data, blank_is_valid=True)
 
     @staticmethod
     def __validate_system(data: Union[bytes, FileBytes]) -> bool:
@@ -273,7 +271,7 @@ class NaomiEEPRom(Generic[BytesLike]):
         return True
 
     @staticmethod
-    def __validate_game(data: Union[bytes, FileBytes]) -> bool:
+    def __validate_game(data: Union[bytes, FileBytes], *, blank_is_valid: bool = False) -> bool:
         game_size1, game_size2 = struct.unpack("<BB", data[38:40])
         if game_size1 != game_size2:
             # These numbers should always match.
@@ -283,6 +281,10 @@ class NaomiEEPRom(Generic[BytesLike]):
         if game_size3 != game_size4:
             # These numbers should always match.
             return False
+
+        if game_size1 == 0xFF and game_size3 == 0xFF and blank_is_valid:
+            # This is a blank game settings section.
+            return True
 
         game_section1 = data[44:(44 + game_size1)]
         game_section2 = data[(44 + game_size1):(44 + game_size1 + game_size3)]
@@ -320,7 +322,7 @@ class NaomiEEPRom(Generic[BytesLike]):
             # These numbers should always match. Skip fixing the CRCs if they don't.
             return
 
-        if game_size1 != 0xFF and game_size1 != 0x0:
+        if game_size1 != 0xFF:
             game_section1 = self._data[44:(44 + game_size1)]
 
             if isinstance(self._data, bytes):
@@ -330,7 +332,7 @@ class NaomiEEPRom(Generic[BytesLike]):
             else:
                 raise Exception("Logic error!")
 
-            if game_size3 != 0xFF and game_size3 != 0x0:
+            if game_size3 != 0xFF:
                 game_section2 = self._data[(44 + game_size1):(44 + game_size1 + game_size3)]
                 if isinstance(self._data, bytes):
                     self._data = self._data[:40] + NaomiEEPRom.crc(game_section2) + self._data[42:]
@@ -338,6 +340,22 @@ class NaomiEEPRom(Generic[BytesLike]):
                     self._data[40:42] = NaomiEEPRom.crc(game_section2)
                 else:
                     raise Exception("Logic error!")
+            else:
+                if isinstance(self._data, bytes):
+                    self._data = self._data[:40] + struct.pack("<BB", 0xFF, 0xFF) + self._data[42:]
+                elif isinstance(self._data, FileBytes):
+                    self._data[40:42] = struct.pack("<BB", 0xFF, 0xFF)
+                else:
+                    raise Exception("Logic error!")
+        else:
+            if isinstance(self._data, bytes):
+                self._data = self._data[:36] + struct.pack("<BB", 0xFF, 0xFF) + self._data[38:]
+                self._data = self._data[:40] + struct.pack("<BB", 0xFF, 0xFF) + self._data[42:]
+            elif isinstance(self._data, FileBytes):
+                self._data[40:42] = struct.pack("<BB", 0xFF, 0xFF)
+                self._data[36:38] = struct.pack("<BB", 0xFF, 0xFF)
+            else:
+                raise Exception("Logic error!")
 
         if len(self._data) != 128:
             raise Exception("Logic error!")
@@ -367,6 +385,9 @@ class NaomiEEPRom(Generic[BytesLike]):
     def length(self, newval: int) -> None:
         if newval < 0 or newval > 42:
             raise NaomiEEPRomException("Game section length invalid!")
+        if newval == 0:
+            # Special case for empty game section.
+            newval = 0xFF
         lengthbytes = struct.pack("<BB", newval, newval)
         if isinstance(self._data, bytes):
             self._data = self._data[:38] + lengthbytes + self._data[40:42] + lengthbytes + self._data[44:]

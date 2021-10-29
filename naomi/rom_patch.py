@@ -514,7 +514,7 @@ class NaomiSettingsPatcher(Generic[BytesLike]):
         if len(settings) == self.EEPROM_SIZE:
             # First, we need to modify the settings trojan with this ROM's load address and
             # the EEPROM we want to add. Make sure the EEPRom we were given is valid.
-            if not NaomiEEPRom.validate(settings):
+            if not NaomiEEPRom.validate(settings, serial=naomi.serial):
                 raise NaomiSettingsPatcherException("Settings is incorrectly formed!")
             if naomi.serial != settings[3:7] or naomi.serial != settings[21:25]:
                 raise NaomiSettingsPatcherException("Settings is not for this game!")
