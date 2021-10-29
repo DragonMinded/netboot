@@ -895,14 +895,17 @@ unsigned int game_settings(state_t *state, int reinit)
     static unsigned int total = 0;
     static unsigned int top = 0;
     static unsigned int maxoptions = 0;
+    static unsigned int patch_count = 0;
     static unsigned int system_settings_count = 0;
     static unsigned int game_settings_count = 0;
+    static uint8_t blocked[256];
 
     if (reinit)
     {
         cursor = 0;
         top = 0;
         maxoptions = (video_height() - (24 + 16 + 21 + 21 + 21)) / 21;
+        memset(blocked, 0, 256);
 
         // Calculate total options.
         system_settings_count = 0;
@@ -914,6 +917,11 @@ unsigned int game_settings(state_t *state, int reinit)
             }
         }
 
+        if (system_settings_count)
+        {
+            system_settings_count += 2;
+        }
+
         game_settings_count = 0;
         for (unsigned int setting = 0; setting < game_options->game_settings_count; setting++)
         {
@@ -923,11 +931,47 @@ unsigned int game_settings(state_t *state, int reinit)
             }
         }
 
-        total = game_options->patch_count + system_settings_count + game_settings_count + 3;
+        if (game_settings_count)
+        {
+            game_settings_count += 2;
+        }
+
+        patch_count = game_options->patch_count;
+        if (patch_count)
+        {
+            patch_count += 2;
+        }
+
+        total = patch_count + system_settings_count + game_settings_count + 3;
+        if (total > 256)
+        {
+            // This should never happen, but lets not crash if it does.
+            total = 256;
+        }
+
+        // Adjust blocked settings so we can make the cursor jump past headings.
+        if (patch_count)
+        {
+            blocked[0] = 1;
+            blocked[patch_count - 1] = 1;
+        }
+        if (system_settings_count)
+        {
+            blocked[patch_count] = 1;
+            blocked[patch_count + system_settings_count - 1] = 1;
+        }
+        if (game_settings_count)
+        {
+            blocked[patch_count + system_settings_count] = 1;
+            blocked[patch_count + system_settings_count + game_settings_count - 1] = 1;
+        }
     }
 
     // If we need to switch screens.
     unsigned int new_screen = SCREEN_GAME_SETTINGS;
+
+    // Make sure that we aren't on an entry that is blocked.
+    while (blocked[cursor]) { cursor++; }
 
     controls_t controls = get_controls(state, reinit);
     if (controls.test_pressed)
@@ -937,9 +981,17 @@ unsigned int game_settings(state_t *state, int reinit)
     }
     else if(controls.up_pressed)
     {
-        if (cursor > 0)
+        int new_cursor = cursor - 1;
+        while (new_cursor >= 0 && blocked[new_cursor]) { new_cursor--; }
+
+        if (new_cursor >= 0)
         {
-            cursor--;
+            cursor = new_cursor;
+        }
+        if (new_cursor < 0)
+        {
+            // Hack so that when we scroll up we can see the patch label.
+            top = 0;
         }
         if (cursor < top)
         {
@@ -948,9 +1000,12 @@ unsigned int game_settings(state_t *state, int reinit)
     }
     else if(controls.down_pressed)
     {
-        if (cursor < (total - 1))
+        int new_cursor = cursor + 1;
+        while (new_cursor < total && blocked[new_cursor]) { new_cursor++; }
+
+        if (new_cursor < total)
         {
-            cursor++;
+            cursor = new_cursor;
         }
         if (cursor >= (top + maxoptions))
         {
@@ -959,39 +1014,181 @@ unsigned int game_settings(state_t *state, int reinit)
     }
     else if(controls.left_pressed)
     {
-        /*if (options[cursor] > 0)
-        {
-            options[cursor]--;
-        }*/
-    }
-    else if(controls.right_pressed)
-    {
-        /*if (options[cursor] < maximums[cursor])
-        {
-            options[cursor]++;
-        }*/
-    }
-    else if(controls.start_pressed)
-    {
         if (cursor < game_options->patch_count)
         {
-            // Toggle enabled patch.
-            unsigned int patchcursor = cursor;
-            game_options->patches[patchcursor].enabled = game_options->patches[patchcursor].enabled ? 0 : 1;
+            // Nothing to do with patches, these are changed with start.
         }
-        else if (cursor < (game_options->patch_count + system_settings_count))
+        else if (cursor < (patch_count + system_settings_count))
         {
-            // TODO
-            //unsigned int systemcursor = cursor - game_options->patch_count;
+            int systemcursor = cursor - (patch_count + 1);
+
+            if (systemcursor >= 0 && systemcursor < (system_settings_count - 2))
+            {
+                unsigned int counted = 0;
+                unsigned int actualoption = 0;
+
+                for (unsigned int setting = 0; setting < game_options->system_settings_count; setting++)
+                {
+                    if (game_options->system_settings[setting].read_only.setting == READ_ONLY_ALWAYS)
+                    {
+                        continue;
+                    }
+
+                    if (counted == systemcursor)
+                    {
+                        actualoption = setting;
+                        break;
+                    }
+
+                    counted++;
+                }
+
+                int valno = find_setting_value(&game_options->system_settings[actualoption], game_options->system_settings[actualoption].current);
+                if (valno > 0)
+                {
+                    valno --;
+                    game_options->system_settings[actualoption].current = game_options->system_settings[actualoption].values[valno].value;
+                }
+            }
         }
-        else if (cursor < (game_options->patch_count + system_settings_count + game_settings_count))
+        else if (cursor < (patch_count + system_settings_count + game_settings_count))
         {
-            // TODO
-            //unsigned int gamecursor = cursor - (game_options->patch_count - game_options->system_settings_count);
+            int gamecursor = cursor - (patch_count + system_settings_count + 1);
+
+            if (gamecursor >= 0 && gamecursor < (game_settings_count - 2))
+            {
+                unsigned int counted = 0;
+                unsigned int actualoption = 0;
+
+                for (unsigned int setting = 0; setting < game_options->game_settings_count; setting++)
+                {
+                    if (game_options->game_settings[setting].read_only.setting == READ_ONLY_ALWAYS)
+                    {
+                        continue;
+                    }
+
+                    if (counted == gamecursor)
+                    {
+                        actualoption = setting;
+                        break;
+                    }
+
+                    counted++;
+                }
+
+                int valno = find_setting_value(&game_options->game_settings[actualoption], game_options->game_settings[actualoption].current);
+                if (valno > 0)
+                {
+                    valno --;
+                    game_options->game_settings[actualoption].current = game_options->game_settings[actualoption].values[valno].value;
+                }
+            }
         }
         else
         {
-            unsigned int menucursor = cursor - (game_options->patch_count + system_settings_count + game_settings_count);
+            // Nothing to do with system options, these are selected with start.
+        }
+    }
+    else if(controls.right_pressed)
+    {
+        if (cursor < game_options->patch_count)
+        {
+            // Nothing to do with patches, these are changed with start.
+        }
+        else if (cursor < (patch_count + system_settings_count))
+        {
+            int systemcursor = cursor - (patch_count + 1);
+
+            if (systemcursor >= 0 && systemcursor < (system_settings_count - 2))
+            {
+                unsigned int counted = 0;
+                unsigned int actualoption = 0;
+
+                for (unsigned int setting = 0; setting < game_options->system_settings_count; setting++)
+                {
+                    if (game_options->system_settings[setting].read_only.setting == READ_ONLY_ALWAYS)
+                    {
+                        continue;
+                    }
+
+                    if (counted == systemcursor)
+                    {
+                        actualoption = setting;
+                        break;
+                    }
+
+                    counted++;
+                }
+
+                int valno = find_setting_value(&game_options->system_settings[actualoption], game_options->system_settings[actualoption].current);
+                if (valno < (game_options->system_settings[actualoption].value_count - 1))
+                {
+                    valno ++;
+                    game_options->system_settings[actualoption].current = game_options->system_settings[actualoption].values[valno].value;
+                }
+            }
+        }
+        else if (cursor < (patch_count + system_settings_count + game_settings_count))
+        {
+            int gamecursor = cursor - (patch_count + system_settings_count + 1);
+
+            if (gamecursor >= 0 && gamecursor < (game_settings_count - 2))
+            {
+                unsigned int counted = 0;
+                unsigned int actualoption = 0;
+
+                for (unsigned int setting = 0; setting < game_options->game_settings_count; setting++)
+                {
+                    if (game_options->game_settings[setting].read_only.setting == READ_ONLY_ALWAYS)
+                    {
+                        continue;
+                    }
+
+                    if (counted == gamecursor)
+                    {
+                        actualoption = setting;
+                        break;
+                    }
+
+                    counted++;
+                }
+
+                int valno = find_setting_value(&game_options->game_settings[actualoption], game_options->game_settings[actualoption].current);
+                if (valno < (game_options->game_settings[actualoption].value_count - 1))
+                {
+                    valno ++;
+                    game_options->game_settings[actualoption].current = game_options->game_settings[actualoption].values[valno].value;
+                }
+            }
+        }
+        else
+        {
+            // Nothing to do with system options, these are selected with start.
+        }
+    }
+    else if(controls.start_pressed)
+    {
+        if (cursor < patch_count)
+        {
+            // Toggle enabled patch.
+            int patchcursor = cursor - 1;
+
+            if (patchcursor >= 0 && patchcursor < game_options->patch_count)
+            {
+                game_options->patches[patchcursor].enabled = game_options->patches[patchcursor].enabled ? 0 : 1;
+            }
+        }
+        else if (cursor < (patch_count + system_settings_count))
+        {
+            // Nothing to do for game/system settings, these are changed with left/right.
+        }
+        else if (cursor < (patch_count + system_settings_count + game_settings_count))
+        {
+            // Nothing to do for game/system settings, these are changed with left/right.
+        }
+        else
+        {
+            unsigned int menucursor = cursor - (patch_count + system_settings_count + game_settings_count);
             switch (menucursor)
             {
                 case 0:
@@ -1085,128 +1282,169 @@ unsigned int game_settings(state_t *state, int reinit)
             uint32_t option_color = (option == cursor ? rgb(255, 255, 20) : rgb(255, 255, 255));
 
             // Draw the menu entry itself.
-            if (option < game_options->patch_count)
+            if (option < patch_count)
             {
-                unsigned int patchoption = option;
+                int patchoption = option - 1;
 
-                video_draw_character(
-                    48,
-                    22 + 21 + 21 + ((option - top) * 21),
-                    state->font_18pt,
-                    option_color,
-                    0x2610   // Ballot box unicode glyph.
-                );
-
-                if (game_options->patches[patchoption].enabled)
+                if (patchoption < 0)
+                {
+                    video_draw_text(
+                        48,
+                        22 + 21 + 21 + ((option - top) * 21),
+                        state->font_18pt,
+                        rgb(0, 255, 0),
+                        "Available Patches"
+                    );
+                }
+                else if (patchoption < game_options->patch_count)
                 {
                     video_draw_character(
-                        48 + 2,
-                        22 + 21 + 21 + ((option - top) * 21),
-                        state->font_18pt,
-                        option_color,
-                        0x2713  // Checkbox unicode glyph.
-                    );
-                }
-
-                video_draw_text(
-                    48 + 24,
-                    22 + 21 + 21 + ((option - top) * 21),
-                    state->font_18pt,
-                    option_color,
-                    game_options->patches[patchoption].description
-                );
-            }
-            else if (option < (game_options->patch_count + system_settings_count))
-            {
-                unsigned int systemoption = option - game_options->patch_count;
-                unsigned int counted = 0;
-                unsigned int actualoption = 0;
-
-                for (unsigned int setting = 0; setting < game_options->system_settings_count; setting++)
-                {
-                    if (game_options->system_settings[setting].read_only.setting == READ_ONLY_ALWAYS)
-                    {
-                        continue;
-                    }
-
-                    if (counted == systemoption)
-                    {
-                        actualoption = setting;
-                        break;
-                    }
-
-                    counted++;
-                }
-
-                int valno = find_setting_value(&game_options->system_settings[actualoption], game_options->system_settings[actualoption].current);
-                if (valno >= 0)
-                {
-                    video_draw_text(
                         48,
                         22 + 21 + 21 + ((option - top) * 21),
                         state->font_18pt,
                         option_color,
-                        "%s: %s", game_options->system_settings[actualoption].name, game_options->system_settings[actualoption].values[valno].description
+                        0x2610   // Ballot box unicode glyph.
                     );
-                }
-                else
-                {
+
+                    if (game_options->patches[patchoption].enabled)
+                    {
+                        video_draw_character(
+                            48 + 2,
+                            22 + 21 + 21 + ((option - top) * 21),
+                            state->font_18pt,
+                            option_color,
+                            0x2713  // Checkbox unicode glyph.
+                        );
+                    }
+
                     video_draw_text(
-                        48,
+                        48 + 24,
                         22 + 21 + 21 + ((option - top) * 21),
                         state->font_18pt,
                         option_color,
-                        "%s: ???", game_options->system_settings[actualoption].name
+                        game_options->patches[patchoption].description
                     );
                 }
             }
-            else if (option < (game_options->patch_count + system_settings_count + game_settings_count))
+            else if (option < (patch_count + system_settings_count))
             {
-                unsigned int gameoption = option - (game_options->patch_count + system_settings_count);
-                unsigned int counted = 0;
-                unsigned int actualoption = 0;
+                int systemoption = option - (patch_count + 1);
 
-                for (unsigned int setting = 0; setting < game_options->game_settings_count; setting++)
-                {
-                    if (game_options->game_settings[setting].read_only.setting == READ_ONLY_ALWAYS)
-                    {
-                        continue;
-                    }
-
-                    if (counted == gameoption)
-                    {
-                        actualoption = setting;
-                        break;
-                    }
-
-                    counted++;
-                }
-
-                int valno = find_setting_value(&game_options->game_settings[actualoption], game_options->game_settings[actualoption].current);
-                if (valno >= 0)
+                if (systemoption < 0)
                 {
                     video_draw_text(
                         48,
                         22 + 21 + 21 + ((option - top) * 21),
                         state->font_18pt,
-                        option_color,
-                        "%s: %s", game_options->game_settings[actualoption].name, game_options->game_settings[actualoption].values[valno].description
+                        rgb(0, 255, 0),
+                        "System Settings"
                     );
                 }
-                else
+                else if (systemoption < (system_settings_count - 2))
+                {
+                    unsigned int counted = 0;
+                    unsigned int actualoption = 0;
+
+                    for (unsigned int setting = 0; setting < game_options->system_settings_count; setting++)
+                    {
+                        if (game_options->system_settings[setting].read_only.setting == READ_ONLY_ALWAYS)
+                        {
+                            continue;
+                        }
+
+                        if (counted == systemoption)
+                        {
+                            actualoption = setting;
+                            break;
+                        }
+
+                        counted++;
+                    }
+
+                    int valno = find_setting_value(&game_options->system_settings[actualoption], game_options->system_settings[actualoption].current);
+                    if (valno >= 0)
+                    {
+                        video_draw_text(
+                            48,
+                            22 + 21 + 21 + ((option - top) * 21),
+                            state->font_18pt,
+                            option_color,
+                            "%s: %s", game_options->system_settings[actualoption].name, game_options->system_settings[actualoption].values[valno].description
+                        );
+                    }
+                    else
+                    {
+                        video_draw_text(
+                            48,
+                            22 + 21 + 21 + ((option - top) * 21),
+                            state->font_18pt,
+                            option_color,
+                            "%s: ???", game_options->system_settings[actualoption].name
+                        );
+                    }
+                }
+            }
+            else if (option < (patch_count + system_settings_count + game_settings_count))
+            {
+                int gameoption = option - (patch_count + system_settings_count + 1);
+
+                if (gameoption < 0)
                 {
                     video_draw_text(
                         48,
                         22 + 21 + 21 + ((option - top) * 21),
                         state->font_18pt,
-                        option_color,
-                        "%s: ???", game_options->game_settings[actualoption].name
+                        rgb(0, 255, 0),
+                        "Game Settings"
                     );
+                }
+                else if (gameoption < (game_settings_count - 2))
+                {
+                    unsigned int counted = 0;
+                    unsigned int actualoption = 0;
+
+                    for (unsigned int setting = 0; setting < game_options->game_settings_count; setting++)
+                    {
+                        if (game_options->game_settings[setting].read_only.setting == READ_ONLY_ALWAYS)
+                        {
+                            continue;
+                        }
+
+                        if (counted == gameoption)
+                        {
+                            actualoption = setting;
+                            break;
+                        }
+
+                        counted++;
+                    }
+
+                    int valno = find_setting_value(&game_options->game_settings[actualoption], game_options->game_settings[actualoption].current);
+                    if (valno >= 0)
+                    {
+                        video_draw_text(
+                            48,
+                            22 + 21 + 21 + ((option - top) * 21),
+                            state->font_18pt,
+                            option_color,
+                            "%s: %s", game_options->game_settings[actualoption].name, game_options->game_settings[actualoption].values[valno].description
+                        );
+                    }
+                    else
+                    {
+                        video_draw_text(
+                            48,
+                            22 + 21 + 21 + ((option - top) * 21),
+                            state->font_18pt,
+                            option_color,
+                            "%s: ???", game_options->game_settings[actualoption].name
+                        );
+                    }
                 }
             }
             else
             {
-                unsigned int menuoption = option - (game_options->patch_count + system_settings_count + game_settings_count);
+                unsigned int menuoption = option - (patch_count + system_settings_count + game_settings_count);
                 switch (menuoption)
                 {
                     case 0:
