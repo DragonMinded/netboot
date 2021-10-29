@@ -970,6 +970,62 @@ unsigned int game_settings(state_t *state, int reinit)
     // If we need to switch screens.
     unsigned int new_screen = SCREEN_GAME_SETTINGS;
 
+    // Calculate visibility
+    unsigned int actualsetting = patch_count + 1;
+    for (unsigned int setting = 0; setting < game_options->system_settings_count; setting++)
+    {
+        int whichsetting = game_options->system_settings[setting].read_only.setting;
+
+        if (whichsetting >= 0 && whichsetting < game_options->system_settings_count)
+        {
+            int readonly = game_options->system_settings[setting].read_only.negate ? 0 : 1;
+
+            for (unsigned int valno = 0; valno < game_options->system_settings[setting].read_only.value_count; valno++)
+            {
+                if (game_options->system_settings[setting].read_only.values[valno] == game_options->system_settings[whichsetting].current)
+                {
+                    readonly = game_options->system_settings[setting].read_only.negate ? 1 : 0;
+                    break;
+                }
+            }
+
+            blocked[actualsetting] = readonly;
+            actualsetting += 1;
+        }
+        else if (whichsetting == READ_ONLY_NEVER)
+        {
+            actualsetting += 1;
+        }
+    }
+
+    // Calculate visibility
+    actualsetting = patch_count + system_settings_count + 1;
+    for (unsigned int setting = 0; setting < game_options->game_settings_count; setting++)
+    {
+        int whichsetting = game_options->game_settings[setting].read_only.setting;
+
+        if (whichsetting >= 0 && whichsetting < game_options->game_settings_count)
+        {
+            int readonly = game_options->game_settings[setting].read_only.negate ? 0 : 1;
+
+            for (unsigned int valno = 0; valno < game_options->game_settings[setting].read_only.value_count; valno++)
+            {
+                if (game_options->game_settings[setting].read_only.values[valno] == game_options->game_settings[whichsetting].current)
+                {
+                    readonly = game_options->game_settings[setting].read_only.negate ? 1 : 0;
+                    break;
+                }
+            }
+
+            blocked[actualsetting] = readonly;
+            actualsetting += 1;
+        }
+        else if (whichsetting == READ_ONLY_NEVER)
+        {
+            actualsetting += 1;
+        }
+    }
+
     // Make sure that we aren't on an entry that is blocked.
     while (blocked[cursor]) { cursor++; }
 
@@ -1279,7 +1335,7 @@ unsigned int game_settings(state_t *state, int reinit)
                 video_draw_sprite(24, 24 + 21 + 21 + ((option - top) * 21), cursor_png_width, cursor_png_height, cursor_png_data);
             }
 
-            uint32_t option_color = (option == cursor ? rgb(255, 255, 20) : rgb(255, 255, 255));
+            uint32_t option_color = blocked[option] ? rgb(128, 128, 128) : (option == cursor ? rgb(255, 255, 20) : rgb(255, 255, 255));
 
             // Draw the menu entry itself.
             if (option < patch_count)
@@ -1361,26 +1417,39 @@ unsigned int game_settings(state_t *state, int reinit)
                         counted++;
                     }
 
-                    int valno = find_setting_value(&game_options->system_settings[actualoption], game_options->system_settings[actualoption].current);
-                    if (valno >= 0)
+                    if (blocked[option])
                     {
                         video_draw_text(
                             48,
                             22 + 21 + 21 + ((option - top) * 21),
                             state->font_18pt,
                             option_color,
-                            "%s: %s", game_options->system_settings[actualoption].name, game_options->system_settings[actualoption].values[valno].description
+                            "%s", game_options->system_settings[actualoption].name
                         );
                     }
                     else
                     {
-                        video_draw_text(
-                            48,
-                            22 + 21 + 21 + ((option - top) * 21),
-                            state->font_18pt,
-                            option_color,
-                            "%s: ???", game_options->system_settings[actualoption].name
-                        );
+                        int valno = find_setting_value(&game_options->system_settings[actualoption], game_options->system_settings[actualoption].current);
+                        if (valno >= 0)
+                        {
+                            video_draw_text(
+                                48,
+                                22 + 21 + 21 + ((option - top) * 21),
+                                state->font_18pt,
+                                option_color,
+                                "%s: %s", game_options->system_settings[actualoption].name, game_options->system_settings[actualoption].values[valno].description
+                            );
+                        }
+                        else
+                        {
+                            video_draw_text(
+                                48,
+                                22 + 21 + 21 + ((option - top) * 21),
+                                state->font_18pt,
+                                option_color,
+                                "%s: ???", game_options->system_settings[actualoption].name
+                            );
+                        }
                     }
                 }
             }
@@ -1419,26 +1488,39 @@ unsigned int game_settings(state_t *state, int reinit)
                         counted++;
                     }
 
-                    int valno = find_setting_value(&game_options->game_settings[actualoption], game_options->game_settings[actualoption].current);
-                    if (valno >= 0)
+                    if (blocked[option])
                     {
                         video_draw_text(
                             48,
                             22 + 21 + 21 + ((option - top) * 21),
                             state->font_18pt,
                             option_color,
-                            "%s: %s", game_options->game_settings[actualoption].name, game_options->game_settings[actualoption].values[valno].description
+                            "%s", game_options->game_settings[actualoption].name
                         );
                     }
                     else
                     {
-                        video_draw_text(
-                            48,
-                            22 + 21 + 21 + ((option - top) * 21),
-                            state->font_18pt,
-                            option_color,
-                            "%s: ???", game_options->game_settings[actualoption].name
-                        );
+                        int valno = find_setting_value(&game_options->game_settings[actualoption], game_options->game_settings[actualoption].current);
+                        if (valno >= 0)
+                        {
+                            video_draw_text(
+                                48,
+                                22 + 21 + 21 + ((option - top) * 21),
+                                state->font_18pt,
+                                option_color,
+                                "%s: %s", game_options->game_settings[actualoption].name, game_options->game_settings[actualoption].values[valno].description
+                            );
+                        }
+                        else
+                        {
+                            video_draw_text(
+                                48,
+                                22 + 21 + 21 + ((option - top) * 21),
+                                state->font_18pt,
+                                option_color,
+                                "%s: ???", game_options->game_settings[actualoption].name
+                            );
+                        }
                     }
                 }
             }
