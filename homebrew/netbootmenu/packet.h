@@ -7,8 +7,8 @@ extern "C" {
 
 #include <stdint.h>
 
-#define MAX_OUTSTANDING_PACKETS 268
-#define MAX_PACKET_LENGTH 253
+#define MAX_OUTSTANDING_PACKETS 256
+#define MAX_PACKET_LENGTH ((0xFF - 2) * 3)
 
 typedef struct
 {

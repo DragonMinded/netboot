@@ -161,14 +161,14 @@ void packetlib_discard(int packetno)
 
 uint32_t checksum_add(uint32_t value)
 {
-    uint8_t sum = ((value & 0xFF) + ((value >> 8) & 0xFF)) & 0xFF;
-    return (((~sum) & 0xFF) << 16) | (value & 0x0000FFFF);
+    uint32_t sum = (value & 0xFF) + ((value >> 8) & 0xFF) + ((value >> 16) & 0xFF);
+    return (((~sum) & 0xFF) << 24) | (value & 0x00FFFFFF);
 }
 
 int checksum_verify(uint32_t value)
 {
-    uint8_t sum = ((value & 0xFF) + ((value >> 8) & 0xFF)) & 0xFF;
-    return (((~sum) & 0xFF) == ((value >> 16) & 0xFF)) ? 1 : 0;
+    uint32_t sum = (value & 0xFF) + ((value >> 8) & 0xFF) + ((value >> 16) & 0xFF);
+    return (((~sum) & 0xFF) == ((value >> 24) & 0xFF)) ? 1 : 0;
 }
 
 uint32_t read_data()
@@ -184,7 +184,7 @@ uint32_t read_data()
     }
 
     // First, construct the location portion of the packet.
-    uint32_t response = ((packetlib_state.pending_send_location + 1) << 24) & 0xFF000000;
+    uint32_t response = (((packetlib_state.pending_send_location / 3) + 1) << 24) & 0xFF000000;
 
     // Now, until we run out of data, stick more into the buffer.
     for (int i = 16; i >= 0; i -= 8)
@@ -233,7 +233,7 @@ uint32_t read_send_status()
 
     if (packetlib_state.pending_send_size != 0)
     {
-        regdata = ((packetlib_state.pending_send_size << 8) & 0xFF00) | (packetlib_state.pending_send_location & 0x00FF);
+        regdata = ((packetlib_state.pending_send_size << 12) & 0xFFF000) | (packetlib_state.pending_send_location & 0x000FFF);
     }
 
     // Actually return the data.
@@ -248,7 +248,7 @@ void write_send_status(uint32_t status)
     // the current location to the length of the packet.
     if (checksum_verify(status))
     {
-        unsigned int location = status & 0xFF;
+        unsigned int location = status & 0xFFF;
         if (location < packetlib_state.pending_send_size)
         {
             // Host is requesting a resend of some data.
@@ -289,6 +289,8 @@ void write_data(uint32_t data)
 
         // Get the actual location.
         location -= 1;
+        location *= 3;
+
         if (location != packetlib_state.pending_recv_location)
         {
             // We missed some data.
@@ -337,7 +339,7 @@ uint32_t read_recv_status()
 
     if (packetlib_state.pending_recv_size != 0)
     {
-        regdata = ((packetlib_state.pending_recv_size << 8) & 0xFF00) | (packetlib_state.pending_recv_location & 0x00FF);
+        regdata = ((packetlib_state.pending_recv_size << 12) & 0xFFF000) | (packetlib_state.pending_recv_location & 0x000FFF);
     }
 
     // Actually return the data.
@@ -357,7 +359,7 @@ void write_recv_status(uint32_t status)
     // it should cancel the transfer by writing all 0's to this register.
     if (checksum_verify(status))
     {
-        unsigned int size = (status >> 8) & 0xFF;
+        unsigned int size = (status >> 12) & 0xFFF;
         if (size > 0 && size <= MAX_PACKET_LENGTH)
         {
             if (packetlib_state.pending_recv_size == 0)

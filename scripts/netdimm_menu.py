@@ -21,7 +21,8 @@ from netboot import PatchManager
 root = os.path.realpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
 
 
-MAX_PACKET_LENGTH: int = 253
+MAX_PACKET_LENGTH: int = ((0xFF - 2) * 3)
+MAX_READ_TIMEOUT: float = 2.0
 MAX_EMPTY_READS: int = 10
 MAX_FAILED_WRITES: int = 10
 MENU_DATA_REGISTER: int = 0xC0DE10
@@ -32,13 +33,13 @@ MENU_SCRATCH2_REGISTER: int = 0xC0DE50
 
 
 def checksum_valid(data: int) -> bool:
-    sumval = (data & 0xFF) + ((data >> 8) & 0xFF)
-    return ((data >> 24) & 0xFF) == 0 and ((data >> 16) & 0xFF) == ((~sumval) & 0xFF)
+    sumval = (data & 0xFF) + ((data >> 8) & 0xFF) + ((data >> 16) & 0xFF)
+    return ((data >> 24) & 0xFF) == ((~sumval) & 0xFF)
 
 
 def checksum_stamp(data: int) -> int:
-    sumval = (data & 0xFF) + ((data >> 8) & 0xFF)
-    return (((~sumval) & 0xFF) << 16) | (data & 0x0000FFFF)
+    sumval = (data & 0xFF) + ((data >> 8) & 0xFF) + ((data >> 16) & 0xFF)
+    return (((~sumval) & 0xFF) << 24) | (data & 0x00FFFFFF)
 
 
 def read_send_status_register(netdimm: NetDimm) -> Optional[int]:
@@ -48,12 +49,12 @@ def read_send_status_register(netdimm: NetDimm) -> Optional[int]:
         start = time.time()
 
         while not valid:
-            while status == 0 or status == 0xFFFFFFFF:
+            status = 0
+            while status == 0 or status == 0xFFFFFFFF and (time.time() - start <= MAX_READ_TIMEOUT):
                 status = netdimm.peek(MENU_SEND_STATUS_REGISTER, PeekPokeTypeEnum.TYPE_LONG)
 
             valid = checksum_valid(status)
-
-            if not valid and (time.time() - start > 1.0):
+            if not valid and (time.time() - start > MAX_READ_TIMEOUT):
                 return None
 
         return status
@@ -71,12 +72,12 @@ def read_recv_status_register(netdimm: NetDimm) -> Optional[int]:
         start = time.time()
 
         while not valid:
-            while status == 0 or status == 0xFFFFFFFF:
+            status = 0
+            while status == 0 or status == 0xFFFFFFFF and (time.time() - start <= MAX_READ_TIMEOUT):
                 status = netdimm.peek(MENU_RECV_STATUS_REGISTER, PeekPokeTypeEnum.TYPE_LONG)
 
             valid = checksum_valid(status)
-
-            if not valid and (time.time() - start > 1.0):
+            if not valid and (time.time() - start > MAX_READ_TIMEOUT):
                 return None
 
         return status
@@ -95,12 +96,12 @@ def receive_packet(netdimm: NetDimm) -> Optional[bytes]:
             return None
 
         # Now, grab the length of the available packet.
-        length = (status >> 8) & 0xFF
+        length = (status >> 12) & 0xFFF
         if length == 0:
             return None
 
         # Now, see if the transfer was partially done, if so rewind it.
-        loc = status & 0xFF
+        loc = status & 0xFFF
         if loc > 0:
             write_send_status_register(netdimm, 0)
 
@@ -116,7 +117,7 @@ def receive_packet(netdimm: NetDimm) -> Optional[bytes]:
                     for loc, val in enumerate(data):
                         if val is None:
                             # We found a spot to resume from.
-                            write_send_status_register(netdimm, loc & 0xFF)
+                            write_send_status_register(netdimm, loc & 0xFFF)
                             tries = 0
                             break
                     else:
@@ -125,7 +126,7 @@ def receive_packet(netdimm: NetDimm) -> Optional[bytes]:
                         raise Exception("Logic error!")
             else:
                 # Grab the location for this chunk, stick the data in the right spot.
-                location = ((chunk >> 24) & 0xFF) - 1
+                location = (((chunk >> 24) & 0xFF) - 1) * 3
 
                 for off, shift in enumerate([16, 8, 0]):
                     actual = off + location
@@ -138,7 +139,7 @@ def receive_packet(netdimm: NetDimm) -> Optional[bytes]:
             raise Exception("Logic error!")
 
         # Acknowledge the data transfer completed.
-        write_send_status_register(netdimm, length & 0xFF)
+        write_send_status_register(netdimm, length & 0xFFF)
 
         # Return the actual data!
         return bytedata
@@ -153,7 +154,7 @@ def send_packet(netdimm: NetDimm, data: bytes) -> bool:
         start = time.time()
         sent_length = False
         while True:
-            if time.time() - start > 1.0:
+            if time.time() - start > MAX_READ_TIMEOUT:
                 # Failed to request a new packet send in time.
                 return False
 
@@ -163,10 +164,10 @@ def send_packet(netdimm: NetDimm, data: bytes) -> bool:
                 return False
 
             # Now, grab the length of the available packet.
-            newlength = (status >> 8) & 0xFF
+            newlength = (status >> 12) & 0xFFF
             if newlength == 0:
                 # Ready to start transferring!
-                write_recv_status_register(netdimm, (length << 8) & 0xFF00)
+                write_recv_status_register(netdimm, (length << 12) & 0xFFF000)
                 sent_length = True
             elif sent_length is False or newlength != length:
                 # Cancel old transfer.
@@ -185,7 +186,7 @@ def send_packet(netdimm: NetDimm, data: bytes) -> bool:
         while True:
             while location < length:
                 # Sum up the next amount of data, up to 3 bytes.
-                chunk: int = (((location + 1) << 24) & 0xFF000000)
+                chunk: int = ((((location // 3) + 1) << 24) & 0xFF000000)
 
                 for shift in [16, 8, 0]:
                     if location < length:
@@ -205,8 +206,8 @@ def send_packet(netdimm: NetDimm, data: bytes) -> bool:
 
             # See if the packet was sent successfully. If not, then our location will
             # be set to where the target needs data sent from.
-            newlength = (status >> 8) & 0xFF
-            location = status & 0xFF
+            newlength = (status >> 12) & 0xFFF
+            location = status & 0xFFF
 
             if newlength == 0 and location == 0:
                 # We succeeded! Time to exit
@@ -233,6 +234,9 @@ def send_message(netdimm: NetDimm, message: Message, verbose: bool = False) -> b
     if send_sequence == 0:
         send_sequence = 1
 
+    if verbose:
+        print(f"Sending type: {hex(message.id)}, length: {len(message.data)}")
+
     data = message.data
     compressed = False
     if data:
@@ -250,6 +254,8 @@ def send_message(netdimm: NetDimm, message: Message, verbose: bool = False) -> b
         packetdata = struct.pack("<HHHH", (message.id & 0x7FFF) | (0x8000 if compressed else 0), send_sequence & 0xFFFF, 0, 0)
         if not send_packet(netdimm, packetdata):
             send_sequence = (send_sequence + 1) & 0xFFFF
+            if verbose:
+                print(f"Packet transfer failed in {time.time() - t} seconds")
             return False
     else:
         location = 0
@@ -259,6 +265,8 @@ def send_message(netdimm: NetDimm, message: Message, verbose: bool = False) -> b
 
             if not send_packet(netdimm, packetdata):
                 send_sequence = (send_sequence + 1) & 0xFFFF
+                if verbose:
+                    print(f"Packet transfer failed in {time.time() - t} seconds")
                 return False
 
     if verbose:
@@ -270,7 +278,7 @@ def send_message(netdimm: NetDimm, message: Message, verbose: bool = False) -> b
 pending_received_chunks: Dict[int, Dict[int, bytes]] = {}
 
 
-def receive_message(netdimm: NetDimm) -> Optional[Message]:
+def receive_message(netdimm: NetDimm, verbose: bool = False) -> Optional[Message]:
     # Try to receive a new packet.
     new_packet = receive_packet(netdimm)
     if new_packet is None:
@@ -309,6 +317,8 @@ def receive_message(netdimm: NetDimm) -> Optional[Message]:
         else:
             raise Exception("Decompress error!")
 
+    if verbose:
+        print(f"Received type: {hex(msgid)}, length: {len(msgdata)}")
     return Message(msgid, msgdata)
 
 
@@ -690,11 +700,8 @@ def main() -> int:
                 netdimm = NetDimm(args.ip, log=print)
                 with netdimm.connection():
                     while True:
-                        msg = receive_message(netdimm)
+                        msg = receive_message(netdimm, verbose=verbose)
                         if msg:
-                            if verbose:
-                                print(f"Received type: {hex(msg.id)}, length: {len(msg.data)}")
-
                             if msg.id == MESSAGE_SELECTION:
                                 index = struct.unpack("<I", msg.data)[0]
                                 filename = games[index][0]
