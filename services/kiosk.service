@@ -9,6 +9,8 @@ User=root
 Group=root
 WorkingDirectory=/home/pi/netboot/
 ExecStart=/home/pi/netboot/services/kiosk.sh
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
