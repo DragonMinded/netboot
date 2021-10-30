@@ -95,32 +95,29 @@ void _enter()
         ctor_ptr++;
     }
 
+    // Initialize things we promise are fully ready by the time main/test is called.
+    timer_init();
+    maple_init();
+
     // Execute main/test executable based on boot variable set in
     // sh-crt0.s which comes from the entrypoint used to start the code.
+    int status;
     if(_boot_mode == 0)
     {
-        int status;
-
-        timer_init();
-        maple_init();
         status = main();
-        maple_free();
-        timer_free();
-
-        _exit(status);
     }
     else
     {
-        int status;
-
-        timer_init();
-        maple_init();
         status = test();
-        maple_free();
-        timer_free();
-
-        _exit(status);
     }
+
+    // Free those things now that we're done. We should usually never get here
+    // because it would be unusual to exit from main/test by returning.
+    maple_free();
+    timer_free();
+
+    // Finally, exit from the program.
+    _exit(status);
 }
 
 void hw_memset(void *addr, uint32_t value, unsigned int amount)
