@@ -9,6 +9,7 @@
 #include "naomi/maple.h"
 #include "naomi/timer.h"
 #include "naomi/rtc.h"
+#include "naomi/interrupts.h"
 
 #define CCR (*(uint32_t *)0xFF00001C)
 #define QACR0 (*(uint32_t *)0xFF000038)
@@ -84,7 +85,8 @@ void _enter()
         ((uint32_t *)0xFFA00040)[0] = 0x8201;
     }
 
-    // Set up floating point stuff.
+    // Set up floating point stuff. Requests round to nearest instead of round to zero,
+    // denormalized numbers treated as zero.
     __set_fpscr(0x40000);
 
     // Run init sections.
@@ -96,6 +98,7 @@ void _enter()
     }
 
     // Initialize things we promise are fully ready by the time main/test is called.
+    irq_init();
     timer_init();
     maple_init();
 
@@ -115,6 +118,7 @@ void _enter()
     // because it would be unusual to exit from main/test by returning.
     maple_free();
     timer_free();
+    irq_free();
 
     // Finally, exit from the program.
     _exit(status);
@@ -395,11 +399,8 @@ int _rename_r (struct _reent *reent, const char *old, const char *new)
     return -1;
 }
 
-void *_sbrk_r(struct _reent *reent, ptrdiff_t incr)
+void *_sbrk_impl(struct _reent *reent, ptrdiff_t incr)
 {
-    // TODO: This is not re-entrant, but it's not possible to make so. We need
-    // to disable and re-enable interrupts here, but we don't support interrupts yet.
-
     extern char end;      /* Defined by the linker in naomi.ld */
     static char *heap_end;
     char *prev_heap_end;
@@ -417,6 +418,14 @@ void *_sbrk_r(struct _reent *reent, ptrdiff_t incr)
     }
     heap_end += incr;
     return prev_heap_end;
+}
+
+void *_sbrk_r(struct _reent *reent, ptrdiff_t incr)
+{
+    uint32_t old_interrupts = irq_disable();
+    void *ptr = _sbrk_impl(reent, incr);
+    irq_restore(old_interrupts);
+    return ptr;
 }
 
 int _fstat_r(struct _reent *reent, int file, struct stat *st)
