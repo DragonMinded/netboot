@@ -35,6 +35,9 @@ extern uint32_t __ctors_end;
 extern uint32_t __dtors;
 extern uint32_t __dtors_end;
 
+/* libgcc floating point stuff */
+extern void __set_fpscr (unsigned long);
+
 /* Provide a weakref to a default test sub for autoconf-purposes. */
 int __test()
 {
@@ -80,6 +83,9 @@ void _enter()
         for(int i = 0; i < 0x10000; i++) { ; }
         ((uint32_t *)0xFFA00040)[0] = 0x8201;
     }
+
+    // Set up floating point stuff.
+    __set_fpscr(0x40000);
 
     // Run init sections.
     uint32_t *ctor_ptr = &__ctors;
