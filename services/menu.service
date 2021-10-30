@@ -8,7 +8,7 @@ Restart=always
 User=root
 Group=root
 WorkingDirectory=/home/pi/netboot/
-ExecStart=/home/pi/netboot/scripts/menu.sh
+ExecStart=/home/pi/netboot/services/menu.sh
 
 [Install]
 WantedBy=multi-user.target

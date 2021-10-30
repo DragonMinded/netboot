@@ -8,7 +8,7 @@ Restart=always
 User=root
 Group=root
 WorkingDirectory=/home/pi/netboot/
-ExecStart=/home/pi/netboot/scripts/kiosk.sh
+ExecStart=/home/pi/netboot/services/kiosk.sh
 
 [Install]
 WantedBy=multi-user.target
