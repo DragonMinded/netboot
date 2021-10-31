@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
-#include "naomi/interrupts.h"
+#include "naomi/interrupt.h"
 #include "naomi/thread.h"
 #include "irqstate.h"
 

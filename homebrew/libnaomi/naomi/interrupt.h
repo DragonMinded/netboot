@@ -1,5 +1,5 @@
-#ifndef __INTERRUPTS_H
-#define __INTERRUPTS_H
+#ifndef __INTERRUPT_H
+#define __INTERRUPT_H
 
 #ifdef __cplusplus
 extern "C" {

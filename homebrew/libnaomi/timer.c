@@ -1,6 +1,6 @@
 #include <stdint.h>
 #include "naomi/timer.h"
-#include "naomi/interrupts.h"
+#include "naomi/interrupt.h"
 
 #define TIMER_BASE_ADDRESS 0xFFD80000
 

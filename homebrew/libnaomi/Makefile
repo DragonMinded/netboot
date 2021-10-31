@@ -6,7 +6,7 @@ all: libnaomi.a
 # The source files that make libnaomi.a tick.
 SRCS += sh-crt0.s
 SRCS += system.c
-SRCS += interrupts.c
+SRCS += interrupt.c
 SRCS += timer.c
 SRCS += thread.c
 SRCS += dimmcomms.c

@@ -1,5 +1,5 @@
-#ifndef __THREADS_H
-#define __THREADS_H
+#ifndef __THREAD_H
+#define __THREAD_H
 
 #ifdef __cplusplus
 extern "C" {

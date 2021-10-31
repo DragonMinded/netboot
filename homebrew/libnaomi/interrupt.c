@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include "naomi/interrupts.h"
+#include "naomi/interrupt.h"
 #include "naomi/timer.h"
 #include "naomi/thread.h"
 #include "irqstate.h"

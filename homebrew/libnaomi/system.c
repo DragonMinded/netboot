@@ -9,7 +9,7 @@
 #include "naomi/maple.h"
 #include "naomi/timer.h"
 #include "naomi/rtc.h"
-#include "naomi/interrupts.h"
+#include "naomi/interrupt.h"
 
 #define CCR (*(uint32_t *)0xFF00001C)
 #define QACR0 (*(uint32_t *)0xFF000038)

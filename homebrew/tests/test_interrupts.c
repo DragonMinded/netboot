@@ -1,6 +1,6 @@
 // vim: set fileencoding=utf-8
 #include <stdlib.h>
-#include "naomi/interrupts.h"
+#include "naomi/interrupt.h"
 #include "naomi/thread.h"
 
 void test_interrupts_basic(test_context_t *context)
