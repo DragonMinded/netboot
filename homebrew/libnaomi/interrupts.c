@@ -3,45 +3,13 @@
 #include <string.h>
 #include "naomi/interrupts.h"
 #include "naomi/timer.h"
+#include "naomi/thread.h"
+#include "irqstate.h"
 
 // Saved state of SR and VBR when we initialize interrupts. We will use these
 // to restore SR/VBR when de-initializing again.
 static uint32_t saved_sr;
 static uint32_t saved_vbr;
-
-// Should match up with save and restore code in sh-crt0.s.
-typedef struct
-{
-    // General purpose registers R0-R15 (R15 being the stack).
-    uint32_t gp_regs[16];
-
-    // Saved program counter where the interrupt occured.
-    uint32_t pc;
-
-    // Saved procedure return address.
-    uint32_t pr;
-
-    // Saved global base address.
-    uint32_t gbr;
-
-    // Saved vector base address.
-    uint32_t vbr;
-
-    // Saved Multiply-accumulate high/low registers.
-    uint32_t mach;
-    uint32_t macl;
-
-    // Saved SR.
-    uint32_t sr;
-
-    // Saved floating point banked and regular registers.
-    uint32_t frbank[16];
-    uint32_t fr[16];
-
-    // Saved floating point status and communication registers.
-    uint32_t fpscr;
-    uint32_t fpul;
-} irq_state_t;
 
 // Size we wish our stack to be.
 #define IRQ_STACK_SIZE 16384
@@ -63,39 +31,73 @@ extern irq_state_t *irq_state;
 
 static irq_stats_t stats;
 
-void _irq_general_exception()
+irq_state_t * _irq_general_exception(irq_state_t *cur_state)
 {
-    // TODO: Handle TRAPA instructions by passing to a user handler.
-
     // TODO: Handle other general purpose exceptions by displaying a
     // debug screen and freezing.
     stats.last_event = EXPEVT;
+
+    switch(EXPEVT)
+    {
+        case IRQ_EVENT_TRAPA:
+        {
+            // TRAPA, AKA syscall exception.
+            unsigned int which = ((TRA) >> 2) & 0xFF;
+            cur_state = _syscall_trapa(cur_state, which);
+
+            break;
+        }
+        default:
+        {
+            // Empty handler.
+            break;
+        }
+    }
+
+    // Return updated IRQ state.
+    return cur_state;
 }
 
 // Prototypes of functions we don't want in the public headers.
 void _irq_set_vector_table();
 void _timer_interrupt(int timer);
 uint32_t _irq_enable();
+uint32_t _irq_read_sr();
+uint32_t _irq_read_vbr();
 
-void _irq_external_interrupt()
+irq_state_t * _irq_external_interrupt(irq_state_t *cur_state)
 {
     stats.last_event = INTEVT;
 
     switch(INTEVT)
     {
         case IRQ_EVENT_TMU0:
+        {
             _timer_interrupt(0);
+            cur_state = _syscall_timer(cur_state, 0);
             break;
+        }
         case IRQ_EVENT_TMU1:
+        {
             _timer_interrupt(1);
+            cur_state = _syscall_timer(cur_state, 1);
             break;
+        }
         case IRQ_EVENT_TMU2:
+        {
             _timer_interrupt(2);
+            cur_state = _syscall_timer(cur_state, 2);
             break;
+        }
         default:
+        {
             // Empty handler.
             break;
+        }
     }
+
+    // Return updated IRQ state.
+    return cur_state;
 }
 
 void _irq_handler(uint32_t source)
@@ -106,12 +108,12 @@ void _irq_handler(uint32_t source)
     if (source == IRQ_SOURCE_GENERAL_EXCEPTION || source == IRQ_SOURCE_TLB_EXCEPTION)
     {
         // Regular exceptions as well as TLB miss exceptions.
-        _irq_general_exception();
+        irq_state = _irq_general_exception(irq_state);
     }
     else if (source == IRQ_SOURCE_INTERRUPT)
     {
         // External interrupts.
-        _irq_external_interrupt();
+        irq_state = _irq_external_interrupt(irq_state);
     }
 }
 
@@ -182,6 +184,28 @@ void _irq_free()
     // Now, get rid of our interrupt state.
     free(irq_state);
     irq_state = 0;
+}
+
+irq_state_t *_irq_new_state(thread_func_t func, void *funcparam, void *stackptr, void *returnaddr)
+{
+    uint32_t old_interrupts = irq_disable();
+
+    // Allocate space for our interrupt state.
+    irq_state_t *new_state = malloc(sizeof(irq_state_t));
+    memset(new_state, 0, sizeof(irq_state_t));
+
+    // Now, set up the starting state.
+    new_state->pc = (uint32_t)func;
+    new_state->pr = (uint32_t)returnaddr;
+    new_state->gp_regs[4] = (uint32_t)funcparam;
+    new_state->gp_regs[15] = (uint32_t)stackptr;
+    new_state->sr = _irq_read_sr() & 0xcfffff0f;
+    new_state->vbr = _irq_read_vbr();
+    new_state->fpscr = 0x40000;
+
+    // Now, re-enable interrupts and return the state.
+    irq_restore(old_interrupts);
+    return new_state;
 }
 
 irq_stats_t irq_get_stats()

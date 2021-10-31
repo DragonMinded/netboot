@@ -8,6 +8,7 @@ SRCS += sh-crt0.s
 SRCS += system.c
 SRCS += interrupts.c
 SRCS += timer.c
+SRCS += thread.c
 SRCS += dimmcomms.c
 SRCS += video.c
 SRCS += video-freetype.c

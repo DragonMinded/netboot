@@ -68,6 +68,8 @@ void _maple_init();
 void _maple_free();
 void _timer_init();
 void _timer_free();
+void _thread_init();
+void _thread_free();
 
 void _enter()
 {
@@ -106,9 +108,10 @@ void _enter()
     }
 
     // Initialize things we promise are fully ready by the time main/test is called.
-    _irq_init();
     _timer_init();
+    _thread_init();
     _maple_init();
+    _irq_init();
 
     // Execute main/test executable based on boot variable set in
     // sh-crt0.s which comes from the entrypoint used to start the code.
@@ -124,9 +127,10 @@ void _enter()
 
     // Free those things now that we're done. We should usually never get here
     // because it would be unusual to exit from main/test by returning.
-    _maple_free();
-    _timer_free();
     _irq_free();
+    _maple_free();
+    _thread_free();
+    _timer_free();
 
     // Finally, exit from the program.
     _exit(status);
@@ -258,9 +262,10 @@ void hw_memcpy(void *dest, void *src, unsigned int amount)
 void enter_test_mode()
 {
     // Shut down everything since we're leaving our executable.
-    _maple_free();
-    _timer_free();
     _irq_free();
+    _maple_free();
+    _thread_free();
+    _timer_free();
 
     // Look up the address of the enter test mode syscall.
     uint32_t test_mode_syscall = SYSCALL_VECTOR_BASE[SYSCALL_ENTER_TEST_MODE] | UNCACHED_MIRROR;

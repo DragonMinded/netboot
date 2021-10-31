@@ -175,6 +175,24 @@ irq_disable_orbits:
     .long   0x100000f0
 
     .align 4
+    .globl  __irq_read_sr
+
+__irq_read_sr:
+    # Store the SR value in r0 so we can return it.
+    stc sr,r0
+    rts
+    nop
+
+    .align 4
+    .globl  __irq_read_vbr
+
+__irq_read_vbr:
+    # Store the VBR value in r0 so we can return it.
+    stc vbr,r0
+    rts
+    nop
+
+    .align 4
     .global __irq_set_vector_table
 
 __irq_set_vector_table:
