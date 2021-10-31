@@ -1,3 +1,7 @@
+#if __has_include(<ft2build.h>)
+// Only provide this stuff if freetype is installed. Otherwise just don't do anything with it.
+// This is so that stage 1 libnaomi.a can be built, and then freetype built against it, before
+// libnaomi is built again.
 #ifndef __VIDEO_FREETYPE_H
 #define __VIDEO_FREETYPE_H
 
@@ -76,4 +80,5 @@ font_metrics_t video_get_text_metrics(font_t *fontface, const char *msg, ...);
 }
 #endif
 
+#endif
 #endif

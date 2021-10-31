@@ -49,7 +49,6 @@ typedef struct
 // Definitions from sh-crt0.s that we use here.
 extern uint8_t *irq_stack;
 extern irq_state_t *irq_state;
-extern void irq_set_vector_table();
 
 #define TRA *((volatile uint32_t *)0xFF000020)
 #define EXPEVT *((volatile uint32_t *)0xFF000024)
@@ -64,7 +63,7 @@ extern void irq_set_vector_table();
 
 static irq_stats_t stats;
 
-void irq_general_exception()
+void _irq_general_exception()
 {
     // TODO: Handle TRAPA instructions by passing to a user handler.
 
@@ -73,22 +72,25 @@ void irq_general_exception()
     stats.last_event = EXPEVT;
 }
 
-#define CODE_NMI 0x1C0
+// Prototypes of functions we don't want in the public headers.
+void _irq_set_vector_table();
+void _timer_interrupt(int timer);
+uint32_t _irq_enable();
 
-void irq_external_interrupt()
+void _irq_external_interrupt()
 {
     stats.last_event = INTEVT;
 
     switch(INTEVT)
     {
         case IRQ_EVENT_TMU0:
-            timer_interrupt(0);
+            _timer_interrupt(0);
             break;
         case IRQ_EVENT_TMU1:
-            timer_interrupt(1);
+            _timer_interrupt(1);
             break;
         case IRQ_EVENT_TMU2:
-            timer_interrupt(2);
+            _timer_interrupt(2);
             break;
         default:
             // Empty handler.
@@ -96,7 +98,7 @@ void irq_external_interrupt()
     }
 }
 
-void irq_handler(uint32_t source)
+void _irq_handler(uint32_t source)
 {
     stats.last_source = source;
     stats.num_interrupts ++;
@@ -104,16 +106,16 @@ void irq_handler(uint32_t source)
     if (source == IRQ_SOURCE_GENERAL_EXCEPTION || source == IRQ_SOURCE_TLB_EXCEPTION)
     {
         // Regular exceptions as well as TLB miss exceptions.
-        irq_general_exception();
+        _irq_general_exception();
     }
     else if (source == IRQ_SOURCE_INTERRUPT)
     {
         // External interrupts.
-        irq_external_interrupt();
+        _irq_external_interrupt();
     }
 }
 
-void irq_init()
+void _irq_init()
 {
     // Save SR and VBR so we can restore them if we ever free.
     __asm__(
@@ -142,7 +144,7 @@ void irq_init()
     irq_stack += IRQ_STACK_SIZE;
 
     // Finally, set the VBR to our vector table.
-    irq_set_vector_table();
+    _irq_set_vector_table();
 
     // Allow timer interrupts, ignore RTC interrupts.
     INTC_IPRA = 0xFFF0;
@@ -157,10 +159,10 @@ void irq_init()
     INTC_IPRD = 0x0000;
 
     // Now, enable interrupts for the whole system!
-    irq_enable();
+    _irq_enable();
 }
 
-void irq_free()
+void _irq_free()
 {
     // Restore SR and VBR to their pre-init state.
     __asm__(

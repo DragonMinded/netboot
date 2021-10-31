@@ -9,12 +9,6 @@ extern "C" {
 
 #define MAX_TIMERS 3
 
-// You do not have to call these functions as they are handled for you
-// by the runtime.
-void timer_init();
-void timer_free();
-void timer_interrupt(int timer);
-
 // Wait for the specified number of microseconds in a spin loop. If the function
 // returns nonzero, then the wait could not be performed. If the function returns
 // zero, then at least the specified microseconds have elapsed.

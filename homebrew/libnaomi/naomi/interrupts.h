@@ -7,19 +7,9 @@ extern "C" {
 
 #include <stdint.h>
 
-// Initialize or de-initialize the interrupt subsystem. Do not call these
-// directly as they are handled by the C runtime for you.
-void irq_init();
-void irq_free();
-
-// Ensure interrupts are disabled, returning the old SR. Do not re-enable
-// interrupts after calling this as you could already be in a disabled state.
-// Instead, call irq_restore() with the return value from irq_disable().
+// Ensure interrupts are disabled, returning the old SR. When you are done with
+// the code that needs exclusive HW access, restore interrupts with irq_restore().
 uint32_t irq_disable();
-
-// Ensure interrupts are enabled. You should not call this function directly
-// as it is dangerous. Instead, let the C runtime handle it for you.
-uint32_t irq_enable();
 
 // Restore interrupts, after calling irq_disable().
 void irq_restore(uint32_t oldstate);

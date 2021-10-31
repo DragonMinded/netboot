@@ -30,7 +30,7 @@ static unsigned int global_background_set = 0;
 
 // We only use two of these for rendering. The third is so we can
 // give a pointer out to scratch VRAM for other code to use.
-static uint32_t global_buffer_offset[3];
+static uint32_t global_buffer_offset[3] = { 0, 0, 0 };
 
 // Nonstatic so that other video modules can use it as well.
 unsigned int global_video_width = 0;
@@ -95,6 +95,7 @@ unsigned int video_is_vertical()
 void video_init_simple()
 {
     volatile unsigned int *videobase = (volatile unsigned int *)POWERVR2_BASE;
+
     global_video_width = 640;
     global_video_height = 480;
     global_video_depth = 2;
@@ -201,6 +202,24 @@ void video_init_simple()
     video_wait_for_vblank();
 }
 
+void video_free()
+{
+    volatile unsigned int *videobase = (volatile unsigned int *)POWERVR2_BASE;
+
+    // Reset video.
+    videobase[POWERVR2_RESET] = 0;
+
+    // De-init our globals.
+    global_video_width = 0;
+    global_video_height = 0;
+    global_video_depth = 0;
+    global_background_color = 0;
+    global_background_set = 0;
+    global_buffer_offset[0] = 0;
+    global_buffer_offset[1] = 0;
+    global_buffer_offset[2] = 0;
+}
+
 uint32_t rgb(unsigned int r, unsigned int g, unsigned int b)
 {
     if(global_video_depth == 2)
@@ -208,9 +227,13 @@ uint32_t rgb(unsigned int r, unsigned int g, unsigned int b)
         // Make a 1555 color that is non-transparent.
         return RGB0555(r, g, b);
     }
-    else
+    else if(global_video_depth == 4)
     {
         // TODO: 32-bit video modes.
+        return 0;
+    }
+    else
+    {
         return 0;
     }
 }
@@ -222,9 +245,13 @@ uint32_t rgba(unsigned int r, unsigned int g, unsigned int b, unsigned int a)
         // Make a 1555 color that is transparent if a < 128 and opaque if a >= 128.
         return RGB1555(r, g, b, a);
     }
-    else
+    else if(global_video_depth == 4)
     {
         // TODO: 32-bit video modes.
+        return 0;
+    }
+    else
+    {
         return 0;
     }
 }
@@ -235,7 +262,7 @@ void explodergb(uint32_t color, unsigned int *r, unsigned int *g, unsigned int *
     {
         EXPLODE0555(color, *r, *g, *b);
     }
-    else
+    else if(global_video_depth == 4)
     {
         // TODO: 32-bit video modes.
         *r = 0;
@@ -250,7 +277,7 @@ void explodergba(uint32_t color, unsigned int *r, unsigned int *g, unsigned int 
     {
         EXPLODE1555(color, *r, *g, *b, *a);
     }
-    else
+    else if(global_video_depth == 4)
     {
         // TODO: 32-bit video modes.
         *r = 0;
@@ -266,7 +293,7 @@ void video_fill_screen(uint32_t color)
     {
         hw_memset(buffer_base, (color & 0xFFFF) | ((color << 16) & 0xFFFF0000), global_video_width * global_video_height * 2);
     }
-    else
+    else if(global_video_depth == 4)
     {
         hw_memset(buffer_base, color, global_video_width * global_video_height * 4);
     }
@@ -281,7 +308,7 @@ void video_set_background_color(uint32_t color)
     {
         global_background_fill_color = (color & 0xFFFF) | ((color << 16) & 0xFFFF0000);
     }
-    else
+    else if(global_video_depth == 4)
     {
         global_background_fill_color = color;
     }
@@ -359,7 +386,7 @@ void video_fill_box(int x0, int y0, int x1, int y1, uint32_t color)
             }
         }
     }
-    else
+    else if(global_video_depth == 4)
     {
         // TODO: 32-bit video modes.
     }
@@ -378,7 +405,7 @@ void video_draw_pixel(int x, int y, uint32_t color)
             SET_PIXEL_H_2(buffer_base, x, y, color);
         }
     }
-    else
+    else if(global_video_depth == 4)
     {
         if (global_video_vertical)
         {
@@ -404,7 +431,7 @@ uint32_t video_get_pixel(int x, int y)
             return GET_PIXEL_H_2(buffer_base, x, y);
         }
     }
-    else
+    else if(global_video_depth == 4)
     {
         if (global_video_vertical)
         {
@@ -414,6 +441,10 @@ uint32_t video_get_pixel(int x, int y)
         {
             return GET_PIXEL_H_4(buffer_base, x, y);
         }
+    }
+    else
+    {
+        return 0;
     }
 }
 
@@ -737,7 +768,7 @@ void video_draw_sprite( int x, int y, int width, int height, void *data )
             }
         }
     }
-    else
+    else if(global_video_depth == 4)
     {
         // TODO: 32-bit video modes.
     }

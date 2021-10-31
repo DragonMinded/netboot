@@ -319,7 +319,7 @@ void __draw_bitmap(int x, int y, unsigned int width, unsigned int height, unsign
                 }
             }
         }
-        else
+        else if (global_video_depth == 4)
         {
             // TODO: Need to support 32-bit video modes.
         }

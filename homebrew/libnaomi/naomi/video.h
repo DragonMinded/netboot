@@ -50,6 +50,10 @@ extern "C" {
 // RGB 1555 color.
 void video_init_simple();
 
+// Free existing video system so that it can be initialized with another
+// call.
+void video_free();
+
 // Wait for an appropriate time to call video_display(). Also polls
 // for dimm communications. Also fills the next screen's background
 // with a previously set background color if a background color was

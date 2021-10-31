@@ -24,7 +24,7 @@ void maple_wait_for_dma()
     while((maplebase[MAPLE_DMA_START] & 1) != 0) { ; }
 }
 
-void maple_init()
+void _maple_init()
 {
     volatile unsigned int *maplebase = (volatile unsigned int *)MAPLE_BASE;
 
@@ -55,7 +55,7 @@ void maple_init()
     maple_base = malloc(1024 + 1024 + 32);
 }
 
-void maple_free()
+void _maple_free()
 {
     free(maple_base);
 }

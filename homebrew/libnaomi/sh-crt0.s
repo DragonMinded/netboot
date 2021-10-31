@@ -118,9 +118,9 @@ _irq_restore:
     nop
 
     .align 4
-    .globl  _irq_enable
+    .globl  __irq_enable
 
-_irq_enable:
+__irq_enable:
     # First, grab a SR mask which turns off all IMASK bits.
     mov.l irq_enable_andbits,r1
 
@@ -175,9 +175,9 @@ irq_disable_orbits:
     .long   0x100000f0
 
     .align 4
-    .global _irq_set_vector_table
+    .global __irq_set_vector_table
 
-_irq_set_vector_table:
+__irq_set_vector_table:
     # Load the addres of the below vector table into VBR.
     mov.l vector_table_address,r0
     ldc r0,vbr
@@ -390,7 +390,7 @@ _irq_state:
     .long 0
 
 irq_handler_addr:
-    .long _irq_handler
+    .long __irq_handler
 
     .align 4
 

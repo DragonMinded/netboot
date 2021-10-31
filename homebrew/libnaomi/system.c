@@ -61,6 +61,14 @@ void _exit(int status)
     while ( 1 ) { ; }
 }
 
+// Prototypes of functions that we don't want available in the public headers
+void _irq_init();
+void _irq_free();
+void _maple_init();
+void _maple_free();
+void _timer_init();
+void _timer_free();
+
 void _enter()
 {
     // We set this to 1 or 0 depending on whether we are in test or normal
@@ -98,9 +106,9 @@ void _enter()
     }
 
     // Initialize things we promise are fully ready by the time main/test is called.
-    irq_init();
-    timer_init();
-    maple_init();
+    _irq_init();
+    _timer_init();
+    _maple_init();
 
     // Execute main/test executable based on boot variable set in
     // sh-crt0.s which comes from the entrypoint used to start the code.
@@ -116,14 +124,16 @@ void _enter()
 
     // Free those things now that we're done. We should usually never get here
     // because it would be unusual to exit from main/test by returning.
-    maple_free();
-    timer_free();
-    irq_free();
+    _maple_free();
+    _timer_free();
+    _irq_free();
 
     // Finally, exit from the program.
     _exit(status);
 }
 
+// TODO: This is NOT re-entrant since it uses hardware. Need to guard against being
+// called from multiple threads/contexts at once.
 void hw_memset(void *addr, uint32_t value, unsigned int amount)
 {
     // Very similar to a standard memset, but the address pointer must be aligned
@@ -182,6 +192,8 @@ void hw_memset(void *addr, uint32_t value, unsigned int amount)
     queue[8] = 0;
 }
 
+// TODO: This is NOT re-entrant since it uses hardware. Need to guard against being
+// called from multiple threads/contexts at once.
 void hw_memcpy(void *dest, void *src, unsigned int amount)
 {
     // Very similar to a standard memcpy, but the destination pointer must be aligned
@@ -245,6 +257,11 @@ void hw_memcpy(void *dest, void *src, unsigned int amount)
 
 void enter_test_mode()
 {
+    // Shut down everything since we're leaving our executable.
+    _maple_free();
+    _timer_free();
+    _irq_free();
+
     // Look up the address of the enter test mode syscall.
     uint32_t test_mode_syscall = SYSCALL_VECTOR_BASE[SYSCALL_ENTER_TEST_MODE] | UNCACHED_MIRROR;
 

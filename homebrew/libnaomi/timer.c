@@ -35,7 +35,7 @@ static uint32_t reset_values[MAX_TIMERS];
 static uint32_t timers_used[MAX_TIMERS];
 static timer_callback_t timer_callbacks[MAX_TIMERS];
 
-void timer_init()
+void _timer_init()
 {
     /* Disable all timers, set timers to internal clock source */
     TIMER_TSTR = 0;
@@ -49,7 +49,7 @@ void timer_init()
     }
 }
 
-void timer_free()
+void _timer_free()
 {
     /* Disable all timers again */
     TIMER_TSTR = 0;
@@ -62,7 +62,7 @@ void timer_free()
     }
 }
 
-void timer_interrupt(int timer)
+void _timer_interrupt(int timer)
 {
     if (timer_callbacks[timer] != 0)
     {
