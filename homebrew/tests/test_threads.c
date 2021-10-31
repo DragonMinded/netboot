@@ -6,7 +6,7 @@ void *thread_main(void *param)
 {
     global_counter_increment(param);
 
-    return (void *)thread_id();
+    return (void *)thread_id() + 1000;
 }
 
 void test_threads_basic(test_context_t *context)
@@ -23,22 +23,12 @@ void test_threads_basic(test_context_t *context)
     ASSERT(info.alive == 1, "Newly created thread isn't alive!");
     ASSERT(info.running == 0, "Newly created thread is running already!");
 
+    // Start the thread, wait until its done.
     thread_start(thread);
-
-    // TODO: Switch this to a join call.
-    while ( 1 )
-    {
-        info = thread_info(thread);
-        if (info.running == 0 && info.alive == 0)
-        {
-            break;
-        }
-
-        // Give the other thread some time to process.
-        thread_yield();
-    }
+    uint32_t expected_id = (uint32_t)thread_join(thread);
 
     ASSERT(global_counter_value(counter) == 1, "Thread did not increment global counter!");
+    ASSERT(expected_id == (thread + 1000), "Thread did not return correct value!");
 
     // Finally, give back the memory.
     thread_destroy(thread);

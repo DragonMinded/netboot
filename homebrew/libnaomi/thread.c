@@ -331,6 +331,49 @@ void _thread_free()
     irq_restore(old_interrupts);
 }
 
+#define WAKE_TYPE_THREADID 1
+
+void _thread_wake_others(thread_t *thread, int wake_type)
+{
+    if (thread == 0)
+    {
+        // Shouldn't be possible, but lets not crash;
+        return;
+    }
+
+    if (wake_type == WAKE_TYPE_THREADID && thread->state != THREAD_STATE_FINISHED)
+    {
+        // We want to wake up on this thread being joinable, but the thread isn't finished.
+        return;
+    }
+
+    for (unsigned int i = 0; i < MAX_THREADS; i++)
+    {
+        if (threads[i] == 0)
+        {
+            // Not a real thread.
+            continue;
+        }
+
+        if (wake_type == WAKE_TYPE_THREADID)
+        {
+            // If the thread in question is finished, see if its ID matches any
+            // other threads waiting for it.
+            if (threads[i]->waiting_thread == thread->id && threads[i]->state == THREAD_STATE_WAITING)
+            {
+                // Yup, the other thread was waiting on this one! Wake it up,
+                // set it as not waiting for this thread, set its return value
+                // for the thread_join() syscall to the thread's retval, and
+                // set the current thread to a zombie since it's been waited on.
+                threads[i]->waiting_thread = 0;
+                threads[i]->state = THREAD_STATE_RUNNING;
+                threads[i]->context->gp_regs[0] = (uint32_t )thread->retval;
+                thread->state = THREAD_STATE_ZOMBIE;
+            }
+        }
+    }
+}
+
 irq_state_t *_syscall_timer(irq_state_t *current, int timer)
 {
     int schedule = THREAD_SCHEDULE_CURRENT;
@@ -375,6 +418,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
         case 3:
         {
             // thread_yield
+            _thread_wake_others(_thread_find_by_context(current), WAKE_TYPE_THREADID);
             schedule = THREAD_SCHEDULE_OTHER;
             break;
         }
@@ -392,7 +436,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
         }
         case 5:
         {
-            // thread_start
+            // thread_stop
             thread_t *thread = _thread_find_by_id(current->gp_regs[4]);
             if (thread && thread->state == THREAD_STATE_RUNNING)
             {
@@ -425,6 +469,57 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
             else
             {
                 current->gp_regs[0] = 0;
+            }
+            break;
+        }
+        case 8:
+        {
+            // thread_join
+            thread_t *myself = _thread_find_by_context(current);
+            thread_t *other = _thread_find_by_id(current->gp_regs[4]);
+            if (!myself)
+            {
+                // Literally should never happen.
+                current->gp_regs[0] = 0;
+            }
+            else
+            {
+                if (other)
+                {
+                    // Figure out if this thread is already done.
+                    switch(other->state)
+                    {
+                        case THREAD_STATE_STOPPED:
+                        case THREAD_STATE_RUNNING:
+                        case THREAD_STATE_WAITING:
+                        {
+                            // Need to stick this thread into waiting until
+                            // the other thread is finished.
+                            myself->state = THREAD_STATE_WAITING;
+                            myself->waiting_thread = other->id;
+                            schedule = THREAD_SCHEDULE_OTHER;
+                            break;
+                        }
+                        case THREAD_STATE_FINISHED:
+                        {
+                            // Thread is already done! We can return immediately.
+                            current->gp_regs[0] = (uint32_t )other->retval;
+                            other->state = THREAD_STATE_ZOMBIE;
+                            break;
+                        }
+                        case THREAD_STATE_ZOMBIE:
+                        {
+                            // Thread was already waited on!
+                            current->gp_regs[0] = 0;
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    // Thread doesn't exist, so return nothing from join.
+                    current->gp_regs[0] = 0;
+                }
             }
             break;
         }
@@ -605,3 +700,11 @@ uint32_t thread_id()
     return syscall_return;
 }
 
+void * thread_join(uint32_t tid)
+{
+    register void * syscall_return asm("r0");
+
+    asm("trapa #8");
+
+    return syscall_return;
+}
