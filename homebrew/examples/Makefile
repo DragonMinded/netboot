@@ -1,4 +1,4 @@
-all: hellonaomi hellocpp inputtest eepromtest audiotest netdimm rtctest
+all: hellonaomi hellocpp inputtest eepromtest audiotest netdimm rtctest threadtest
 
 .PHONY: hellonaomi
 hellonaomi:
@@ -28,8 +28,12 @@ netdimm:
 rtctest:
 	$(MAKE) -C rtctest
 
+.PHONY: threadtest
+threadtest:
+	$(MAKE) -C threadtest
+
 .PHONY: copy
-copy: hellonaomi hellocpp inputtest eepromtest audiotest netdimm rtctest
+copy: hellonaomi hellocpp inputtest eepromtest audiotest netdimm rtctest threadtest
 	cp -r hellonaomi/hellonaomi.bin ../binaries/
 	cp -r hellocpp/hellocpp.bin ../binaries/
 	cp -r inputtest/inputtest.bin ../binaries/
@@ -37,6 +41,7 @@ copy: hellonaomi hellocpp inputtest eepromtest audiotest netdimm rtctest
 	cp -r audiotest/audiotest.bin ../binaries/
 	cp -r netdimm/netdimm.bin ../binaries/
 	cp -r rtctest/rtctest.bin ../binaries/
+	cp -r threadtest/threadtest.bin ../binaries/
 
 .PHONY: clean
 clean:
@@ -47,3 +52,4 @@ clean:
 	$(MAKE) -C audiotest clean
 	$(MAKE) -C netdimm clean
 	$(MAKE) -C rtctest clean
+	$(MAKE) -C threadtest clean

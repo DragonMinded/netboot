@@ -37,8 +37,12 @@ typedef struct
     uint32_t fpul;
 } irq_state_t;
 
-irq_state_t *_irq_new_state(thread_func_t func, void *funcparam, void *stackptr, void *returnaddr);
+irq_state_t *_irq_new_state(thread_func_t func, void *funcparam, void *stackptr);
+void _irq_free_state(irq_state_t *state);
+
 irq_state_t *_syscall_trapa(irq_state_t *state, unsigned int which);
 irq_state_t *_syscall_timer(irq_state_t *state, int timer);
+
+void _thread_register_main(irq_state_t *state);
 
 #endif

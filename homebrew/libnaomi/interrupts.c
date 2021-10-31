@@ -141,6 +141,10 @@ void _irq_init()
     irq_state = malloc(sizeof(irq_state_t));
     memset(irq_state, 0, sizeof(irq_state_t));
 
+    // Register the default state with threads since the current
+    // running code at the time of init becomes a "thread" as such.
+    _thread_register_main(irq_state);
+
     // Allocate space for our interrupt handler stack.
     irq_stack = malloc(IRQ_STACK_SIZE);
     irq_stack += IRQ_STACK_SIZE;
@@ -166,6 +170,10 @@ void _irq_init()
 
 void _irq_free()
 {
+    // TODO: This should only ever be called from the main thread. We should
+    // verify that the current irq_state is the main thread with the threads
+    // module, and if not display an error message to the screen.
+
     // Restore SR and VBR to their pre-init state.
     __asm__(
         "mov.l  %0,r0\n"
@@ -186,7 +194,7 @@ void _irq_free()
     irq_state = 0;
 }
 
-irq_state_t *_irq_new_state(thread_func_t func, void *funcparam, void *stackptr, void *returnaddr)
+irq_state_t *_irq_new_state(thread_func_t func, void *funcparam, void *stackptr)
 {
     uint32_t old_interrupts = irq_disable();
 
@@ -196,7 +204,6 @@ irq_state_t *_irq_new_state(thread_func_t func, void *funcparam, void *stackptr,
 
     // Now, set up the starting state.
     new_state->pc = (uint32_t)func;
-    new_state->pr = (uint32_t)returnaddr;
     new_state->gp_regs[4] = (uint32_t)funcparam;
     new_state->gp_regs[15] = (uint32_t)stackptr;
     new_state->sr = _irq_read_sr() & 0xcfffff0f;
@@ -206,6 +213,13 @@ irq_state_t *_irq_new_state(thread_func_t func, void *funcparam, void *stackptr,
     // Now, re-enable interrupts and return the state.
     irq_restore(old_interrupts);
     return new_state;
+}
+
+void _irq_free_state(irq_state_t *state)
+{
+    // TODO: If we try to free the current state we're in trouble! We should
+    // check for this and display an exception on the screen if it happens.
+    free(state);
 }
 
 irq_stats_t irq_get_stats()
