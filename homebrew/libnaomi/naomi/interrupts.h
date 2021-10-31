@@ -43,6 +43,9 @@ typedef struct
 
 #define IRQ_EVENT_TRAPA 0x160
 #define IRQ_EVENT_NMI 0x1C0
+#define IRQ_EVENT_TMU0 0x400
+#define IRQ_EVENT_TMU1 0x420
+#define IRQ_EVENT_TMU2 0x440
 
 irq_stats_t irq_get_stats();
 

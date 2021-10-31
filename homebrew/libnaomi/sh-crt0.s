@@ -127,7 +127,7 @@ _irq_enable:
     # Now, store the old SR value in r0 so we can return it.
     stc sr,r0
 
-    # Now, set the new SR value to the old value but with all IMASK bits off.
+    # Now, set the new SR value to the old value but with all IMASK bits off
     # and BL cleared so that interrupts can flow.
     and r0,r1
     ldc r1,sr
@@ -165,14 +165,14 @@ _irq_disable:
     .align 4
 
 irq_disable_andbits:
-    # Leave the BL bit as-is (so its safe to call irq_disable() when
-    # inside a function call nested in an interrupt handler), mask
-    # off the IMASK bits.
-    .long   0xffffff0f
+    # Going to explicitly set BL, so we are completely blocked from
+    # any interrupts or exceptions inside our handler. Also, mask off
+    # the IMASK bits.
+    .long   0xefffff0f
 irq_disable_orbits:
     # Add back in the mask bits to turn on all IMASK bits to disable
-    # interrupts.
-    .long   0x000000f0
+    # interrupts, also set BR to blocked so that exceptions don't work.
+    .long   0x100000f0
 
     .align 4
     .global _irq_set_vector_table
@@ -262,22 +262,22 @@ _irq_base_handler:
     # We can't accesss banked registers directly like we could with R0-R7 above.
     # So swap banks and keep storing.
     frchg
-    fmov.s fr15,@-r0   ! save FR15  0x98
-    fmov.s fr14,@-r0   ! save FR14
-    fmov.s fr13,@-r0   ! save FR13
-    fmov.s fr12,@-r0   ! save FR12
-    fmov.s fr11,@-r0   ! save FR11
-    fmov.s fr10,@-r0   ! save FR10
-    fmov.s fr9,@-r0    ! save FR9
-    fmov.s fr8,@-r0    ! save FR8
-    fmov.s fr7,@-r0    ! save FR7
-    fmov.s fr6,@-r0    ! save FR6
-    fmov.s fr5,@-r0    ! save FR5
-    fmov.s fr4,@-r0    ! save FR4
-    fmov.s fr3,@-r0    ! save FR3
-    fmov.s fr2,@-r0    ! save FR2
-    fmov.s fr1,@-r0    ! save FR1
-    fmov.s fr0,@-r0    ! save FR0   0x5c
+    fmov.s fr15,@-r0
+    fmov.s fr14,@-r0
+    fmov.s fr13,@-r0
+    fmov.s fr12,@-r0
+    fmov.s fr11,@-r0
+    fmov.s fr10,@-r0
+    fmov.s fr9,@-r0
+    fmov.s fr8,@-r0
+    fmov.s fr7,@-r0
+    fmov.s fr6,@-r0
+    fmov.s fr5,@-r0
+    fmov.s fr4,@-r0
+    fmov.s fr3,@-r0
+    fmov.s fr2,@-r0
+    fmov.s fr1,@-r0
+    fmov.s fr0,@-r0
 
     # Now, swap back just for good measure. I'm not entirely sure this is necessary?
     # I guess if some interrupted code took a direct pointer to which bank of the

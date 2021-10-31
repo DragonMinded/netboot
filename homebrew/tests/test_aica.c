@@ -17,7 +17,7 @@ void test_aica_simple(test_context_t *context)
 
     // Wait at most 1ms before giving up.
     int timer = timer_available();
-    timer_start(timer, 1000);
+    ASSERT(timer_start(timer, 1000, 0) == 0, "No available system timers!");
     while (timer_left(timer) > 0 && !got_result)
     {
         if ((*status_location) == 0xCAFEBABE)

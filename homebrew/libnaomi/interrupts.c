@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "naomi/interrupts.h"
+#include "naomi/timer.h"
 
 // Saved state of SR and VBR when we initialize interrupts. We will use these
 // to restore SR/VBR when de-initializing again.
@@ -50,8 +51,16 @@ extern uint8_t *irq_stack;
 extern irq_state_t *irq_state;
 extern void irq_set_vector_table();
 
+#define TRA *((volatile uint32_t *)0xFF000020)
 #define EXPEVT *((volatile uint32_t *)0xFF000024)
 #define INTEVT *((volatile uint32_t *)0xFF000028)
+
+#define INTC_BASE_ADDRESS 0xFFD00000
+
+#define INTC_IPRA *((volatile uint16_t *)(INTC_BASE_ADDRESS + 0x04))
+#define INTC_IPRB *((volatile uint16_t *)(INTC_BASE_ADDRESS + 0x08))
+#define INTC_IPRC *((volatile uint16_t *)(INTC_BASE_ADDRESS + 0x0C))
+#define INTC_IPRD *((volatile uint16_t *)(INTC_BASE_ADDRESS + 0x10))
 
 static irq_stats_t stats;
 
@@ -72,6 +81,15 @@ void irq_external_interrupt()
 
     switch(INTEVT)
     {
+        case IRQ_EVENT_TMU0:
+            timer_interrupt(0);
+            break;
+        case IRQ_EVENT_TMU1:
+            timer_interrupt(1);
+            break;
+        case IRQ_EVENT_TMU2:
+            timer_interrupt(2);
+            break;
         default:
             // Empty handler.
             break;
@@ -110,6 +128,7 @@ void irq_init()
     // Now, make sure interrupts are disabled.
     irq_disable();
 
+    // Initialize our stats.
     stats.last_source = 0;
     stats.last_event = 0;
     stats.num_interrupts = 0;
@@ -124,6 +143,18 @@ void irq_init()
 
     // Finally, set the VBR to our vector table.
     irq_set_vector_table();
+
+    // Allow timer interrupts, ignore RTC interrupts.
+    INTC_IPRA = 0xFFF0;
+
+    // Ignore WDT and SCIF2 interrupts.
+    INTC_IPRB = 0x0000;
+
+    // Ignore SCIF1 and UDI interrupts.
+    INTC_IPRC = 0x0000;
+
+    // Ignore IRL0-IRL3 interrupts.
+    INTC_IPRD = 0x0000;
 
     // Now, enable interrupts for the whole system!
     irq_enable();
@@ -144,6 +175,7 @@ void irq_free()
     // Now, get rid of our interrupt stack.
     irq_stack -= IRQ_STACK_SIZE;
     free(irq_stack);
+    irq_stack = 0;
 
     // Now, get rid of our interrupt state.
     free(irq_state);
