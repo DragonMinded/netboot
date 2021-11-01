@@ -38,6 +38,8 @@ uint32_t timer_left(int timer);
 // Return the number of microseconds elapsed on an active timer.
 uint32_t timer_elapsed(int timer);
 
+#define MAX_PROFILERS 64
+
 // Start a timer for the purpose of profiling code. This has granularity up to 1 second.
 // If a negative value is returned, then profiling could not start. It is safe to pass
 // a negative value into a profile_end() call.
@@ -45,7 +47,7 @@ int profile_start();
 
 // Return the number of microseconds some code took, given the return from a profile start.
 // If a negative value is passed into the profile option, 0 is returned as the elapsed time.
-uint32_t profile_end(int profile);
+uint64_t profile_end(int profile);
 
 #ifdef __cplusplus
 }

@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <string.h>
 #include "naomi/timer.h"
 #include "naomi/interrupt.h"
 
@@ -35,6 +36,9 @@ static uint32_t reset_values[MAX_TIMERS];
 static uint32_t timers_used[MAX_TIMERS];
 static timer_callback_t timer_callbacks[MAX_TIMERS];
 
+void _profile_init();
+void _profile_free();
+
 void _timer_init()
 {
     /* Disable all timers, set timers to internal clock source */
@@ -47,10 +51,16 @@ void _timer_init()
         timers_used[i] = 0;
         timer_callbacks[i] = 0;
     }
+
+    // Schedule the profiler timer.
+    _profile_init();
 }
 
 void _timer_free()
 {
+    // Kill the profiler.
+    _profile_free();
+
     /* Disable all timers again */
     TIMER_TSTR = 0;
 
@@ -218,52 +228,79 @@ int timer_available()
 // occurs to reset it. Higher numbers equal fewer interrupts but less accuracy.
 #define MAX_PROFILE_MICROSECONDS 1000000
 
-static uint32_t profile_rollovers[MAX_TIMERS];
+static uint64_t profile_timers[MAX_PROFILERS];
+static uint64_t profile_current;
+static int profile_timer = -1;
 
 void __profile_cb(int timer)
 {
-    profile_rollovers[timer] ++;
+    profile_current += MAX_PROFILE_MICROSECONDS;
 }
 
-int profile_start()
+void _profile_init()
 {
     // Make sure that we safely ask for a new timer.
     uint32_t old_interrupts = irq_disable();
 
-    int timer = timer_available();
-    if (timer >= 0 && timer < MAX_TIMERS)
+    memset(profile_timers, 0, sizeof(uint64_t) * MAX_PROFILERS);
+    profile_current = 0;
+    profile_timer = timer_available();
+    if (profile_timer >= 0 && profile_timer < MAX_TIMERS)
     {
-        profile_rollovers[timer] = 0;
-        timer_start(timer, MAX_PROFILE_MICROSECONDS, __profile_cb);
+        timer_start(profile_timer, MAX_PROFILE_MICROSECONDS, __profile_cb);
     }
 
     // Enable interrupts again now that we're done.
     irq_restore(old_interrupts);
-
-    return timer;
 }
 
-uint32_t profile_end(int profile)
+void _profile_free()
 {
-    if (profile < 0 || profile >= MAX_TIMERS) {
-        /* Couldn't init profile */
-        return 0;
+    if (profile_timer >= 0 && profile_timer < MAX_TIMERS)
+    {
+        timer_stop(profile_timer);
     }
 
-    // Make sure to disable interrupts so we can safely read the rollovers.
+    memset(profile_timers, 0, sizeof(uint64_t) * MAX_PROFILERS);
+    profile_current = 0;
+    profile_timer = -1;
+}
+
+int profile_start()
+{
     uint32_t old_interrupts = irq_disable();
+    int profile_slot = -1;
 
-    // Grab the current timer state, add in the number of rollovers as the max microseconds.
-    uint32_t elapsed = timer_elapsed(profile);
-    elapsed += MAX_PROFILE_MICROSECONDS * profile_rollovers[profile];
+    if (profile_timer >= 0 && profile_timer < MAX_TIMERS)
+    {
+        for (int slot = 0; slot < MAX_PROFILERS; slot++)
+        {
+            if (profile_timers[slot] == 0)
+            {
+                profile_timers[slot] = profile_current + timer_elapsed(profile_timer);
+                profile_slot = slot;
+                break;
+            }
+        }
+    }
 
-    // Stop the timer, we don't need it anymore.
-    timer_stop(profile);
+    irq_restore(old_interrupts);
+    return profile_slot;
+}
+
+uint64_t profile_end(int profile)
+{
+    uint32_t old_interrupts = irq_disable();
+    uint64_t elapsed = 0;
+
+    if (profile >= 0 && profile < MAX_PROFILERS && profile_timers[profile] != 0)
+    {
+        elapsed = (profile_current + timer_elapsed(profile_timer)) - profile_timers[profile];
+        profile_timers[profile] = 0;
+    }
 
     // Safe to re-enable interrupts now.
     irq_restore(old_interrupts);
-
-    // Return final calculated value.
     return elapsed;
 }
 
