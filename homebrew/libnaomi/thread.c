@@ -68,13 +68,20 @@ thread_t *_thread_find_by_id(uint32_t id)
     return 0;
 }
 
-static uint32_t *global_counters[MAX_GLOBAL_COUNTERS];
+typedef struct
+{
+    uint32_t id;
+    uint32_t current;
+} global_counter_t;
 
-uint32_t *_global_counter_find(uint32_t counter)
+static global_counter_t *global_counters[MAX_GLOBAL_COUNTERS];
+static uint32_t global_counter_counter = 1;
+
+global_counter_t *_global_counter_find(uint32_t counterid)
 {
     for (unsigned int i = 0; i < MAX_GLOBAL_COUNTERS; i++)
     {
-        if (global_counters[i] != 0 && global_counters[i] == (uint32_t *)counter)
+        if (global_counters[i] != 0 && global_counters[i]->id == counterid)
         {
             return global_counters[i];
         }
@@ -300,6 +307,7 @@ irq_state_t *_thread_schedule(irq_state_t *state, int request)
 void _thread_init()
 {
     thread_counter = 1;
+    global_counter_counter = 1;
     memset(global_counters, 0, sizeof(uint32_t *) * MAX_GLOBAL_COUNTERS);
     memset(semaphores, 0, sizeof(semaphore_t *) * MAX_SEMAPHORES);
     memset(threads, 0, sizeof(thread_t *) * MAX_THREADS);
@@ -421,24 +429,24 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
         case 0:
         {
             // global_counter_increment
-            uint32_t *counter = _global_counter_find(current->gp_regs[4]);
-            if (counter) { *counter = *counter + 1; }
+            global_counter_t *counter = _global_counter_find(current->gp_regs[4]);
+            if (counter) { counter->current = counter->current + 1; }
             break;
         }
         case 1:
         {
             // global_counter_decrement
-            uint32_t *counter = _global_counter_find(current->gp_regs[4]);
-            if (counter && *counter > 0) { *counter = *counter - 1; }
+            global_counter_t *counter = _global_counter_find(current->gp_regs[4]);
+            if (counter && counter->current > 0) { counter->current = counter->current - 1; }
             break;
         }
         case 2:
         {
             // global_counter_value
-            uint32_t *counter = _global_counter_find(current->gp_regs[4]);
+            global_counter_t *counter = _global_counter_find(current->gp_regs[4]);
             if (counter)
             {
-                current->gp_regs[0] = *counter;
+                current->gp_regs[0] = counter->current;
             }
             else
             {
@@ -594,21 +602,31 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
 void *global_counter_init(uint32_t initial_value)
 {
     uint32_t old_interrupts = irq_disable();
-    uint32_t *counter = 0;
+    void *retval = 0;
 
     for (unsigned int i = 0; i < MAX_GLOBAL_COUNTERS; i++)
     {
         if (global_counters[i] == 0)
         {
-            counter = malloc(sizeof(uint32_t));
-            *counter = initial_value;
+            // Create counter.
+            global_counter_t *counter = malloc(sizeof(global_counter_t));
+
+            // Set up the ID and initial value.
+            counter->id = global_counter_counter++;
+            counter->current = initial_value;
+
+            // Put it in our registry.
             global_counters[i] = counter;
+
+            // Return it.
+            retval = (void *)counter->id;
+
             break;
         }
     }
 
     irq_restore(old_interrupts);
-    return counter;
+    return retval;
 }
 
 void global_counter_increment(void *counter)
@@ -637,10 +655,10 @@ void global_counter_free(void *counter)
 
     for (unsigned int i = 0; i < MAX_GLOBAL_COUNTERS; i++)
     {
-        if (global_counters[i] != 0 && global_counters[i] == counter)
+        if (global_counters[i] != 0 && global_counters[i]->id == (uint32_t)counter)
         {
+            free(global_counters[i]);
             global_counters[i] = 0;
-            free(counter);
             break;
         }
     }
