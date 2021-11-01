@@ -37,6 +37,7 @@ void semaphore_free(void *semaphore);
 // the lock or fail and no context switch will be attempted on failure.
 void *mutex_init();
 int mutex_try_lock(void *mutex);
+void mutex_lock(void *mutex);
 void mutex_unlock(void *mutex);
 void mutex_free(void *mutex);
 
@@ -76,6 +77,10 @@ void thread_stop(uint32_t tid);
 
 // Yield to the thread scheduler, which can choose a new thread to schedule.
 void thread_yield();
+
+// Exit a thread early, returning return value. Identical to letting control reach the end
+// of the thread function with a return statement.
+void thread_exit(void *retval);
 
 // Return the current thread's ID.
 uint32_t thread_id();

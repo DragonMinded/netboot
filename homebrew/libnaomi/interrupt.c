@@ -1,8 +1,10 @@
+#include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include "naomi/interrupt.h"
-#include "naomi/timer.h"
+#include "naomi/video.h"
+#include "naomi/console.h"
 #include "naomi/thread.h"
 #include "irqstate.h"
 
@@ -30,11 +32,39 @@ extern irq_state_t *irq_state;
 #define INTC_IPRD *((volatile uint16_t *)(INTC_BASE_ADDRESS + 0x10))
 
 static irq_stats_t stats;
+static char exception_buffer[1024];
+
+void _irq_display_exception(irq_state_t *cur_state, char *failure, int code)
+{
+    video_init_simple();
+    console_set_visible(0);
+    video_set_background_color(rgb(48, 0, 0));
+
+    sprintf(
+        exception_buffer,
+        "EXCEPTION OCCURED: %s (%d)\n\n"
+        "GP Regs:\n"
+        "r0:  %08lx  r1:  %08lx  r2:  %08lx  r3:  %08lx\n"
+        "r4:  %08lx  r5:  %08lx  r6:  %08lx  r7:  %08lx\n"
+        "r8:  %08lx  r9:  %08lx  r10: %08lx  r11: %08lx\n"
+        "r12: %08lx  r13: %08lx  r14: %08lx\n"
+        "stack: %08lx  pc: %08lx",
+        failure, code,
+        cur_state->gp_regs[0], cur_state->gp_regs[1], cur_state->gp_regs[2], cur_state->gp_regs[3],
+        cur_state->gp_regs[4], cur_state->gp_regs[5], cur_state->gp_regs[6], cur_state->gp_regs[7],
+        cur_state->gp_regs[8], cur_state->gp_regs[9], cur_state->gp_regs[10], cur_state->gp_regs[11],
+        cur_state->gp_regs[12], cur_state->gp_regs[13], cur_state->gp_regs[14],
+        cur_state->gp_regs[15], cur_state->pc
+    );
+
+    video_draw_debug_text(32, 32, rgb(255, 255, 255), exception_buffer);
+    video_display_on_vblank();
+
+    while( 1 ) { ; }
+}
 
 irq_state_t * _irq_general_exception(irq_state_t *cur_state)
 {
-    // TODO: Handle other general purpose exceptions by displaying a
-    // debug screen and freezing.
     stats.last_event = EXPEVT;
 
     switch(EXPEVT)
@@ -50,6 +80,7 @@ irq_state_t * _irq_general_exception(irq_state_t *cur_state)
         default:
         {
             // Empty handler.
+            _irq_display_exception(cur_state, "uncaught general exception", EXPEVT);
             break;
         }
     }
@@ -92,6 +123,7 @@ irq_state_t * _irq_external_interrupt(irq_state_t *cur_state)
         default:
         {
             // Empty handler.
+            _irq_display_exception(cur_state, "uncaught external interrupt", INTEVT);
             break;
         }
     }

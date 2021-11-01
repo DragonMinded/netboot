@@ -8,12 +8,13 @@ To build any examples that are included, first activate the Naomi enviornment by
 
 For convenience, libnaomi and the examples will all be built if you run `make` in the `homebrew/` directory. Note that by default, there are no 3rd party libraries installed and thus libnaomi support for things like freetype is disabled. To enable them, first run `make 3rdparty` in the `homebrew/` directory which will fetch, configure, make and install all of the 3rd party libraries. Then, run `make clean` and then re-run `make` at the top level.
 
+For ease of tracking down program bugs, an exception handler is present which prints out the system registers, stack address and PC. For further convenience, debugging information is left in an elf file that resides in the build/ directory of an example you might be building. To locate the offending line of code when an exception is displayed, you can run `sh4-linux-gnu-addr2line --exe=build/naomi.elf <displayed PC address>` and the function and line of code will be displayed for you.
+
 If you are looking for a great resource for programming, the first thing I would recommend is https://github.com/Kochise/dreamcast-docs which is mostly relevant to the Naomi. For memory maps and general low-level stuff, Mame's https://github.com/mamedev/mame/blob/master/src/mame/drivers/naomi.cpp is extremely valuable.
 
 TODOs
 =====
  - Figure out why audio doesn't play in ARM code, get a working sound example published.
  - Verify G1 functionality, add functionality for DMA from cartridge space.
- - Fill out more of the TODOs in system.c to add functionality such as a ROMFS and debug console.
- - Get libgcc/newlib compiled with threads enabled, publish a multi-threading example.
+ - Fill out more of the TODOs in system.c to add functionality such as a ROMFS.
  - Use PowerVR accelerated texture commands instead of raw framebuffer.

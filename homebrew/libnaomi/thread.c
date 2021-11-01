@@ -182,6 +182,7 @@ irq_state_t *_thread_schedule(irq_state_t *state, int request)
     if (current_thread == 0)
     {
         // Should never happen.
+        _irq_display_exception(state, "cannot locate current thread to schedule", -1);
         return state;
     }
 
@@ -209,15 +210,15 @@ irq_state_t *_thread_schedule(irq_state_t *state, int request)
             continue;
         }
 
-        if (request == THREAD_SCHEDULE_OTHER && threads[i] == current_thread)
-        {
-            // Don't include this thread, we specifically requested going to the next thread.
-            continue;
-        }
-
         if (threads[i]->state != THREAD_STATE_RUNNING)
         {
             // This thread isn't runnable.
+            continue;
+        }
+
+        if (request == THREAD_SCHEDULE_OTHER && threads[i] == current_thread)
+        {
+            // Don't include this thread, we specifically requested going to the next thread.
             continue;
         }
 
@@ -232,6 +233,12 @@ irq_state_t *_thread_schedule(irq_state_t *state, int request)
         if (threads[i] == 0)
         {
             // Not a real thread.
+            continue;
+        }
+
+        if (threads[i]->state != THREAD_STATE_RUNNING)
+        {
+            // This thread isn't runnable.
             continue;
         }
 
@@ -269,6 +276,12 @@ irq_state_t *_thread_schedule(irq_state_t *state, int request)
             continue;
         }
 
+        if (threads[i]->state != THREAD_STATE_RUNNING)
+        {
+            // This thread isn't runnable.
+            continue;
+        }
+
         if (threads[i]->priority != priority)
         {
             // Don't care, not the band we're after.
@@ -280,6 +293,7 @@ irq_state_t *_thread_schedule(irq_state_t *state, int request)
     }
 
     // We should never ever get here, but if so just return the current state.
+    _irq_display_exception(state, "cannot locate new thread to schedule", -1);
     return state;
 }
 
@@ -435,7 +449,6 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
         case 3:
         {
             // thread_yield
-            _thread_wake_others(_thread_find_by_context(current), WAKE_TYPE_THREADID);
             schedule = THREAD_SCHEDULE_OTHER;
             break;
         }
@@ -494,7 +507,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
             }
             else
             {
-                current->gp_regs[0] = 0;
+                _irq_display_exception(current, "cannot locate thread object", which);
             }
             break;
         }
@@ -506,7 +519,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
             if (!myself)
             {
                 // Literally should never happen.
-                current->gp_regs[0] = 0;
+                _irq_display_exception(current, "cannot locate thread object", which);
             }
             else
             {
@@ -549,6 +562,30 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
             }
             break;
         }
+        case 9:
+        {
+            // thread_exit
+            thread_t *thread = _thread_find_by_context(current);
+            if (thread)
+            {
+                thread->state = THREAD_STATE_FINISHED;
+                thread->retval = (void *)current->gp_regs[4];
+            }
+            else
+            {
+                _irq_display_exception(current, "cannot locate thread object", which);
+            }
+
+            // Wake up any other threads that were waiting on this thread for a join.
+            _thread_wake_others(thread, WAKE_TYPE_THREADID);
+            schedule = THREAD_SCHEDULE_OTHER;
+            break;
+        }
+        default:
+        {
+            _irq_display_exception(current, "unrecognized syscall", which);
+            break;
+        }
     }
 
     return _thread_schedule(current, schedule);
@@ -576,20 +613,21 @@ void *global_counter_init(uint32_t initial_value)
 
 void global_counter_increment(void *counter)
 {
-    asm("trapa #0");
+    register void *syscall_param0 asm("r4") = counter;
+    asm("trapa #0" : : "r" (syscall_param0));
 }
 
 void global_counter_decrement(void *counter)
 {
-    asm("trapa #1");
+    register void *syscall_param0 asm("r4") = counter;
+    asm("trapa #1" : : "r" (syscall_param0));
 }
 
 uint32_t global_counter_value(void *counter)
 {
+    register void *syscall_param0 asm("r4") = counter;
     register uint32_t syscall_return asm("r0");
-
-    asm("trapa #2");
-
+    asm("trapa #2" : "=r" (syscall_return) : "r" (syscall_param0));
     return syscall_return;
 }
 
@@ -614,23 +652,22 @@ typedef struct
 {
     void *param;
     thread_func_t function;
-    thread_t *thread;
 } thread_run_ctx_t;
 
 void * _thread_run(void *param)
 {
-    // Execute the thread, save the return value.
+    // Grab all of our operating parameters from the param.
     thread_run_ctx_t *ctx = param;
-    ctx->thread->retval = ctx->function(ctx->param);
-    ctx->thread->state = THREAD_STATE_FINISHED;
+    thread_func_t func = ctx->function;
+    void * funcparam = ctx->param;
 
     // Free the context, we no longer need it.
     free(ctx);
 
-    // Yield from this thread, which will cause it to not be scheduled again.
-    thread_yield();
+    // Actually run the thread function, returning the result.
+    thread_exit(func(funcparam));
 
-    // TODO: Should never reach here, maybe we need some sort of debug?
+    // We should never reach here if thread_exit() does it's job.
     return 0;
 }
 
@@ -641,7 +678,6 @@ uint32_t thread_create(char *name, thread_func_t function, void *param)
 
     // Create a thread run context so we can return from the thread.
     thread_run_ctx_t *ctx = malloc(sizeof(thread_run_ctx_t));
-    ctx->thread = thread;
     ctx->function = function;
     ctx->param = param;
 
@@ -672,17 +708,21 @@ void thread_destroy(uint32_t tid)
 
 void thread_start(uint32_t tid)
 {
-    asm("trapa #4");
+    register uint32_t syscall_param0 asm("r4") = tid;
+    asm("trapa #4" : : "r" (syscall_param0));
 }
 
 void thread_stop(uint32_t tid)
 {
-    asm("trapa #5");
+    register uint32_t syscall_param0 asm("r4") = tid;
+    asm("trapa #5" : : "r" (syscall_param0));
 }
 
 void thread_priority(uint32_t tid, int priority)
 {
-    asm("trapa #6");
+    register uint32_t syscall_param0 asm("r4") = tid;
+    register int syscall_param1 asm("r5") = priority;
+    asm("trapa #6" : : "r" (syscall_param0), "r" (syscall_param1));
 }
 
 thread_info_t thread_info(uint32_t tid)
@@ -720,17 +760,20 @@ void thread_yield()
 uint32_t thread_id()
 {
     register uint32_t syscall_return asm("r0");
-
-    asm("trapa #7");
-
+    asm("trapa #7" : "=r" (syscall_return));
     return syscall_return;
 }
 
 void * thread_join(uint32_t tid)
 {
+    register uint32_t syscall_param0 asm("r4") = tid;
     register void * syscall_return asm("r0");
-
-    asm("trapa #8");
-
+    asm("trapa #8" : "=r" (syscall_return) : "r" (syscall_param0));
     return syscall_return;
+}
+
+void thread_exit(void *retval)
+{
+    register void * syscall_param0 asm("r4") = retval;
+    asm("trapa #9" : : "r" (syscall_param0));
 }

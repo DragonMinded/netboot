@@ -26,6 +26,8 @@ NAOMI_SH_CCFLAGS += ${NAOMI_SH_INCLUDEPATHS}
 NAOMI_SH_CCFLAGS += ${OPTIMIZATION_LEVEL}
 # Make sure we warn about a bunch of stuff.
 NAOMI_SH_CCFLAGS += -Wall
+# Produce debug information so addr2line works.
+NAOMI_SH_CCFLAGS += -g
 
 # Set up gcc default options for compiling .c files.
 CC  = ${NAOMI_SH_CC} ${NAOMI_SH_CCFLAGS}
@@ -49,7 +51,9 @@ NAOMI_SH_CPPFLAGS += ${NAOMI_SH_INCLUDEPATHS}
 # Make sure we compile optimized
 NAOMI_SH_CPPFLAGS += ${OPTIMIZATION_LEVEL}
 # Make sure we warn about a bunch of stuff.
-NAOMI_SH_CCFLAGS += -Wall
+NAOMI_SH_CPPFLAGS += -Wall
+# Produce debug information so addr2line works.
+NAOMI_SH_CPPFLAGS += -g
 
 # Set up gcc default options for compiling .cpp files.
 CPP  = ${NAOMI_SH_CPP} ${NAOMI_SH_CPPFLAGS}

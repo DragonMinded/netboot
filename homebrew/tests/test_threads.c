@@ -32,4 +32,5 @@ void test_threads_basic(test_context_t *context)
 
     // Finally, give back the memory.
     thread_destroy(thread);
+    global_counter_free(counter);
 }
