@@ -5,14 +5,15 @@
 
 #define USE_INTERRUPT_MODE 0
 
-#define REG_A05F6904 ((volatile uint32_t *)0xA05F6904)
-#define REG_A05F6914 ((volatile uint32_t *)0xA05F6914)
 #define NAOMI_DIMM_COMMAND ((volatile uint16_t *)0xA05F703C)
 #define NAOMI_DIMM_OFFSETL ((volatile uint16_t *)0xA05F7040)
 #define NAOMI_DIMM_PARAMETERL ((volatile uint16_t *)0xA05F7044)
 #define NAOMI_DIMM_PARAMETERH ((volatile uint16_t *)0xA05F7048)
 #define NAOMI_DIMM_STATUS ((volatile uint16_t *)0xA05F704C)
-#define REG_A05F7418 ((volatile int32_t *)0xA05F7418)
+
+#define HOLLY_EXTERNAL_IRQ_STATUS ((volatile uint32_t *)0xA05F6904)
+#define HOLLY_EXTERNAL_IRQ_MASK ((volatile uint32_t *)0xA05F6914)
+#define NAOMI_GD_DMA_START ((volatile int32_t *)0xA05F7418)
 
 #define CONST_NO_DIMM 0xFFFF
 #define CONST_DIMM_HAS_COMMAND 0x8000
@@ -22,9 +23,9 @@
 static peek_call_t global_peek_hook = 0;
 static poke_call_t global_poke_hook = 0;
 
-int check_has_dimm_inserted(int check_regs_first)
+int check_has_dimm_inserted(int check_gd_dma_first)
 {
-    if ((check_regs_first != 0) && (*REG_A05F7418 != 0)) {
+    if ((check_gd_dma_first != 0) && (*NAOMI_GD_DMA_START != 0)) {
         return 0;
     }
     if (*NAOMI_DIMM_COMMAND == CONST_NO_DIMM) {
@@ -37,7 +38,7 @@ void marshall_dimm_command()
 {
     static uint32_t base_address = 0;
 
-    if (*REG_A05F7418 == 0) {
+    if (*NAOMI_GD_DMA_START == 0) {
         // Do stuff here
         uint16_t dimm_command = *NAOMI_DIMM_COMMAND;
 
@@ -207,8 +208,8 @@ void marshall_dimm_command()
             *NAOMI_DIMM_STATUS = *NAOMI_DIMM_STATUS | 0x100;
 
             do {
-                /* Do some spinlop to wait for some other register. */
-            } while ((*REG_A05F6904 & 8) != 0);
+                /* Do a spinloop to wait for external IRQ to clear. */
+            } while ((*HOLLY_EXTERNAL_IRQ_STATUS & 8) != 0);
 
             /* Send interrupt to the DIMM itself saying we have data. */
             *NAOMI_DIMM_STATUS = *NAOMI_DIMM_STATUS & 0xFFFE;
@@ -217,14 +218,14 @@ void marshall_dimm_command()
             /* Acknowledge the command */
             *NAOMI_DIMM_STATUS = *NAOMI_DIMM_STATUS | 0x100;
             do {
-                /* Do some spinloop to wait for some other register. */
-            } while ((*REG_A05F6904 & 8) != 0);
+                /* Do a spinloop to wait for external IRQ to clear. */
+            } while ((*HOLLY_EXTERNAL_IRQ_STATUS & 8) != 0);
         }
     }
 #if USE_INTERRUPT_MODE
     else {
-        // Some other acknowledge?
-        *REG_A05F6914 = *REG_A05F6914 & 0xfffffff7;
+        // Disable external IRQ for Naomi DIMM.
+        *HOLLY_EXTERNAL_IRQ_MASK = *HOLLY_EXTERNAL_IRQ_MASK & 0xfffffff7;
     }
 #endif
 }
@@ -240,8 +241,8 @@ void dimm_comms_poll()
         dimm_present = check_has_dimm_inserted(1);
 
 #if USE_INTERRUPT_MODE
-        if ((*REG_A05F6914 & 8) == 0) {
-            *REG_A05F6914 = *REG_A05F6914 | 8;
+        if ((*HOLLY_EXTERNAL_IRQ_MASK & 8) == 0) {
+            *HOLLY_EXTERNAL_IRQ_MASK = *HOLLY_EXTERNAL_IRQ_MASK | 8;
         }
 #endif
     }
