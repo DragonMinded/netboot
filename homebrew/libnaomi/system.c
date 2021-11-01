@@ -489,9 +489,15 @@ int _unlink_r(struct _reent *reent, const char *path)
 
 int _isatty_r(struct _reent *reent, int fd)
 {
-    // TODO: Implement isatty once we have some sort of console bridge support.
-    reent->_errno = ENOTSUP;
-    return -1;
+    if (fd == 0 || fd == 1 || fd == 2)
+    {
+        return 1;
+    }
+    else
+    {
+        reent->_errno = ENOTTY;
+        return 0;
+    }
 }
 
 int _kill_r(struct _reent *reent, int n, int m)
