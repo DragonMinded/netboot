@@ -46,5 +46,6 @@ irq_state_t *_syscall_timer(irq_state_t *state, int timer);
 void _thread_register_main(irq_state_t *state);
 
 void _irq_display_exception(irq_state_t *cur_state, char *failure, int code);
+void _irq_display_invariant(char *msg, char *failure, ...);
 
 #endif

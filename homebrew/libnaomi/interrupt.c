@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 #include "naomi/interrupt.h"
 #include "naomi/video.h"
@@ -36,6 +37,9 @@ static char exception_buffer[1024];
 
 void _irq_display_exception(irq_state_t *cur_state, char *failure, int code)
 {
+    // Threads should already be disabled, but lets be sure.
+    uint32_t old_interrupts = irq_disable();
+
     video_init_simple();
     console_set_visible(0);
     video_set_background_color(rgb(48, 0, 0));
@@ -61,6 +65,38 @@ void _irq_display_exception(irq_state_t *cur_state, char *failure, int code)
     video_display_on_vblank();
 
     while( 1 ) { ; }
+
+    irq_restore(old_interrupts);
+}
+
+void _irq_display_invariant(char *msg, char *failure, ...)
+{
+    // Threads should already be disabled, but lets be sure.
+    uint32_t old_interrupts = irq_disable();
+
+    video_init_simple();
+    console_set_visible(0);
+    video_set_background_color(rgb(48, 0, 0));
+
+    sprintf(exception_buffer, "INVARIANT VIOLATION: %s", msg);
+    video_draw_debug_text(32, 32, rgb(255, 255, 255), exception_buffer);
+
+    va_list args;
+    va_start(args, failure);
+    int length = vsnprintf(exception_buffer, 1023, failure, args);
+    va_end(args);
+
+    if (length > 0)
+    {
+        exception_buffer[length < 1023 ? length : 1023] = 0;
+        video_draw_debug_text(32, 32 + (8 * 2), rgb(255, 255, 255), exception_buffer);
+    }
+
+    video_display_on_vblank();
+
+    while( 1 ) { ; }
+
+    irq_restore(old_interrupts);
 }
 
 irq_state_t * _irq_general_exception(irq_state_t *cur_state)
@@ -249,8 +285,13 @@ irq_state_t *_irq_new_state(thread_func_t func, void *funcparam, void *stackptr)
 
 void _irq_free_state(irq_state_t *state)
 {
-    // TODO: If we try to free the current state we're in trouble! We should
-    // check for this and display an exception on the screen if it happens.
+    if (state == irq_state)
+    {
+        // We tried to free our current state. That can't happen since
+        // we don't have anything else to go back to.
+        _irq_display_invariant("irq failure", "tried to free our own state");
+    }
+
     free(state);
 }
 
