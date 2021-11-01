@@ -63,6 +63,9 @@ uint32_t thread_create(char *name, thread_func_t function, void *param);
 void *thread_join(uint32_t tid);
 void thread_destroy(uint32_t tid);
 
+#define MAX_PRIORITY 1000
+#define MIN_PRIORITY -1000
+
 // Various thread manipulation functions. Get information about a thread, start and stop a
 // thread, change priority on a thread, etc. All of these are safe to call from within any
 // thread including the thread in questions.

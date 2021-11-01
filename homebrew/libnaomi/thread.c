@@ -469,7 +469,16 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
             thread_t *thread = _thread_find_by_id(current->gp_regs[4]);
             if (thread)
             {
-                thread->priority = current->gp_regs[5];
+                int priority = current->gp_regs[5];
+                if (priority > MAX_PRIORITY)
+                {
+                    priority = MAX_PRIORITY;
+                }
+                if (priority < MIN_PRIORITY)
+                {
+                    priority = MIN_PRIORITY;
+                }
+                thread->priority = priority;
             }
 
             schedule = THREAD_SCHEDULE_ANY;
