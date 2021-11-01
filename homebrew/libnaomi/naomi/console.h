@@ -15,8 +15,9 @@ extern "C" {
 void console_init(unsigned int overscan);
 void console_free();
 
-// Render the console. This is called for you automatically in video_wait_for_vblank().
-// So you do not need to handle calling it.
+// Render the console. This is called for you automatically in video_display_on_vblank().
+// So you do not need to handle calling it. However, it is provided in case you need to
+// manually call it for some reason.
 void console_render();
 
 // Show or hide an initialized console.

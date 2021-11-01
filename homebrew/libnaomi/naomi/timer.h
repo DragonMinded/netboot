@@ -18,7 +18,7 @@ int timer_wait(uint32_t microseconds);
 int timer_available();
 
 // A timer callback (will happen in interrupt context).
-typedef void (*timer_callback_t)(int timer);
+typedef int (*timer_callback_t)(int timer);
 
 // Start a timer that will expire after specified microseconds have elapsed.
 // If callback is supplied, it will be called every "microseconds" period.

@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include "naomi/video.h"
 #include "naomi/maple.h"
+#include "naomi/dimmcomms.h"
+#include "naomi/timer.h"
 
 void main()
 {
@@ -94,13 +96,14 @@ void main()
         video_draw_debug_text(0, 8, rgb(255, 0, 0), "Failed!");
     }
 
-    video_wait_for_vblank();
-    video_display();
+    video_display_on_vblank();
 
     while ( 1 )
     {
-        // Don't display anything, but make this example rebootable.
-        video_wait_for_vblank();
+        // TODO: Don't display anything, but make this example rebootable.
+        // This should go away as soon as we have interrupt-driven dimm comms.
+        dimm_comms_poll();
+        timer_wait(1000000 / 60);
     }
 }
 
@@ -112,7 +115,6 @@ void test()
     {
         video_fill_screen(rgb(48, 48, 48));
         video_draw_debug_text(320 - 56, 236, rgb(255, 255, 255), "test mode stub");
-        video_wait_for_vblank();
-        video_display();
+        video_display_on_vblank();
     }
 }

@@ -11,8 +11,7 @@ void main()
     // Display status, since loading the binary can take awhile.
     video_fill_screen(rgb(48, 48, 48));
     video_draw_debug_text(20, 20, rgb(255, 255, 255), "Loading AICA binary...");
-    video_wait_for_vblank();
-    video_display();
+    video_display_on_vblank();
 
     // Load the AICA binary itself.
     load_aica_binary(AICA_DEFAULT_BINARY, AICA_DEFAULT_BINARY_SIZE);
@@ -32,8 +31,7 @@ void main()
             counter++,
             *((volatile uint32_t *)((SOUNDRAM_BASE | UNCACHED_MIRROR) + 0xF100))
         );
-        video_wait_for_vblank();
-        video_display();
+        video_display_on_vblank();
     }
 }
 
@@ -45,7 +43,6 @@ void test()
     {
         video_fill_screen(rgb(48, 48, 48));
         video_draw_debug_text(320 - 56, 236, rgb(255, 255, 255), "test mode stub");
-        video_wait_for_vblank();
-        video_display();
+        video_display_on_vblank();
     }
 }

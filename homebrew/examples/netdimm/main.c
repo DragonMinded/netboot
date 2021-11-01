@@ -95,8 +95,7 @@ void main()
         video_draw_debug_text(100, 260, rgb(200, 200, 20), "Aliveness counter: %d", counter++);
 
         // Actually draw the framebuffer.
-        video_wait_for_vblank();
-        video_display();
+        video_display_on_vblank();
     }
 }
 
@@ -108,7 +107,6 @@ void test()
     {
         video_fill_screen(rgb(48, 48, 48));
         video_draw_debug_text(320 - 56, 236, rgb(255, 255, 255), "test mode stub");
-        video_wait_for_vblank();
-        video_display();
+        video_display_on_vblank();
     }
 }

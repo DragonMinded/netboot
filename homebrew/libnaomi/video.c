@@ -7,6 +7,7 @@
 #include "naomi/dimmcomms.h"
 #include "naomi/eeprom.h"
 #include "naomi/console.h"
+#include "naomi/interrupt.h"
 #include "video-internal.h"
 #include "font.h"
 
@@ -41,7 +42,7 @@ unsigned int global_video_depth = 0;
 unsigned int global_video_vertical = 0;
 void *buffer_base = 0;
 
-void video_wait_for_vblank()
+void video_display_on_vblank()
 {
     volatile unsigned int *videobase = (volatile unsigned int *)POWERVR2_BASE;
 
@@ -50,8 +51,7 @@ void video_wait_for_vblank()
 
     // Poll for dimm communications during wait for vblank, since this is
     // a convenient place to put this. It probably should go int an interrupt
-    // handler or something, or get added to video_display() as well, but
-    // for now this is how it works.
+    // handler or something, but for now this is how it works.
     dimm_comms_poll();
 
     // Handle filling the background of the other screen while we wait.
@@ -59,6 +59,17 @@ void video_wait_for_vblank()
         global_background_fill_start = ((VRAM_BASE + global_buffer_offset[buffer_loc ? 0 : 1]) | 0xA0000000);
         global_background_fill_end = global_background_fill_start + ((global_video_width * global_video_height * global_video_depth));
     }
+
+    // TODO: This is completely wrong. We shouldn't break threads while waiting for
+    // vblank, but if we don't do this then we can get preempted during the busy
+    // loop and miss a vblank period. What really should happen is the thread should
+    // be parked, until the "in vblank" interrupt fires, then we should wake up,
+    // disable threads, busyloop while we're in the vblank period and then swap buffers.
+    // This will require us to support priority inversion of threads, and I'm not sure
+    // how to safely clear the next frame during this time. We might want to kick off
+    // another thread for that, then kill that thread when we wake back up and manually
+    // do the rest ourselves.
+    uint32_t old_interrupts = irq_disable();
 
     while(!(videobase[POWERVR2_SYNC_STAT] & 0x01ff)) {
         if (global_background_fill_start < global_background_fill_end) {
@@ -69,6 +80,24 @@ void video_wait_for_vblank()
     while((videobase[POWERVR2_SYNC_STAT] & 0x01ff)) {
         // Don't clear here, as this can cause us to miss the vblank swap period.
     }
+
+    // Swap buffers in HW.
+    videobase[POWERVR2_FB_DISPLAY_ADDR_1] = global_buffer_offset[buffer_loc];
+    videobase[POWERVR2_FB_DISPLAY_ADDR_2] = global_buffer_offset[buffer_loc] + (global_video_width * global_video_depth);
+
+    // Swap buffer pointer in SW.
+    buffer_loc = buffer_loc ? 0 : 1;
+    buffer_base = (void *)((VRAM_BASE + global_buffer_offset[buffer_loc]) | 0xA0000000);
+
+    // Safe for interrupts to be re-enabled at this point.
+    irq_restore(old_interrupts);
+
+    // Finish filling in the background.
+    if (global_background_fill_start < global_background_fill_end) {
+        hw_memset((void *)global_background_fill_start, global_background_fill_color, global_background_fill_end - global_background_fill_start);
+    }
+    global_background_fill_start = 0;
+    global_background_fill_end = 0;
 }
 
 unsigned int video_width()
@@ -94,6 +123,7 @@ unsigned int video_is_vertical()
 // TODO: This function assumes 640x480 VGA, we should support more varied options.
 void video_init_simple()
 {
+    uint32_t old_interrupts = irq_disable();
     volatile unsigned int *videobase = (volatile unsigned int *)POWERVR2_BASE;
 
     global_video_width = 640;
@@ -152,7 +182,12 @@ void video_init_simple()
     );
 
     // Set up even/odd field video base address, shifted by bpp.
-    video_display();
+    videobase[POWERVR2_FB_DISPLAY_ADDR_1] = global_buffer_offset[buffer_loc];
+    videobase[POWERVR2_FB_DISPLAY_ADDR_2] = global_buffer_offset[buffer_loc] + (global_video_width * global_video_depth);
+
+    // Swap buffer pointer in SW.
+    buffer_loc = buffer_loc ? 0 : 1;
+    buffer_base = (void *)((VRAM_BASE + global_buffer_offset[buffer_loc]) | 0xA0000000);
 
     // Set up render modulo, (bpp * width) / 8.
     videobase[POWERVR2_FB_RENDER_MODULO] = (global_video_depth * global_video_width) / 8;
@@ -199,11 +234,14 @@ void video_init_simple()
     videobase[POWERVR2_FB_CLIP_Y] = (global_video_height << 16) | (0 << 0);
 
     // Wait for vblank like games do.
-    video_wait_for_vblank();
+    while(!(videobase[POWERVR2_SYNC_STAT] & 0x01ff)) { ; }
+    while((videobase[POWERVR2_SYNC_STAT] & 0x01ff)) { ; }
+    irq_restore(old_interrupts);
 }
 
 void video_free()
 {
+    uint32_t old_interrupts = irq_disable();
     volatile unsigned int *videobase = (volatile unsigned int *)POWERVR2_BASE;
 
     // Reset video.
@@ -218,6 +256,7 @@ void video_free()
     global_buffer_offset[0] = 0;
     global_buffer_offset[1] = 0;
     global_buffer_offset[2] = 0;
+    irq_restore(old_interrupts);
 }
 
 uint32_t rgb(unsigned int r, unsigned int g, unsigned int b)
@@ -830,26 +869,6 @@ void video_draw_debug_text(int x, int y, uint32_t color, const char * const msg,
             __video_draw_debug_text(x, y, color, buffer);
         }
     }
-}
-
-void video_display()
-{
-    volatile unsigned int *videobase = (volatile unsigned int *)POWERVR2_BASE;
-
-    // Swap buffers in HW.
-    videobase[POWERVR2_FB_DISPLAY_ADDR_1] = global_buffer_offset[buffer_loc];
-    videobase[POWERVR2_FB_DISPLAY_ADDR_2] = global_buffer_offset[buffer_loc] + (global_video_width * global_video_depth);
-
-    // Swap buffer pointer in SW.
-    buffer_loc = buffer_loc ? 0 : 1;
-    buffer_base = (void *)((VRAM_BASE + global_buffer_offset[buffer_loc]) | 0xA0000000);
-
-    // Finish filling in the background.
-    if (global_background_fill_start < global_background_fill_end) {
-        hw_memset((void *)global_background_fill_start, global_background_fill_color, global_background_fill_end - global_background_fill_start);
-    }
-    global_background_fill_start = 0;
-    global_background_fill_end = 0;
 }
 
 void *video_scratch_area()

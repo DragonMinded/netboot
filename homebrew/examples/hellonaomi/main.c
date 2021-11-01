@@ -39,8 +39,7 @@ void main()
         // Display a sample sprite.
         video_draw_sprite(video_width() - sonic_png_width - 20, 20, sonic_png_width, sonic_png_height, sonic_png_data);
 
-        video_wait_for_vblank();
-        video_display();
+        video_display_on_vblank();
 
         // Calculate instantaneous FPS.
         uint32_t uspf = profile_end(fps);
@@ -56,7 +55,6 @@ void test()
     {
         video_fill_screen(rgb(48, 48, 48));
         video_draw_debug_text(320 - 56, 236, rgb(255, 255, 255), "test mode stub");
-        video_wait_for_vblank();
-        video_display();
+        video_display_on_vblank();
     }
 }

@@ -35,6 +35,12 @@ void hw_memset(void *addr, uint32_t value, unsigned int amount);
 // the fastest tight loop that you can write in software.
 void hw_memcpy(void *addr, void *src, unsigned int amount);
 
+// Call code that is outside of our C runtime, such as another program or something
+// in the BIOS that does not return. Takes care of safely shutting down interrupts,
+// threads and anything else going on so that the new code can execute without any
+// of our own calls interfering.
+void call_unmanaged(void (*call)());
+
 // Syscalls that request the BIOS do something.
 void enter_test_mode();
 

@@ -60,7 +60,7 @@ irq_state_t * _irq_general_exception(irq_state_t *cur_state)
 
 // Prototypes of functions we don't want in the public headers.
 void _irq_set_vector_table();
-void _timer_interrupt(int timer);
+int _timer_interrupt(int timer);
 uint32_t _irq_enable();
 uint32_t _irq_read_sr();
 uint32_t _irq_read_vbr();
@@ -73,20 +73,20 @@ irq_state_t * _irq_external_interrupt(irq_state_t *cur_state)
     {
         case IRQ_EVENT_TMU0:
         {
-            _timer_interrupt(0);
-            cur_state = _syscall_timer(cur_state, 0);
+            int ret = _timer_interrupt(0);
+            cur_state = _syscall_timer(cur_state, ret);
             break;
         }
         case IRQ_EVENT_TMU1:
         {
-            _timer_interrupt(1);
-            cur_state = _syscall_timer(cur_state, 1);
+            int ret = _timer_interrupt(1);
+            cur_state = _syscall_timer(cur_state, ret);
             break;
         }
         case IRQ_EVENT_TMU2:
         {
-            _timer_interrupt(2);
-            cur_state = _syscall_timer(cur_state, 2);
+            int ret = _timer_interrupt(2);
+            cur_state = _syscall_timer(cur_state, ret);
             break;
         }
         default:
@@ -222,7 +222,7 @@ void _irq_free_state(irq_state_t *state)
     free(state);
 }
 
-irq_stats_t irq_get_stats()
+irq_stats_t irq_stats()
 {
     irq_stats_t statscopy;
 

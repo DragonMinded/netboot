@@ -101,12 +101,6 @@ static const struct test_suite
 // =================================================
 };
 
-void wait_and_display()
-{
-    video_wait_for_vblank();
-    video_display();
-}
-
 void main()
 {
     // Grab the system configuration
@@ -121,7 +115,7 @@ void main()
     printf("====================\n");
     printf("Starting tests\n%d tests to run\n", (sizeof(tests) / sizeof(tests[0])));
     printf("====================\n\n");
-    wait_and_display();
+    video_display_on_vblank();
 
     // Run the tests!
     char logbuffer[2048];
@@ -135,7 +129,7 @@ void main()
     {
         // Set the test up to be run.
         printf("%s...", tests[testno].name);
-        wait_and_display();
+        video_display_on_vblank();
 
         test_context_t context;
         context.name = tests[testno].file;
@@ -210,7 +204,7 @@ void main()
             failed ++;
         }
 
-        wait_and_display();
+        video_display_on_vblank();
     }
 
     printf("\n====================\n");
@@ -219,8 +213,7 @@ void main()
 
     while ( 1 )
     {
-        video_wait_for_vblank();
-        video_display();
+        video_display_on_vblank();
     }
 }
 
@@ -232,7 +225,6 @@ void test()
     {
         video_fill_screen(rgb(48, 48, 48));
         video_draw_debug_text(320 - 56, 236, rgb(255, 255, 255), "test mode stub");
-        video_wait_for_vblank();
-        video_display();
+        video_display_on_vblank();
     }
 }

@@ -7,12 +7,6 @@
 #include "naomi/eeprom.h"
 #include "naomi/console.h"
 
-void display()
-{
-    video_wait_for_vblank();
-    video_display();
-}
-
 void main()
 {
     // Grab the system configuration
@@ -33,18 +27,18 @@ void main()
     {
         printf("MIE reports bad RAM!\n");
     }
-    display();
+    video_display_on_vblank();
 
     // Request version, make sure we're running our updated code.
     char version[128];
     maple_request_version(version);
     printf("MIE version string: %s\n", version);
-    display();
+    video_display_on_vblank();
 
     // Now, display the JVS IO version ID.
     maple_request_jvs_id(0x01, version);
     printf("JVS IO ID: %s\n\n", version);
-    display();
+    video_display_on_vblank();
 
     // Now, read the controls forever.
     char * reset_loc = console_save();
@@ -191,7 +185,7 @@ void main()
             printf("\n2P Analog: %02X %02X %02X %02X\n", buttons.player2.analog1, buttons.player2.analog2, buttons.player2.analog3, buttons.player2.analog4);
         }
 
-        display();
+        video_display_on_vblank();
     }
 }
 
@@ -203,7 +197,6 @@ void test()
     {
         video_fill_screen(rgb(48, 48, 48));
         video_draw_debug_text(320 - 56, 236, rgb(255, 255, 255), "test mode stub");
-        video_wait_for_vblank();
-        video_display();
+        video_display_on_vblank();
     }
 }

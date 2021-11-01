@@ -82,8 +82,7 @@ void main()
         }
 
         // Actually draw the buffer.
-        video_wait_for_vblank();
-        video_display();
+        video_display_on_vblank();
 
         // Calcualte instantaneous FPS, adjust animation counters.
         uint32_t uspf = profile_end(fps);
@@ -122,7 +121,6 @@ void test()
             "the menu, press [test] when you are on the main screen.\n\n"
             "                  press [test] to exit                  "
         );
-        video_wait_for_vblank();
-        video_display();
+        video_display_on_vblank();
     }
 }

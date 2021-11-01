@@ -38,6 +38,8 @@ static timer_callback_t timer_callbacks[MAX_TIMERS];
 
 void _profile_init();
 void _profile_free();
+void _preempt_init();
+void _preempt_free();
 
 void _timer_init()
 {
@@ -54,10 +56,16 @@ void _timer_init()
 
     // Schedule the profiler timer.
     _profile_init();
+
+    // Schedule the periodic preemption timer.
+    _preempt_init();
 }
 
 void _timer_free()
 {
+    // Kill the periodic preemption timer.
+    _preempt_free();
+
     // Kill the profiler.
     _profile_free();
 
@@ -72,7 +80,7 @@ void _timer_free()
     }
 }
 
-void _timer_interrupt(int timer)
+int _timer_interrupt(int timer)
 {
     if (timer_callbacks[timer] != 0)
     {
@@ -80,8 +88,46 @@ void _timer_interrupt(int timer)
         TIMER_TCR(timer) &= ~0x100;
 
         // Call the callback.
-        timer_callbacks[timer](timer);
+        return timer_callbacks[timer](timer);
     }
+
+    // Inform the scheduler that this was a regular callback.
+    return 0;
+}
+
+static int preempt_timer = -1;
+
+#define PREEMPTION_HZ 1000
+
+int _preempt_cb(int timer)
+{
+    // Inform the scheduler that this was a preemption request
+    return -1;
+}
+
+void _preempt_init()
+{
+    // Make sure that we safely ask for a new timer.
+    uint32_t old_interrupts = irq_disable();
+
+    preempt_timer = timer_available();
+    if (preempt_timer >= 0 && preempt_timer < MAX_TIMERS)
+    {
+        timer_start(preempt_timer, 1000000 / PREEMPTION_HZ, _preempt_cb);
+    }
+
+    // Enable interrupts again now that we're done.
+    irq_restore(old_interrupts);
+}
+
+void _preempt_free()
+{
+    if (preempt_timer >= 0 && preempt_timer < MAX_TIMERS)
+    {
+        timer_stop(preempt_timer);
+    }
+
+    preempt_timer = -1;
 }
 
 int timer_start(int timer, uint32_t microseconds, timer_callback_t callback)
@@ -224,6 +270,32 @@ int timer_available()
     return timer;
 }
 
+int timer_wait(uint32_t microseconds)
+{
+    // Disable interrupts so we are safe to grab a new timer.
+    uint32_t old_interrupts = irq_disable();
+
+    // Start a timer if we found one.
+    int timer = timer_available();
+    if (timer >= 0 && timer < MAX_TIMERS)
+    {
+        timer_start(timer, microseconds, 0);
+    }
+
+    // Safe to re-enable interrupts now.
+    irq_restore(old_interrupts);
+
+    // Wait until we have no time left.
+    while (timer_left(timer) > 0) { ; }
+
+    // Now, stop the timer (safe to do outside of interrupts as
+    // timer_stop() is resilient to dummy timer values.
+    timer_stop(timer);
+
+    // Finally, return whether the wait was successful.
+    return (timer >= 0 && timer < MAX_TIMERS) ? 0 : -1;
+}
+
 // Maximum number of microseconds a timer can be set to before an interrupt
 // occurs to reset it. Higher numbers equal fewer interrupts but less accuracy.
 #define MAX_PROFILE_MICROSECONDS 1000000
@@ -232,9 +304,12 @@ static uint64_t profile_timers[MAX_PROFILERS];
 static uint64_t profile_current;
 static int profile_timer = -1;
 
-void __profile_cb(int timer)
+int _profile_cb(int timer)
 {
     profile_current += MAX_PROFILE_MICROSECONDS;
+
+    // Inform the scheduler that this was a regular callback.
+    return 0;
 }
 
 void _profile_init()
@@ -247,7 +322,7 @@ void _profile_init()
     profile_timer = timer_available();
     if (profile_timer >= 0 && profile_timer < MAX_TIMERS)
     {
-        timer_start(profile_timer, MAX_PROFILE_MICROSECONDS, __profile_cb);
+        timer_start(profile_timer, MAX_PROFILE_MICROSECONDS, _profile_cb);
     }
 
     // Enable interrupts again now that we're done.
@@ -302,30 +377,4 @@ uint64_t profile_end(int profile)
     // Safe to re-enable interrupts now.
     irq_restore(old_interrupts);
     return elapsed;
-}
-
-int timer_wait(uint32_t microseconds)
-{
-    // Disable interrupts so we are safe to grab a new timer.
-    uint32_t old_interrupts = irq_disable();
-
-    // Start a timer if we found one.
-    int timer = timer_available();
-    if (timer >= 0 && timer < MAX_TIMERS)
-    {
-        timer_start(timer, microseconds, 0);
-    }
-
-    // Safe to re-enable interrupts now.
-    irq_restore(old_interrupts);
-
-    // Wait until we have no time left.
-    while (timer_left(timer) > 0) { ; }
-
-    // Now, stop the timer (safe to do outside of interrupts as
-    // timer_stop() is resilient to dummy timer values.
-    timer_stop(timer);
-
-    // Finally, return whether the wait was successful.
-    return (timer >= 0 && timer < MAX_TIMERS) ? 0 : -1;
 }

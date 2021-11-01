@@ -54,15 +54,10 @@ void video_init_simple();
 // call.
 void video_free();
 
-// Wait for an appropriate time to call video_display(). Also polls
-// for dimm communications. Also fills the next screen's background
-// with a previously set background color if a background color was
-// set.
-void video_wait_for_vblank();
-
-// Actually swap framebuffers. If you have set a background color, this
-// also finishes filling the next screen's background with that color.
-void video_display();
+// Wait for an appropriate time to swap buffers and then do so. Also polls
+// for dimm communications. Also fills the next screen's background with a
+// previously set background color if a background color was set.
+void video_display_on_vblank();
 
 // Request that every frame be cleared to this color (use rgb() or
 // rgba() to generate the color for this). Without this, you are

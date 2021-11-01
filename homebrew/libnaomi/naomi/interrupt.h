@@ -37,7 +37,7 @@ typedef struct
 #define IRQ_EVENT_TMU1 0x420
 #define IRQ_EVENT_TMU2 0x440
 
-irq_stats_t irq_get_stats();
+irq_stats_t irq_stats();
 
 #ifdef __cplusplus
 }

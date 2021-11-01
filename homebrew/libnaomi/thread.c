@@ -378,6 +378,23 @@ irq_state_t *_syscall_timer(irq_state_t *current, int timer)
 {
     int schedule = THREAD_SCHEDULE_CURRENT;
 
+    if (timer < 0)
+    {
+        // Periodic preemption timer.
+        schedule = THREAD_SCHEDULE_ANY;
+    }
+    else if (timer == 0)
+    {
+        // Just a regular timer interrupt, we don't care about it.
+    }
+    else
+    {
+        // Timer ID passed in should match a requested callback
+        // we made for waking up threads. We need to wake up any
+        // threads that were sleeping and should now be awake.
+        schedule = THREAD_SCHEDULE_OTHER;
+    }
+
     return _thread_schedule(current, schedule);
 }
 

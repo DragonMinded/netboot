@@ -41,8 +41,7 @@ void main()
         printf("Current time: %d-%02d-%02d %02d:%02d:%02d\n", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
         printf("Edit this time in the test menu under clock settings!");
 
-        video_wait_for_vblank();
-        video_display();
+        video_display_on_vblank();
     }
 }
 
@@ -54,7 +53,6 @@ void test()
     {
         video_fill_screen(rgb(48, 48, 48));
         video_draw_debug_text(320 - 56, 236, rgb(255, 255, 255), "test mode stub");
-        video_wait_for_vblank();
-        video_display();
+        video_display_on_vblank();
     }
 }

@@ -16,8 +16,6 @@ void *thread1(void *param)
         thread_info_t info = thread_info(id);
         sprintf(buf, "Thread ID: %ld, Thread Name: %s\nCounter: %ld", id, info.name, counter);
         counter += 1;
-
-        thread_yield();
     }
 
     return 0;
@@ -34,8 +32,6 @@ void *thread2(void *param)
         thread_info_t info = thread_info(id);
         sprintf(buf, "Thread ID: %ld, Thread Name: %s\nCounter: %ld", id, info.name, counter);
         counter += 2;
-
-        thread_yield();
     }
 
     return 0;
@@ -52,8 +48,6 @@ void *thread3(void *param)
         thread_info_t info = thread_info(id);
         sprintf(buf, "Thread ID: %ld, Thread Name: %s\nCounter: %ld", id, info.name, counter);
         counter += 3;
-
-        thread_yield();
     }
 
     return 0;
@@ -70,8 +64,6 @@ void *thread4(void *param)
         thread_info_t info = thread_info(id);
         sprintf(buf, "Thread ID: %ld, Thread Name: %s\nCounter: %ld", id, info.name, counter);
         counter += 4;
-
-        thread_yield();
     }
 
     return 0;
@@ -88,7 +80,7 @@ void main()
     video_set_background_color(rgb(48, 48, 48));
 
     // Create a simple buffer for threads to manipulate.
-    char tbuf[5][64];
+    char tbuf[5][256];
 
     // Create four threads, each with their own function.
     uint32_t threads[4];
@@ -104,15 +96,14 @@ void main()
         thread_start(threads[i]);
     }
 
+    uint32_t frame_counter = 0;
+
     while ( 1 )
     {
         // Display our own threading info.
         uint32_t id = thread_id();
         thread_info_t info = thread_info(id);
-        sprintf(tbuf[0], "Thread ID: %ld, Thread Name: %s", id, info.name);
-
-        // Cooperatively yield until we get preemption.
-        thread_yield();
+        sprintf(tbuf[0], "Thread ID: %ld, Thread Name: %s\nFrame number: %ld", id, info.name, frame_counter++);
 
         // Go through and display all 5 buffers.
         for (unsigned int i = 0; i < (sizeof(tbuf) / sizeof(tbuf[0])); i++)
@@ -120,8 +111,7 @@ void main()
             video_draw_debug_text(50, 50 + (50 * i), rgb(255, 255, 255), tbuf[i]);
         }
 
-        video_wait_for_vblank();
-        video_display();
+        video_display_on_vblank();
     }
 }
 
@@ -133,7 +123,6 @@ void test()
     {
         video_fill_screen(rgb(48, 48, 48));
         video_draw_debug_text(320 - 56, 236, rgb(255, 255, 255), "test mode stub");
-        video_wait_for_vblank();
-        video_display();
+        video_display_on_vblank();
     }
 }

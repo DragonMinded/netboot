@@ -5,6 +5,8 @@
 #include "naomi/video.h"
 #include "naomi/maple.h"
 #include "naomi/eeprom.h"
+#include "naomi/timer.h"
+#include "naomi/system.h"
 
 // We will overwrite this in the final linking script when we are injected
 // into a binary. It will point to the original entrypoint that was in the
@@ -208,16 +210,16 @@ void main()
 
     if (settings_chunk[DEBUG_ENABLED] != 0)
     {
-        video_wait_for_vblank();
-        video_display();
+        video_display_on_vblank();
 
         // Wait some seconds to display debugging.
         for (int i = 0; i < 60 * (VERBOSE_DEBUG_MODE ? WAIT_TIME_DEBUG : WAIT_TIME_NORMAL); i++) {
-            video_wait_for_vblank();
+            // TODO: This should really be a single timer wait call once we fix that interface.
+            timer_wait(1000000 / 60);
         }
     }
 
     // Boot original code.
     void (*jump_to_exe)() = (void (*))settings_chunk[GAME_ENTRYPOINT];
-    jump_to_exe();
+    call_unmanaged(jump_to_exe);
 }

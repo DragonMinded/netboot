@@ -259,7 +259,7 @@ void hw_memcpy(void *dest, void *src, unsigned int amount)
     queue[8] = 0;
 }
 
-void enter_test_mode()
+void call_unmanaged(void (*call)())
 {
     // Shut down everything since we're leaving our executable.
     _irq_free();
@@ -267,11 +267,20 @@ void enter_test_mode()
     _thread_free();
     _timer_free();
 
+    // Call it.
+    call();
+
+    // Finally, exit from the program if it ever returns.
+    _exit(0);
+}
+
+void enter_test_mode()
+{
     // Look up the address of the enter test mode syscall.
     uint32_t test_mode_syscall = SYSCALL_VECTOR_BASE[SYSCALL_ENTER_TEST_MODE] | UNCACHED_MIRROR;
 
     // Call it.
-    ((void (*)())test_mode_syscall)();
+    call_unmanaged((void (*)())test_mode_syscall);
 }
 
 // Currently hooked stdio calls.
