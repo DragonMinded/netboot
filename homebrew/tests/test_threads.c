@@ -107,5 +107,102 @@ void test_threads_semaphore(test_context_t *context)
     // Should have had no other buckets filled.
     ASSERT(counts[3] == 0, "Unexpected number of threads %d that got bizarre timing!", counts[3]);
 
+    for(unsigned int i = 0; i < (sizeof(threads) / sizeof(threads[0])); i++)
+    {
+        thread_destroy(threads[i]);
+    }
     semaphore_free(&semaphore);
+}
+
+void *mutex_try_thread(void *param)
+{
+    mutex_t *mutex = param;
+    int got = 0;
+
+    if (mutex_try_lock(mutex))
+    {
+        got = 1;
+
+        for (volatile unsigned int i = 0; i < 1000000; i++) { ; }
+
+        mutex_unlock(mutex);
+    }
+
+    return (void *)got;
+}
+
+void test_threads_mutex_trylock(test_context_t *context)
+{
+    mutex_t mutex;
+    mutex_init(&mutex);
+
+    uint32_t threads[2];
+    int returns[2];
+
+    threads[0] = thread_create("test1", mutex_try_thread, &mutex);
+    threads[1] = thread_create("test2", mutex_try_thread, &mutex);
+
+    thread_start(threads[0]);
+    thread_start(threads[1]);
+
+    returns[0] = (int)thread_join(threads[0]);
+    returns[1] = (int)thread_join(threads[1]);
+
+    ASSERT(
+        (returns[0] == 0 && returns[1] == 1) || (returns[0] == 1 && returns[1] == 0),
+        "Expected only one thread to acquire the mutex using a try lock!"
+    );
+
+    for(unsigned int i = 0; i < (sizeof(threads) / sizeof(threads[0])); i++)
+    {
+        thread_destroy(threads[i]);
+    }
+    mutex_free(&mutex);
+}
+
+void *mutex_lock_thread(void *param)
+{
+    int profile = profile_start();
+    mutex_t *mutex = param;
+    unsigned int duration = 0;
+
+    mutex_lock(mutex);
+
+    duration = profile_end(profile);
+
+    for (volatile unsigned int i = 0; i < 1000000; i++) { ; }
+
+    mutex_unlock(mutex);
+
+    return (void *)duration;
+}
+
+void test_threads_mutex_lock(test_context_t *context)
+{
+    mutex_t mutex;
+    mutex_init(&mutex);
+
+    uint32_t threads[2];
+    unsigned int returns[2];
+
+    threads[0] = thread_create("test1", mutex_lock_thread, &mutex);
+    threads[1] = thread_create("test2", mutex_lock_thread, &mutex);
+
+    thread_start(threads[0]);
+    thread_start(threads[1]);
+
+    returns[0] = (int)thread_join(threads[0]);
+    returns[1] = (int)thread_join(threads[1]);
+
+    ASSERT(
+        (returns[0] < 100 && returns[1] > 10000) || (returns[0] > 10000 && returns[1] < 100),
+        "Expected one thread to have a long acquire time!"
+    );
+
+
+    for(unsigned int i = 0; i < (sizeof(threads) / sizeof(threads[0])); i++)
+    {
+        thread_destroy(threads[i]);
+    }
+    mutex_free(&mutex);
 }

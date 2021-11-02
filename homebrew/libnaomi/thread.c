@@ -6,23 +6,29 @@
 #include "naomi/thread.h"
 #include "irqstate.h"
 
+#define SEM_TYPE_MUTEX 1
+#define SEM_TYPE_SEMAPHORE 2
+#define MAX_SEM_AND_MUTEX (MAX_SEMAPHORES + MAX_MUTEXES)
+
 typedef struct
 {
-    semaphore_t *public;
+    void *public;
+    unsigned int type;
     uint32_t max;
     uint32_t current;
 } semaphore_internal_t;
 
-static semaphore_internal_t *semaphores[MAX_SEMAPHORES];
+static semaphore_internal_t *semaphores[MAX_SEM_AND_MUTEX];
 static uint32_t semaphore_counter = 1;
+static uint32_t mutex_counter = 1;
 
-semaphore_internal_t *_semaphore_find(semaphore_t * semaphore)
+semaphore_internal_t *_semaphore_find(void * semaphore, unsigned int type)
 {
     if (semaphore != 0)
     {
-        for (unsigned int i = 0; i < MAX_SEMAPHORES; i++)
+        for (unsigned int i = 0; i < MAX_SEM_AND_MUTEX; i++)
         {
-            if (semaphores[i] != 0 && semaphores[i]->public == semaphore)
+            if (semaphores[i] != 0 && semaphores[i]->public == semaphore && semaphores[i]->type == type)
             {
                 return semaphores[i];
             }
@@ -323,8 +329,9 @@ void _thread_init()
     thread_counter = 1;
     global_counter_counter = 1;
     semaphore_counter = 1;
+    mutex_counter = 1;
     memset(global_counters, 0, sizeof(uint32_t *) * MAX_GLOBAL_COUNTERS);
-    memset(semaphores, 0, sizeof(semaphore_internal_t *) * MAX_SEMAPHORES);
+    memset(semaphores, 0, sizeof(semaphore_internal_t *) * MAX_SEM_AND_MUTEX);
     memset(threads, 0, sizeof(thread_t *) * MAX_THREADS);
 
     // Create an idle thread.
@@ -347,7 +354,7 @@ void _thread_free()
         }
     }
 
-    for (unsigned int i = 0; i < MAX_SEMAPHORES; i++)
+    for (unsigned int i = 0; i < MAX_SEM_AND_MUTEX; i++)
     {
         if (semaphores[i] != 0)
         {
@@ -662,9 +669,9 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
         }
         case 10:
         {
-            // semaphore_acquire
+            // semaphore_acquire, mutex_lock
             semaphore_t *handle = (semaphore_t *)current->gp_regs[4];
-            semaphore_internal_t *semaphore = _semaphore_find(handle);
+            semaphore_internal_t *semaphore = _semaphore_find(handle, current->gp_regs[5]);
             if (semaphore)
             {
                 if (semaphore->current > 0)
@@ -694,16 +701,19 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
             {
                 // This semaphore is dead, so we have no choice but to fail.
                 uint32_t id = handle ? handle->id : 0;
-                _irq_display_exception(current, "attempt acquire uninitialized semaphore", id);
+                char *msg = current->gp_regs[5] == SEM_TYPE_SEMAPHORE ?
+                    "attempt acquire uninitialized semaphore" :
+                    "attempt acquire uninitialized mutex";
+                _irq_display_exception(current, msg, id);
             }
 
             break;
         }
         case 11:
         {
-            // semaphore_release
+            // semaphore_release, mutex_unlock
             semaphore_t *handle = (semaphore_t *)current->gp_regs[4];
-            semaphore_internal_t *semaphore = _semaphore_find(handle);
+            semaphore_internal_t *semaphore = _semaphore_find(handle, current->gp_regs[5]);
             if (semaphore)
             {
                 // Safely restore this.
@@ -712,7 +722,10 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
                 if (semaphore->current > semaphore->max)
                 {
                     uint32_t id = handle ? handle->id : 0;
-                    _irq_display_exception(current, "attempt release unowned semaphore", id);
+                    char *msg = current->gp_regs[5] == SEM_TYPE_SEMAPHORE ?
+                        "attempt release unowned semaphore" :
+                        "attempt release unowned mutex";
+                    _irq_display_exception(current, msg, id);
                 }
 
                 // Wake up any other threads that were waiting on this thread for a join.
@@ -723,7 +736,10 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
             {
                 // This semaphore is dead, so we have no choice but to fail.
                 uint32_t id = handle ? handle->id : 0;
-                _irq_display_exception(current, "attempt release uninitialized semaphore", id);
+                char *msg = current->gp_regs[5] == SEM_TYPE_SEMAPHORE ?
+                    "attempt release uninitialized semaphore" :
+                    "attempt release uninitialized mutex";
+                _irq_display_exception(current, msg, id);
             }
 
             break;
@@ -811,7 +827,21 @@ void semaphore_init(semaphore_t *semaphore, uint32_t initial_value)
 
     if (semaphore)
     {
-        for (unsigned int i = 0; i < MAX_SEMAPHORES; i++)
+        // Enforce maximum, since we combine semaphores and mutexes.
+        int sem_count = 0;
+        for (unsigned int i = 0; i < MAX_SEM_AND_MUTEX; i++)
+        {
+            if (semaphores[i] != 0 && semaphores[i]->type == SEM_TYPE_SEMAPHORE)
+            {
+                sem_count++;
+            }
+        }
+        if (sem_count >= MAX_SEMAPHORES)
+        {
+            return;
+        }
+
+        for (unsigned int i = 0; i < MAX_SEM_AND_MUTEX; i++)
         {
             if (semaphores[i] == 0)
             {
@@ -824,6 +854,7 @@ void semaphore_init(semaphore_t *semaphore, uint32_t initial_value)
 
                 // Set up the pointer and initial value.
                 internal->public = semaphore;
+                internal->type = SEM_TYPE_SEMAPHORE;
                 internal->max = initial_value;
                 internal->current = initial_value;
 
@@ -841,13 +872,15 @@ void semaphore_init(semaphore_t *semaphore, uint32_t initial_value)
 void semaphore_acquire(semaphore_t * semaphore)
 {
     register semaphore_t * syscall_param0 asm("r4") = semaphore;
-    asm("trapa #10" : : "r" (syscall_param0));
+    register unsigned int syscall_param1 asm("r5") = SEM_TYPE_SEMAPHORE;
+    asm("trapa #10" : : "r" (syscall_param0), "r" (syscall_param1));
 }
 
 void semaphore_release(semaphore_t * semaphore)
 {
     register semaphore_t * syscall_param0 asm("r4") = semaphore;
-    asm("trapa #11" : : "r" (syscall_param0));
+    register unsigned int syscall_param1 asm("r5") = SEM_TYPE_SEMAPHORE;
+    asm("trapa #11" : : "r" (syscall_param0), "r" (syscall_param1));
 }
 
 void semaphore_free(semaphore_t *semaphore)
@@ -856,13 +889,124 @@ void semaphore_free(semaphore_t *semaphore)
 
     if (semaphore)
     {
-        for (unsigned int i = 0; i < MAX_SEMAPHORES; i++)
+        for (unsigned int i = 0; i < MAX_SEM_AND_MUTEX; i++)
         {
-            if (semaphores[i] != 0 && semaphores[i]->public == semaphore)
+            if (semaphores[i] != 0 && semaphores[i]->public == semaphore && semaphores[i]->type == SEM_TYPE_SEMAPHORE)
             {
                 free(semaphores[i]);
                 semaphores[i] = 0;
                 semaphore->id = 0;
+                break;
+            }
+        }
+    }
+
+    irq_restore(old_interrupts);
+}
+
+void mutex_init(mutex_t *mutex)
+{
+    uint32_t old_interrupts = irq_disable();
+
+    if (mutex)
+    {
+        // Enforce maximum, since we combine semaphores and mutexes.
+        int mut_count = 0;
+        for (unsigned int i = 0; i < MAX_SEM_AND_MUTEX; i++)
+        {
+            if (semaphores[i] != 0 && semaphores[i]->type == SEM_TYPE_MUTEX)
+            {
+                mut_count++;
+            }
+        }
+        if (mut_count >= MAX_MUTEXES)
+        {
+            return;
+        }
+
+        for (unsigned int i = 0; i < MAX_SEM_AND_MUTEX; i++)
+        {
+            if (semaphores[i] == 0)
+            {
+                // Assign an ID to this mutex. This is basically meaningless,
+                // but we might as well do something with the data passed in.
+                mutex->id = mutex_counter++;
+
+                // Create semaphore.
+                semaphore_internal_t *internal = malloc(sizeof(semaphore_internal_t));
+
+                // Set up the pointer and initial value.
+                internal->public = mutex;
+                internal->type = SEM_TYPE_MUTEX;
+                internal->max = 1;
+                internal->current = 1;
+
+                // Put it in our registry.
+                semaphores[i] = internal;
+
+                break;
+            }
+        }
+    }
+
+    irq_restore(old_interrupts);
+}
+
+int mutex_try_lock(mutex_t *mutex)
+{
+    // This doesn't use a syscall since we don't want to context switch.
+    uint32_t old_interrupts = irq_disable();
+    int acquired = 0;
+
+    if (mutex)
+    {
+        for (unsigned int i = 0; i < MAX_SEM_AND_MUTEX; i++)
+        {
+            if (semaphores[i] != 0 && semaphores[i]->public == mutex && semaphores[i]->type == SEM_TYPE_MUTEX)
+            {
+                // This is the right mutex. See if we can acquire it.
+                if (semaphores[i]->current > 0)
+                {
+                    acquired = 1;
+                    semaphores[i]->current --;
+                }
+
+                break;
+            }
+        }
+    }
+
+    irq_restore(old_interrupts);
+    return acquired;
+}
+
+void mutex_lock(mutex_t * mutex)
+{
+    register mutex_t * syscall_param0 asm("r4") = mutex;
+    register unsigned int syscall_param1 asm("r5") = SEM_TYPE_MUTEX;
+    asm("trapa #10" : : "r" (syscall_param0), "r" (syscall_param1));
+}
+
+void mutex_unlock(mutex_t * mutex)
+{
+    register mutex_t * syscall_param0 asm("r4") = mutex;
+    register unsigned int syscall_param1 asm("r5") = SEM_TYPE_MUTEX;
+    asm("trapa #11" : : "r" (syscall_param0), "r" (syscall_param1));
+}
+
+void mutex_free(mutex_t *mutex)
+{
+    uint32_t old_interrupts = irq_disable();
+
+    if (mutex)
+    {
+        for (unsigned int i = 0; i < MAX_SEM_AND_MUTEX; i++)
+        {
+            if (semaphores[i] != 0 && semaphores[i]->public == mutex && semaphores[i]->type == SEM_TYPE_MUTEX)
+            {
+                free(semaphores[i]);
+                semaphores[i] = 0;
+                mutex->id = 0;
                 break;
             }
         }
