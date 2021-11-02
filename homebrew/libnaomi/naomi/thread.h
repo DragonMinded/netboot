@@ -96,6 +96,9 @@ void thread_stop(uint32_t tid);
 // Yield to the thread scheduler, which can choose a new thread to schedule.
 void thread_yield();
 
+// Sleep the thread until at least the specified number of nanoseconds has elapsed.
+void thread_sleep(uint32_t ns);
+
 // Exit a thread early, returning return value. Identical to letting control reach the end
 // of the thread function with a return statement.
 void thread_exit(void *retval);

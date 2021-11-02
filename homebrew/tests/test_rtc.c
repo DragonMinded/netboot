@@ -9,7 +9,7 @@ void test_rtc_get(test_context_t *context)
     for (int i = 0; i < 4; i++)
     {
         // Wait a quarter of a second.
-        ASSERT(timer_wait(250000) == 0, "No available system timers!");
+        timer_wait(250000);
 
         rtc_new = rtc_get();
         if (rtc_new != rtc_orig)

@@ -4,6 +4,8 @@
 #include "naomi/video.h"
 #include "naomi/eeprom.h"
 #include "naomi/thread.h"
+#include "naomi/timer.h"
+#include "naomi/rtc.h"
 
 void *thread1(void *param)
 {
@@ -69,6 +71,42 @@ void *thread4(void *param)
     return 0;
 }
 
+void *thread5(void *param)
+{
+    char *buf = param;
+    uint32_t counter = 0;
+
+    while ( 1 )
+    {
+        uint32_t id = thread_id();
+        thread_info_t info = thread_info(id);
+        sprintf(buf, "Thread ID: %ld, Thread Name: %s\nCounter: %ld\nRTC: %lu", id, info.name, counter, rtc_get());
+
+        timer_wait(500000);
+        counter ++;
+    }
+
+    return 0;
+}
+
+void *thread6(void *param)
+{
+    char *buf = param;
+    uint32_t counter = 0;
+
+    while ( 1 )
+    {
+        uint32_t id = thread_id();
+        thread_info_t info = thread_info(id);
+        sprintf(buf, "Thread ID: %ld, Thread Name: %s\nCounter: %ld\nRTC: %lu", id, info.name, counter, rtc_get());
+
+        thread_sleep(500000);
+        counter ++;
+    }
+
+    return 0;
+}
+
 void main()
 {
     // Grab the system configuration
@@ -80,15 +118,17 @@ void main()
     video_set_background_color(rgb(48, 48, 48));
 
     // Create a simple buffer for threads to manipulate.
-    char tbuf[5][256];
+    char tbuf[7][256];
 
     // Create four threads, each with their own function.
-    uint32_t threads[4];
+    uint32_t threads[6];
 
     threads[0] = thread_create("thread1", thread1, tbuf[1]);
     threads[1] = thread_create("thread2", thread2, tbuf[2]);
     threads[2] = thread_create("thread3", thread3, tbuf[3]);
     threads[3] = thread_create("thread4", thread4, tbuf[4]);
+    threads[4] = thread_create("thread5", thread5, tbuf[5]);
+    threads[5] = thread_create("thread6", thread6, tbuf[6]);
 
     // Start them all.
     for (unsigned int i = 0; i < (sizeof(threads) / sizeof(threads[0])); i++)
@@ -108,7 +148,7 @@ void main()
         // Go through and display all 5 buffers.
         for (unsigned int i = 0; i < (sizeof(tbuf) / sizeof(tbuf[0])); i++)
         {
-            video_draw_debug_text(50, 50 + (50 * i), rgb(255, 255, 255), tbuf[i]);
+            video_draw_debug_text(50, 50 + (45 * i), rgb(255, 255, 255), tbuf[i]);
         }
 
         video_display_on_vblank();

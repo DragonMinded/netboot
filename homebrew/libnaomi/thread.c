@@ -4,6 +4,7 @@
 #include <limits.h>
 #include "naomi/interrupt.h"
 #include "naomi/thread.h"
+#include "naomi/timer.h"
 #include "irqstate.h"
 
 #define SEM_TYPE_MUTEX 1
@@ -65,6 +66,7 @@ typedef struct
     // Any resources this thread is waiting on.
     semaphore_internal_t * waiting_semaphore;
     uint32_t waiting_thread;
+    uint32_t waiting_timer;
 
     // The actual context of the thread, including all of the registers and such.
     int main_thread;
@@ -73,6 +75,7 @@ typedef struct
     void *retval;
 } thread_t;
 
+static uint64_t current_profile = 0;
 static thread_t *threads[MAX_THREADS];
 
 thread_t *_thread_find_by_context(irq_state_t *context)
@@ -190,6 +193,24 @@ void _thread_register_main(irq_state_t *state)
     irq_restore(old_interrupts);
 }
 
+#define INVERSION_AMOUNT 100000
+
+void _thread_enable_inversion(thread_t *thread)
+{
+    if (thread->priority >= MIN_PRIORITY && thread->priority <= MAX_PRIORITY)
+    {
+        thread->priority += INVERSION_AMOUNT;
+    }
+}
+
+void _thread_disable_inversion(thread_t *thread)
+{
+    if (thread->priority >= (INVERSION_AMOUNT + MIN_PRIORITY) && thread->priority <= (INVERSION_AMOUNT + MAX_PRIORITY))
+    {
+        thread->priority -= INVERSION_AMOUNT;
+    }
+}
+
 #define THREAD_SCHEDULE_CURRENT 0
 #define THREAD_SCHEDULE_OTHER 1
 #define THREAD_SCHEDULE_ANY 2
@@ -212,6 +233,7 @@ irq_state_t *_thread_schedule(irq_state_t *state, int request)
         if (current_thread->state == THREAD_STATE_RUNNING)
         {
             // It is, just return it.
+            _thread_disable_inversion(current_thread);
             return current_thread->context;
         }
     }
@@ -280,6 +302,7 @@ irq_state_t *_thread_schedule(irq_state_t *state, int request)
         {
             // Okay, we found our current thread last iteration, so this is
             // the next applicable thread in a round-robin scheduler.
+            _thread_disable_inversion(threads[i]);
             return threads[i]->context;
         }
 
@@ -317,10 +340,11 @@ irq_state_t *_thread_schedule(irq_state_t *state, int request)
         }
 
         // Okay, we found an applicable thread, return it as the scheduled thread.
+        _thread_disable_inversion(threads[i]);
         return threads[i]->context;
     }
 
-    // We should never ever get here, but if so just return the current state.
+    // We should never ever get here, so display a failure message.
     _irq_display_invariant("scheduling failure", "cannot locate new thread to schedule");
     return state;
 }
@@ -331,6 +355,7 @@ void _thread_init()
     global_counter_counter = 1;
     semaphore_counter = 1;
     mutex_counter = 1;
+    current_profile = 0;
     memset(global_counters, 0, sizeof(uint32_t *) * MAX_GLOBAL_COUNTERS);
     memset(semaphores, 0, sizeof(semaphore_internal_t *) * MAX_SEM_AND_MUTEX);
     memset(threads, 0, sizeof(thread_t *) * MAX_THREADS);
@@ -483,28 +508,82 @@ void _thread_wake_waiting_semaphore(semaphore_internal_t *semaphore)
     }
 }
 
-irq_state_t *_syscall_timer(irq_state_t *current, int timer)
+uint32_t _thread_time_elapsed()
 {
-    int schedule = THREAD_SCHEDULE_CURRENT;
-
-    if (timer < 0)
+    if (current_profile != 0)
     {
-        // Periodic preemption timer.
-        schedule = THREAD_SCHEDULE_ANY;
-    }
-    else if (timer == 0)
-    {
-        // Just a regular timer interrupt, we don't care about it.
+        return _profile_get_current(0) - current_profile;
     }
     else
     {
-        // Timer ID passed in should match a requested callback
-        // we made for waking up threads. We need to wake up any
-        // threads that were sleeping and should now be awake.
-        schedule = THREAD_SCHEDULE_OTHER;
+        return 0;
+    }
+}
+
+void _thread_wake_waiting_timer()
+{
+    // Calculate the time since we did our last adjustments.
+    uint64_t new_profile = _profile_get_current(0);
+    uint32_t time_elapsed = 0;
+    if (current_profile != 0)
+    {
+        time_elapsed = new_profile - current_profile;
+    }
+    current_profile = new_profile;
+
+    if (time_elapsed == 0)
+    {
+        // Nothing to do here!
+        return;
     }
 
-    return _thread_schedule(current, schedule);
+    for (unsigned int i = 0; i < MAX_THREADS; i++)
+    {
+        if (threads[i] == 0)
+        {
+            // Not a real thread.
+            continue;
+        }
+
+        if (threads[i]->state != THREAD_STATE_WAITING)
+        {
+            // Not waiting on any resources.
+            continue;
+        }
+
+        if (threads[i]->waiting_timer == 0)
+        {
+            // Not waiting on a timer.
+            continue;
+        }
+
+        if (threads[i]->waiting_timer <= time_elapsed)
+        {
+            // We hit our timeout, this thread is now wakeable!
+            threads[i]->waiting_timer = 0;
+            threads[i]->state = THREAD_STATE_RUNNING;
+            _thread_enable_inversion(threads[i]);
+        }
+        else
+        {
+            // This thread hasn't hit our timeout yet.
+            threads[i]->waiting_timer -= time_elapsed;
+        }
+    }
+}
+
+irq_state_t *_syscall_timer(irq_state_t *current, int timer)
+{
+    if (timer < 0)
+    {
+        // Periodic preemption timer.
+        _thread_wake_waiting_timer();
+        return _thread_schedule(current, THREAD_SCHEDULE_ANY);
+    }
+    else
+    {
+        return current;
+    }
 }
 
 irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
@@ -754,6 +833,27 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
 
             break;
         }
+        case 12:
+        {
+            // thread_sleep.
+            thread_t *thread = _thread_find_by_context(current);
+            if (thread)
+            {
+                // Put the thread to sleep, waiting for the number of ns requested.
+                // Adjust that number based on how close to the periodic interrupt
+                // we are, since when it fires it will not necessarily have lasted
+                // the right amount of time for this particular timer.
+                thread->state = THREAD_STATE_WAITING;
+                thread->waiting_timer = current->gp_regs[4] + _thread_time_elapsed();
+                schedule = THREAD_SCHEDULE_OTHER;
+            }
+            else
+            {
+                // Should never happen.
+                _irq_display_exception(current, "cannot locate thread object", which);
+            }
+            break;
+        }
         default:
         {
             _irq_display_exception(current, "unrecognized syscall", which);
@@ -761,6 +861,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
         }
     }
 
+    _thread_wake_waiting_timer();
     return _thread_schedule(current, schedule);
 }
 
@@ -1182,4 +1283,10 @@ void thread_exit(void *retval)
 {
     register void * syscall_param0 asm("r4") = retval;
     asm("trapa #9" : : "r" (syscall_param0));
+}
+
+void thread_sleep(uint32_t ns)
+{
+    register uint32_t syscall_param0 asm("r4") = ns;
+    asm("trapa #12" : : "r" (syscall_param0));
 }

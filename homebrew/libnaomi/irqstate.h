@@ -3,6 +3,9 @@
 
 #include <stdint.h>
 
+#define NANOSECONDS_IN_ONE_SECOND 1000000
+#define PREEMPTION_HZ 1000
+
 // Should match up with save and restore code in sh-crt0.s.
 typedef struct
 {
@@ -44,6 +47,7 @@ irq_state_t *_syscall_trapa(irq_state_t *state, unsigned int which);
 irq_state_t *_syscall_timer(irq_state_t *state, int timer);
 
 void _thread_register_main(irq_state_t *state);
+uint64_t _profile_get_current(uint32_t adjustments);
 
 void _irq_display_exception(irq_state_t *cur_state, char *failure, int code);
 void _irq_display_invariant(char *msg, char *failure, ...);

@@ -35,5 +35,4 @@ void rtc_set(uint32_t newtime)
         val1 = ((AICA_RTC_SECS_H & 0xffff) << 16) | (AICA_RTC_SECS_L & 0xffff);
         val2 = ((AICA_RTC_SECS_H & 0xffff) << 16) | (AICA_RTC_SECS_L & 0xffff);
     } while (val1 != val2);
-
 }
