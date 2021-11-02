@@ -9,10 +9,10 @@ void test_hw_memset(test_context_t *context)
     ASSERT((((uint32_t)scratch) & 0x1F) == 0, "Scratch region is not 32-byte aligned");
 
     // Zero a wider area so we can catch overspray.
-    hw_memset(scratch, 0, 512);
+    ASSERT(hw_memset(scratch, 0, 512), "Failed to get hardware for memset!");
 
     // Set 0xDEADBEEF to the center 256 bytes.
-    hw_memset(scratch + (128 / 4), 0xDEADBEEF, 256);
+    ASSERT(hw_memset(scratch + (128 / 4), 0xDEADBEEF, 256), "Failed to get hardware for memset!");
 
     // Now check the 3 regions for overspray and correct contents.
     for (int i = 0; i < (128 / 4); i++)
@@ -45,8 +45,8 @@ void test_hw_memcpy(test_context_t *context)
     }
 
     // Set up zeros around our copy area to catch overspray.
-    hw_memset(dest, 0, 512);
-    hw_memcpy(dest + (128 / 4), scratch, 256);
+    ASSERT(hw_memset(dest, 0, 512), "Failed to get hardware for memset!");
+    ASSERT(hw_memcpy(dest + (128 / 4), scratch, 256), "Failed to get hardware for memcpy!");
 
     for (int i = 0; i < (128 / 4); i++)
     {

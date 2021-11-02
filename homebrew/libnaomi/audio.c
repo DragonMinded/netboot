@@ -16,14 +16,25 @@ void load_aica_binary(void *binary, unsigned int length)
     aicabase[AICA_RESET] |= 0x1;
 
     // Do the BSS-init for the ARM binary.
-    hw_memset((void *)(SOUNDRAM_BASE | UNCACHED_MIRROR), 0, SOUNDRAM_SIZE);
+    if (!hw_memset((void *)(SOUNDRAM_BASE | UNCACHED_MIRROR), 0, SOUNDRAM_SIZE))
+    {
+        // Failed to use HW to memset, fall back to slow method.
+        memset((void *)(SOUNDRAM_BASE | UNCACHED_MIRROR), 0, SOUNDRAM_SIZE);
+    }
 
     // Copy the binary to the AICA MCU.
     unsigned int hw_copy_amount = length & 0xFFFFFFE0;
-    hw_memcpy((void *)(SOUNDRAM_BASE | UNCACHED_MIRROR), binary, hw_copy_amount);
-    for(unsigned int memloc = hw_copy_amount; memloc < length; memloc+= 4)
+    if (hw_memcpy((void *)(SOUNDRAM_BASE | UNCACHED_MIRROR), binary, hw_copy_amount))
     {
-        *((uint32_t *)((SOUNDRAM_BASE | UNCACHED_MIRROR) + memloc)) = *((uint32_t *)(((uint32_t)binary) + memloc));
+        for(unsigned int memloc = hw_copy_amount; memloc < length; memloc+= 4)
+        {
+            *((uint32_t *)((SOUNDRAM_BASE | UNCACHED_MIRROR) + memloc)) = *((uint32_t *)(((uint32_t)binary) + memloc));
+        }
+    }
+    else
+    {
+        // Failed to use HW memcpy, fall back to slow method.
+        memcpy((void *)(SOUNDRAM_BASE | UNCACHED_MIRROR), binary, length);
     }
 
     // Pull the AICA MCU back out of reset.

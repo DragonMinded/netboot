@@ -41,7 +41,11 @@ void semaphore_free(semaphore_t *semaphore);
 // Mutexes, with all of the standard expectations for them. Calling try_lock on a
 // mutex will return nonzero if the lock is successfully held, false otherwise.
 // Mutexes do not cooperate with the thread scheduler, a try_lock will simply get
-// the lock or fail and no context switch will be attempted on failure.
+// the lock or fail and no context switch will be attempted on failure. This makes
+// try_lock safe to perform with interrupts disabled where any other semaphore or
+// mutex operation would cause a system failure. Note that if you call try_lock
+// while interrupts are disabled and you successfully acquire the lock, you must
+// not re-enable interrupts before calling mutex_unlock.
 #define MAX_MUTEXES 64
 
 typedef struct

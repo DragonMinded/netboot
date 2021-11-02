@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <string.h>
 #include "naomi/video.h"
 #include "naomi/system.h"
 #include "naomi/dimmcomms.h"
@@ -73,8 +74,10 @@ void video_display_on_vblank()
 
     while(!(videobase[POWERVR2_SYNC_STAT] & 0x01ff)) {
         if (global_background_fill_start < global_background_fill_end) {
-            hw_memset((void *)global_background_fill_start, global_background_fill_color, 32);
-            global_background_fill_start += 32;
+            if (hw_memset((void *)global_background_fill_start, global_background_fill_color, 32))
+            {
+                global_background_fill_start += 32;
+            }
         }
     }
     while((videobase[POWERVR2_SYNC_STAT] & 0x01ff)) {
@@ -94,7 +97,7 @@ void video_display_on_vblank()
 
     // Finish filling in the background.
     if (global_background_fill_start < global_background_fill_end) {
-        hw_memset((void *)global_background_fill_start, global_background_fill_color, global_background_fill_end - global_background_fill_start);
+        while (hw_memset((void *)global_background_fill_start, global_background_fill_color, global_background_fill_end - global_background_fill_start) == 0) { ; }
     }
     global_background_fill_start = 0;
     global_background_fill_end = 0;
@@ -153,7 +156,11 @@ void video_init_simple()
 
     // Now, zero out the screen so there's no garbage if we never display.
     void *zero_base = (void *)(VRAM_BASE | 0xA0000000);
-    hw_memset(zero_base, 0, global_video_width * global_video_height * global_video_depth * 2);
+    if (!hw_memset(zero_base, 0, global_video_width * global_video_height * global_video_depth * 2))
+    {
+        // Gotta do the slow method.
+        memset(zero_base, 0, global_video_width * global_video_height * global_video_depth * 2);
+    }
 
     // Set up video timings copied from Naomi BIOS.
     videobase[POWERVR2_VRAM_CFG3] = 0x15D1C955;
@@ -330,11 +337,17 @@ void video_fill_screen(uint32_t color)
 {
     if(global_video_depth == 2)
     {
-        hw_memset(buffer_base, (color & 0xFFFF) | ((color << 16) & 0xFFFF0000), global_video_width * global_video_height * 2);
+        if (!hw_memset(buffer_base, (color & 0xFFFF) | ((color << 16) & 0xFFFF0000), global_video_width * global_video_height * 2))
+        {
+            memset(buffer_base, (color & 0xFFFF) | ((color << 16) & 0xFFFF0000), global_video_width * global_video_height * 2);
+        }
     }
     else if(global_video_depth == 4)
     {
-        hw_memset(buffer_base, color, global_video_width * global_video_height * 4);
+        if (!hw_memset(buffer_base, color, global_video_width * global_video_height * 4))
+        {
+            memset(buffer_base, color, global_video_width * global_video_height * 4);
+        }
     }
 }
 

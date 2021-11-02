@@ -16,6 +16,7 @@ typedef struct
     unsigned int type;
     uint32_t max;
     uint32_t current;
+    uint32_t irq_disabled;
 } semaphore_internal_t;
 
 static semaphore_internal_t *semaphores[MAX_SEM_AND_MUTEX];
@@ -358,6 +359,14 @@ void _thread_free()
     {
         if (semaphores[i] != 0)
         {
+            if (semaphores[i]->type == SEM_TYPE_MUTEX)
+            {
+                ((mutex_t *)semaphores[i]->public)->id = 0;
+            }
+            else if (semaphores[i]->type == SEM_TYPE_SEMAPHORE)
+            {
+                ((semaphore_t *)semaphores[i]->public)->id = 0;
+            }
             free(semaphores[i]);
             semaphores[i] = 0;
         }
@@ -678,6 +687,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
                 {
                     // Safely can acquire this.
                     semaphore->current -= 1;
+                    semaphore->irq_disabled = 0;
                 }
                 else
                 {
@@ -969,6 +979,11 @@ int mutex_try_lock(mutex_t *mutex)
                 {
                     acquired = 1;
                     semaphores[i]->current --;
+
+                    // Keep track of whether this was acquired with interrupts disabled or not.
+                    // This is because if it was, the subsequent unlock must be done without
+                    // syscalls as well.
+                    semaphores[i]->irq_disabled = _irq_was_disabled(old_interrupts);
                 }
 
                 break;
@@ -989,6 +1004,29 @@ void mutex_lock(mutex_t * mutex)
 
 void mutex_unlock(mutex_t * mutex)
 {
+    // If we locked a mutex without threads/interrupts enabled, we need to similarly
+    // unlock it without a syscall. That's safe to do so, since no other thread could
+    // have gotten to the mutex as threads were disabled.
+    uint32_t old_interrupts = irq_disable();
+
+    if (mutex)
+    {
+        for (unsigned int i = 0; i < MAX_SEM_AND_MUTEX; i++)
+        {
+            if (semaphores[i] != 0 && semaphores[i]->public == mutex && semaphores[i]->type == SEM_TYPE_MUTEX && semaphores[i]->irq_disabled)
+            {
+                // Unlock the mutex, exit without doing a syscall.
+                semaphores[i]->current ++;
+                semaphores[i]->irq_disabled = 0;
+
+                irq_restore(old_interrupts);
+                return;
+            }
+        }
+    }
+
+    // This was locked normally, unlock using a syscall to wake any other threads.
+    irq_restore(old_interrupts);
     register mutex_t * syscall_param0 asm("r4") = mutex;
     register unsigned int syscall_param1 asm("r5") = SEM_TYPE_MUTEX;
     asm("trapa #11" : : "r" (syscall_param0), "r" (syscall_param1));

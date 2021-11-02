@@ -10,6 +10,7 @@
 #include "naomi/timer.h"
 #include "naomi/rtc.h"
 #include "naomi/interrupt.h"
+#include "naomi/thread.h"
 
 #define CCR (*(uint32_t *)0xFF00001C)
 #define QACR0 (*(uint32_t *)0xFF000038)
@@ -38,6 +39,9 @@ extern uint32_t __dtors_end;
 
 /* libgcc floating point stuff */
 extern void __set_fpscr (unsigned long);
+
+/* Global hardware access mutexes. */
+static mutex_t queue_mutex;
 
 /* Provide a weakref to a default test sub for autoconf-purposes. */
 int __test()
@@ -113,6 +117,9 @@ void _enter()
     _maple_init();
     _irq_init();
 
+    // Initialize mutexes for hardware that needs exclusive access.
+    mutex_init(&queue_mutex);
+
     // Execute main/test executable based on boot variable set in
     // sh-crt0.s which comes from the entrypoint used to start the code.
     int status;
@@ -136,127 +143,145 @@ void _enter()
     _exit(status);
 }
 
-// TODO: This is NOT re-entrant since it uses hardware. Need to guard against being
-// called from multiple threads/contexts at once.
-void hw_memset(void *addr, uint32_t value, unsigned int amount)
+int hw_memset(void *addr, uint32_t value, unsigned int amount)
 {
-    // Very similar to a standard memset, but the address pointer must be aligned
-    // to a 32 byte boundary, the amount must be a multiple of 32 bytes and the
-    // value must be 32 bits. No checking of these constraints is done.
+    int successful = 0;
 
-    // Set the base queue address pointer to the queue location with address bits
-    // 25:5. The bottom bits should be all 0s since hw_memset requires an alignment
-    // to a 32 byte boundary. We will use both queue areas since SQ0/SQ1 specification
-    // is the same bit as address bit 5. Technically this means the below queue setup
-    // interleaves the data between the two queues, but it really does not matter what
-    // order the hardware copies things.
-    uint32_t *queue = (uint32_t *)(STORE_QUEUE_BASE | (((uint32_t)addr) & 0x03FFFFE0));
-    uint32_t actual_copy_addr = (uint32_t)addr;
-    uint32_t stored_addr_bits = (actual_copy_addr >> 24) & 0x1C;
-
-    // Set the top address bits (28:26) into the store queue address control registers.
-    QACR0 = stored_addr_bits;
-    QACR1 = stored_addr_bits;
-
-    // Now, set up both store queues to contain the same value that we want to memset.
-    // This is 8 32-bit values per store queue.
-    for (int i = 0; i < 16; i++) {
-        queue[i] = value;
-    }
-
-    // Now, trigger the hardware to copy the values from the queue to the address we
-    // care about, triggering one 32-byte prefetch at a time.
-    for (int cycles = amount >> 5; cycles > 0; cycles--)
+    if (mutex_try_lock(&queue_mutex))
     {
-        // Make sure we don't wrap around our top address bits.
-        if (((actual_copy_addr >> 24) & 0x1C) != stored_addr_bits)
-        {
-            // Re-init the top address control registers and the queue.
-            stored_addr_bits = (actual_copy_addr >> 24) & 0x1C;
-            QACR0 = stored_addr_bits;
-            QACR1 = stored_addr_bits;
+        // Very similar to a standard memset, but the address pointer must be aligned
+        // to a 32 byte boundary, the amount must be a multiple of 32 bytes and the
+        // value must be 32 bits. No checking of these constraints is done.
 
-            // Now, set up both store queues to contain the same value that we want to memset.
-            // This is 8 32-bit values per store queue.
-            for (int i = 0; i < 16; i++) {
-                queue[i] = value;
-            }
+        // Set the base queue address pointer to the queue location with address bits
+        // 25:5. The bottom bits should be all 0s since hw_memset requires an alignment
+        // to a 32 byte boundary. We will use both queue areas since SQ0/SQ1 specification
+        // is the same bit as address bit 5. Technically this means the below queue setup
+        // interleaves the data between the two queues, but it really does not matter what
+        // order the hardware copies things.
+        uint32_t *queue = (uint32_t *)(STORE_QUEUE_BASE | (((uint32_t)addr) & 0x03FFFFE0));
+        uint32_t actual_copy_addr = (uint32_t)addr;
+        uint32_t stored_addr_bits = (actual_copy_addr >> 24) & 0x1C;
+
+        // Set the top address bits (28:26) into the store queue address control registers.
+        QACR0 = stored_addr_bits;
+        QACR1 = stored_addr_bits;
+
+        // Now, set up both store queues to contain the same value that we want to memset.
+        // This is 8 32-bit values per store queue.
+        for (int i = 0; i < 16; i++) {
+            queue[i] = value;
         }
 
-        // Perform the actual memset.
-        __asm__("pref @%0" : : "r"(queue));
-        queue += 8;
-        actual_copy_addr += 32;
+        // Now, trigger the hardware to copy the values from the queue to the address we
+        // care about, triggering one 32-byte prefetch at a time.
+        for (int cycles = amount >> 5; cycles > 0; cycles--)
+        {
+            // Make sure we don't wrap around our top address bits.
+            if (((actual_copy_addr >> 24) & 0x1C) != stored_addr_bits)
+            {
+                // Re-init the top address control registers and the queue.
+                stored_addr_bits = (actual_copy_addr >> 24) & 0x1C;
+                QACR0 = stored_addr_bits;
+                QACR1 = stored_addr_bits;
+
+                // Now, set up both store queues to contain the same value that we want to memset.
+                // This is 8 32-bit values per store queue.
+                for (int i = 0; i < 16; i++) {
+                    queue[i] = value;
+                }
+            }
+
+            // Perform the actual memset.
+            __asm__("pref @%0" : : "r"(queue));
+            queue += 8;
+            actual_copy_addr += 32;
+        }
+
+        // Finally, attempt a new write to both queues in order to stall the CPU until the
+        // last write is done.
+        queue = (uint32_t *)STORE_QUEUE_BASE;
+        queue[0] = 0;
+        queue[8] = 0;
+
+        // We held the lock and succeeded at memsetting.
+        successful = 1;
+        mutex_unlock(&queue_mutex);
     }
 
-    // Finally, attempt a new write to both queues in order to stall the CPU until the
-    // last write is done.
-    queue = (uint32_t *)STORE_QUEUE_BASE;
-    queue[0] = 0;
-    queue[8] = 0;
+    return successful;
 }
 
-// TODO: This is NOT re-entrant since it uses hardware. Need to guard against being
-// called from multiple threads/contexts at once.
-void hw_memcpy(void *dest, void *src, unsigned int amount)
+int hw_memcpy(void *dest, void *src, unsigned int amount)
 {
-    // Very similar to a standard memcpy, but the destination pointer must be aligned
-    // to a 32 byte boundary, the amount must be a multiple of 32 bytes and the source
-    // pointer must be aligned to a 4 byte boundary. No checking of these constraints
-    // is done.
+    int successful = 0;
 
-    // Set the base queue address pointer to the queue location with destination bits
-    // 25:5. The bottom bits should be all 0s since hw_memset requires an alignment
-    // to a 32 byte boundary. We will use both queue areas since SQ0/SQ1 specification
-    // is the same bit as destination bit 5. Technically this means the below queue setup
-    // interleaves the data between the two queues, but it really does not matter what
-    // order the hardware copies things.
-    uint32_t *srcptr = (uint32_t *)src;
-    uint32_t *queue = (uint32_t *)(STORE_QUEUE_BASE | (((uint32_t)dest) & 0x03FFFFE0));
-    uint32_t actual_copy_dest = (uint32_t)dest;
-    uint32_t stored_dest_bits = (actual_copy_dest >> 24) & 0x1C;
-
-    // Set the top address bits (28:26) into the store queue address control registers.
-    QACR0 = stored_dest_bits;
-    QACR1 = stored_dest_bits;
-
-    // Now, trigger the hardware to copy the values from the queue to the address we
-    // care about, triggering one 32-byte prefetch at a time.
-    for (int cycles = amount >> 5; cycles > 0; cycles--)
+    if (mutex_try_lock(&queue_mutex))
     {
-        // Make sure we don't wrap around if we were near a memory border.
-        if (((actual_copy_dest >> 24) & 0x1C) != stored_dest_bits)
+        // Very similar to a standard memcpy, but the destination pointer must be aligned
+        // to a 32 byte boundary, the amount must be a multiple of 32 bytes and the source
+        // pointer must be aligned to a 4 byte boundary. No checking of these constraints
+        // is done.
+
+        // Set the base queue address pointer to the queue location with destination bits
+        // 25:5. The bottom bits should be all 0s since hw_memset requires an alignment
+        // to a 32 byte boundary. We will use both queue areas since SQ0/SQ1 specification
+        // is the same bit as destination bit 5. Technically this means the below queue setup
+        // interleaves the data between the two queues, but it really does not matter what
+        // order the hardware copies things.
+        uint32_t *srcptr = (uint32_t *)src;
+        uint32_t *queue = (uint32_t *)(STORE_QUEUE_BASE | (((uint32_t)dest) & 0x03FFFFE0));
+        uint32_t actual_copy_dest = (uint32_t)dest;
+        uint32_t stored_dest_bits = (actual_copy_dest >> 24) & 0x1C;
+
+        // Set the top address bits (28:26) into the store queue address control registers.
+        QACR0 = stored_dest_bits;
+        QACR1 = stored_dest_bits;
+
+        // Now, trigger the hardware to copy the values from the queue to the address we
+        // care about, triggering one 32-byte prefetch at a time.
+        for (int cycles = amount >> 5; cycles > 0; cycles--)
         {
-            // Re-init the top address control registers and the queue.
-            stored_dest_bits = (actual_copy_dest >> 24) & 0x1C;
-            QACR0 = stored_dest_bits;
-            QACR1 = stored_dest_bits;
+            // Make sure we don't wrap around if we were near a memory border.
+            if (((actual_copy_dest >> 24) & 0x1C) != stored_dest_bits)
+            {
+                // Re-init the top address control registers and the queue.
+                stored_dest_bits = (actual_copy_dest >> 24) & 0x1C;
+                QACR0 = stored_dest_bits;
+                QACR1 = stored_dest_bits;
+            }
+
+            // First, prefetch the bytes we will need in the next cycle.
+            __asm__("pref @%0" : : "r"(srcptr + 8));
+
+            // Now, load the destination queue with the next 32 bytes from the source.
+            queue[0] = *srcptr++;
+            queue[1] = *srcptr++;
+            queue[2] = *srcptr++;
+            queue[3] = *srcptr++;
+            queue[4] = *srcptr++;
+            queue[5] = *srcptr++;
+            queue[6] = *srcptr++;
+            queue[7] = *srcptr++;
+
+            // Finally, trigger the store of this data
+            __asm__("pref @%0" : : "r"(queue));
+            queue += 8;
+            actual_copy_dest += 32;
         }
 
-        // First, prefetch the bytes we will need in the next cycle.
-        __asm__("pref @%0" : : "r"(srcptr + 8));
+        // Finally, attempt a new write to both queues in order to stall the CPU until the
+        // last write is done.
+        queue = (uint32_t *)STORE_QUEUE_BASE;
+        queue[0] = 0;
+        queue[8] = 0;
 
-        // Now, load the destination queue with the next 32 bytes from the source.
-        queue[0] = *srcptr++;
-        queue[1] = *srcptr++;
-        queue[2] = *srcptr++;
-        queue[3] = *srcptr++;
-        queue[4] = *srcptr++;
-        queue[5] = *srcptr++;
-        queue[6] = *srcptr++;
-        queue[7] = *srcptr++;
-
-        // Finally, trigger the store of this data
-        __asm__("pref @%0" : : "r"(queue));
-        queue += 8;
-        actual_copy_dest += 32;
+        // We held the lock and succeeded at memsetting.
+        successful = 1;
+        mutex_unlock(&queue_mutex);
     }
 
-    // Finally, attempt a new write to both queues in order to stall the CPU until the
-    // last write is done.
-    queue = (uint32_t *)STORE_QUEUE_BASE;
-    queue[0] = 0;
-    queue[8] = 0;
+    return successful;
 }
 
 void call_unmanaged(void (*call)())

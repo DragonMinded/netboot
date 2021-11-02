@@ -305,3 +305,8 @@ irq_stats_t irq_stats()
 
     return statscopy;
 }
+
+int _irq_was_disabled(uint32_t sr)
+{
+    return (sr & 0x10000000) != 0 ? 1 : 0;
+}

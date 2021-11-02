@@ -28,12 +28,14 @@ extern "C" {
 #define RAM_SIZE 0x2000000
 
 // A 32-byte aligned and 32-byte multiple hardware memset that is about 3x faster than
-// the fastest tight loop that you can write in software.
-void hw_memset(void *addr, uint32_t value, unsigned int amount);
+// the fastest tight loop that you can write in software. Returns nonzero if the copy was
+// successful or 0 if the HW was unavailable.
+int hw_memset(void *addr, uint32_t value, unsigned int amount);
 
 // A 32-byte aligned and 32-byte multiple hardware memcpy that is similarly faster than
-// the fastest tight loop that you can write in software.
-void hw_memcpy(void *addr, void *src, unsigned int amount);
+// the fastest tight loop that you can write in software. Returns nonzero if the copy
+// was successful or 0 if the HW was unavailable.
+int hw_memcpy(void *addr, void *src, unsigned int amount);
 
 // Call code that is outside of our C runtime, such as another program or something
 // in the BIOS that does not return. Takes care of safely shutting down interrupts,
