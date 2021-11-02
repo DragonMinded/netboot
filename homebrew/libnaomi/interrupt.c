@@ -234,6 +234,11 @@ void _irq_init()
 
     // Now, enable interrupts for the whole system!
     _irq_enable();
+
+    // Finally, create an idle thread. We can only do this here because
+    // if we do it anywhere else the idle thread will get the wrong VBR
+    // and SR and the first time we enter it we will freeze forever.
+    _thread_create_idle();
 }
 
 void _irq_free()

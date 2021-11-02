@@ -867,10 +867,10 @@ void __video_draw_debug_text( int x, int y, uint32_t color, const char * const m
 
 void video_draw_debug_text(int x, int y, uint32_t color, const char * const msg, ...)
 {
-    static char buffer[2048];
 
     if (msg)
     {
+        char buffer[2048];
         va_list args;
         va_start(args, msg);
         int length = vsnprintf(buffer, 2047, msg, args);

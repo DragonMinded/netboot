@@ -193,6 +193,15 @@ void _thread_register_main(irq_state_t *state)
     irq_restore(old_interrupts);
 }
 
+void _thread_create_idle()
+{
+    // Create an idle thread.
+    thread_t *idle_thread = _thread_create("idle", INT_MIN);
+    idle_thread->stack = malloc(64);
+    idle_thread->context = _irq_new_state(_idle_thread, 0, idle_thread->stack + 64);
+    idle_thread->state = THREAD_STATE_RUNNING;
+}
+
 #define INVERSION_AMOUNT 100000
 
 void _thread_enable_inversion(thread_t *thread)
@@ -229,8 +238,9 @@ irq_state_t *_thread_schedule(irq_state_t *state, int request)
     // Schedule a new thread at this point.
     if (request == THREAD_SCHEDULE_CURRENT)
     {
-        // See if the current thread is applicable to run.
-        if (current_thread->state == THREAD_STATE_RUNNING)
+        // See if the current thread is applicable to run. Never reschedule the
+        // idle thread, however, unless there is truly nothing else to reschedule.
+        if (current_thread->state == THREAD_STATE_RUNNING && current_thread->priority != INT_MIN)
         {
             // It is, just return it.
             _thread_disable_inversion(current_thread);
@@ -359,12 +369,6 @@ void _thread_init()
     memset(global_counters, 0, sizeof(uint32_t *) * MAX_GLOBAL_COUNTERS);
     memset(semaphores, 0, sizeof(semaphore_internal_t *) * MAX_SEM_AND_MUTEX);
     memset(threads, 0, sizeof(thread_t *) * MAX_THREADS);
-
-    // Create an idle thread.
-    thread_t *idle_thread = _thread_create("idle", INT_MIN);
-    idle_thread->stack = malloc(64);
-    idle_thread->context = _irq_new_state(_idle_thread, 0, idle_thread->stack + 64);
-    idle_thread->state = THREAD_STATE_RUNNING;
 }
 
 void _thread_free()

@@ -46,6 +46,7 @@ void _irq_free_state(irq_state_t *state);
 irq_state_t *_syscall_trapa(irq_state_t *state, unsigned int which);
 irq_state_t *_syscall_timer(irq_state_t *state, int timer);
 
+void _thread_create_idle();
 void _thread_register_main(irq_state_t *state);
 uint64_t _profile_get_current(uint32_t adjustments);
 

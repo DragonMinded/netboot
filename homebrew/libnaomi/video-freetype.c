@@ -610,7 +610,7 @@ int video_draw_text(int x, int y, font_t *fontface, uint32_t color, const char *
 {
     if (msg)
     {
-        static char buffer[2048];
+        char buffer[2048];
         va_list args;
         va_start(args, msg);
         int length = vsnprintf(buffer, 2047, msg, args);
@@ -656,7 +656,7 @@ font_metrics_t video_get_text_metrics(font_t *fontface, const char * const msg, 
 {
     if (msg)
     {
-        static char buffer[2048];
+        char buffer[2048];
         va_list args;
         va_start(args, msg);
         int length = vsnprintf(buffer, 2047, msg, args);

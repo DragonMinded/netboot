@@ -5,6 +5,7 @@
 #include "naomi/console.h"
 #include "naomi/system.h"
 #include "naomi/video.h"
+#include "naomi/interrupt.h"
 
 static char *render_buffer = 0;
 static unsigned int console_width = 0;
@@ -20,9 +21,12 @@ static unsigned int console_visible = 0;
 
 static int __console_write( const char * const buf, unsigned int len )
 {
+    uint32_t old_interrupts = irq_disable();
+
     if (!render_buffer || !console_width || !console_height)
     {
         // The console is not initialized.
+        irq_restore(old_interrupts);
         return len;
     }
 
@@ -75,6 +79,7 @@ static int __console_write( const char * const buf, unsigned int len )
     render_buffer[pos] = 0;
 
     /* Always write all */
+    irq_restore(old_interrupts);
     return len;
 }
 
@@ -149,22 +154,25 @@ void console_set_visible(unsigned int visibility)
 
 char * console_save()
 {
+    uint32_t old_interrupts = irq_disable();
+    char *location = 0;
     if (render_buffer)
     {
         // Return where we are in the console, so it can be restored later.
-        return render_buffer + strlen(render_buffer);
+        location = render_buffer + strlen(render_buffer);
     }
-    else
-    {
-        return 0;
-    }
+
+    irq_restore(old_interrupts);
+    return location;
 }
 
 void console_restore(char *location)
 {
+    uint32_t old_interrupts = irq_disable();
     if (render_buffer && location >= render_buffer && location < (render_buffer + (console_width * console_height)))
     {
         // If the pointer is within our console, cap the console off at that location.
         location[0] = 0;
     }
+    irq_restore(old_interrupts);
 }
