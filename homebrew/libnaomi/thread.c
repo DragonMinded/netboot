@@ -63,6 +63,11 @@ typedef struct
     int priority;
     int state;
 
+    // Thread statistics.
+    uint64_t running_time;
+    uint32_t running_time_recent;
+    float cpu_percentage;
+
     // Any resources this thread is waiting on.
     semaphore_internal_t * waiting_semaphore;
     uint32_t waiting_thread;
@@ -75,6 +80,10 @@ typedef struct
     void *retval;
 } thread_t;
 
+// Calculate stats every second.
+#define STATS_DENOMINATOR 1000000
+
+static uint64_t running_time_denominator = 0;
 static uint64_t current_profile = 0;
 static thread_t *threads[MAX_THREADS];
 
@@ -366,6 +375,7 @@ void _thread_init()
     semaphore_counter = 1;
     mutex_counter = 1;
     current_profile = 0;
+    running_time_denominator = 0;
     memset(global_counters, 0, sizeof(uint32_t *) * MAX_GLOBAL_COUNTERS);
     memset(semaphores, 0, sizeof(semaphore_internal_t *) * MAX_SEM_AND_MUTEX);
     memset(threads, 0, sizeof(thread_t *) * MAX_THREADS);
@@ -524,7 +534,7 @@ uint32_t _thread_time_elapsed()
     }
 }
 
-void _thread_wake_waiting_timer()
+uint32_t _thread_wake_waiting_timer()
 {
     // Calculate the time since we did our last adjustments.
     uint64_t new_profile = _profile_get_current(0);
@@ -538,7 +548,7 @@ void _thread_wake_waiting_timer()
     if (time_elapsed == 0)
     {
         // Nothing to do here!
-        return;
+        return 0;
     }
 
     for (unsigned int i = 0; i < MAX_THREADS; i++)
@@ -574,6 +584,64 @@ void _thread_wake_waiting_timer()
             threads[i]->waiting_timer -= time_elapsed;
         }
     }
+
+    return time_elapsed;
+}
+
+void _thread_calc_stats(irq_state_t *current, uint32_t elapsed)
+{
+    if (elapsed == 0)
+    {
+        // Nothing to calculate?
+        return;
+    }
+
+    if (!current)
+    {
+        // Should never happen.
+        _irq_display_invariant("stats failure", "current irq state is NULL");
+    }
+
+    thread_t *current_thread = _thread_find_by_context(current);
+
+    if (current_thread == 0)
+    {
+        // Should never happen.
+        _irq_display_invariant("stats failure", "cannot locate current thread");
+    }
+
+    // First, make sure we know the total running time.
+    running_time_denominator += elapsed;
+
+    // Now, go through and find all running threads and see if its time to calculate
+    // percentages.
+    for (unsigned int i = 0; i < MAX_THREADS; i++)
+    {
+        if (threads[i] == 0)
+        {
+            // Not a real thread.
+            continue;
+        }
+
+        if (threads[i] == current_thread && threads[i]->state == THREAD_STATE_RUNNING)
+        {
+            // We spent the last elapsed ns on this thread.
+            threads[i]->running_time += elapsed;
+            threads[i]->running_time_recent += elapsed;
+        }
+
+        if (running_time_denominator >= STATS_DENOMINATOR)
+        {
+            // Calculate CPU percentage based on recent running time.
+            threads[i]->cpu_percentage = (float)threads[i]->running_time_recent / (float)running_time_denominator;
+            threads[i]->running_time_recent = 0;
+        }
+    }
+
+    if (running_time_denominator >= STATS_DENOMINATOR)
+    {
+        running_time_denominator = 0;
+    }
 }
 
 irq_state_t *_syscall_timer(irq_state_t *current, int timer)
@@ -581,7 +649,8 @@ irq_state_t *_syscall_timer(irq_state_t *current, int timer)
     if (timer < 0)
     {
         // Periodic preemption timer.
-        _thread_wake_waiting_timer();
+        uint32_t elapsed = _thread_wake_waiting_timer();
+        _thread_calc_stats(current, elapsed);
         return _thread_schedule(current, THREAD_SCHEDULE_ANY);
     }
     else
@@ -865,7 +934,8 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
         }
     }
 
-    _thread_wake_waiting_timer();
+    uint32_t elapsed = _thread_wake_waiting_timer();
+    _thread_calc_stats(current, elapsed);
     return _thread_schedule(current, schedule);
 }
 
@@ -1245,8 +1315,15 @@ thread_info_t thread_info(uint32_t tid)
     thread_t *thread = _thread_find_by_id(tid);
     if (thread)
     {
+        // Basic stats
         memcpy(info.name, thread->name, 64);
         info.priority = thread->priority;
+        if (info.priority >= (INVERSION_AMOUNT + MIN_PRIORITY) && info.priority <= (INVERSION_AMOUNT + MAX_PRIORITY))
+        {
+            info.priority -= INVERSION_AMOUNT;
+        }
+
+        // Calculate whether it is alive or not.
         if (thread->state == THREAD_STATE_STOPPED || thread->state == THREAD_STATE_RUNNING || thread->state == THREAD_STATE_WAITING)
         {
             info.alive = 1;
@@ -1256,6 +1333,10 @@ thread_info_t thread_info(uint32_t tid)
             info.alive = 0;
         }
         info.running = thread->state == THREAD_STATE_RUNNING ? 1 : 0;
+
+        // CPU stats.
+        info.running_time = thread->running_time;
+        info.cpu_percentage = thread->cpu_percentage;
     }
 
     irq_restore(old_interrupts);

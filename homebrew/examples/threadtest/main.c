@@ -4,6 +4,7 @@
 #include "naomi/video.h"
 #include "naomi/eeprom.h"
 #include "naomi/thread.h"
+#include "naomi/interrupt.h"
 #include "naomi/timer.h"
 #include "naomi/rtc.h"
 
@@ -16,7 +17,7 @@ void *thread1(void *param)
     {
         uint32_t id = thread_id();
         thread_info_t info = thread_info(id);
-        sprintf(buf, "Thread ID: %ld, Thread Name: %s\nCounter: %ld", id, info.name, counter);
+        ATOMIC(sprintf(buf, "Thread ID: %ld, Thread Name: %s, CPU: %.02f percent\nCounter: %ld", id, info.name, info.cpu_percentage * 100.0, counter));
         counter += 1;
     }
 
@@ -32,7 +33,7 @@ void *thread2(void *param)
     {
         uint32_t id = thread_id();
         thread_info_t info = thread_info(id);
-        sprintf(buf, "Thread ID: %ld, Thread Name: %s\nCounter: %ld", id, info.name, counter);
+        ATOMIC(sprintf(buf, "Thread ID: %ld, Thread Name: %s, CPU: %.02f percent\nCounter: %ld", id, info.name, info.cpu_percentage * 100.0, counter));
         counter += 2;
     }
 
@@ -48,7 +49,7 @@ void *thread3(void *param)
     {
         uint32_t id = thread_id();
         thread_info_t info = thread_info(id);
-        sprintf(buf, "Thread ID: %ld, Thread Name: %s\nCounter: %ld", id, info.name, counter);
+        ATOMIC(sprintf(buf, "Thread ID: %ld, Thread Name: %s, CPU: %.02f percent\nCounter: %ld", id, info.name, info.cpu_percentage * 100.0, counter));
         counter += 3;
     }
 
@@ -64,7 +65,7 @@ void *thread4(void *param)
     {
         uint32_t id = thread_id();
         thread_info_t info = thread_info(id);
-        sprintf(buf, "Thread ID: %ld, Thread Name: %s\nCounter: %ld", id, info.name, counter);
+        ATOMIC(sprintf(buf, "Thread ID: %ld, Thread Name: %s, CPU: %.02f percent\nCounter: %ld", id, info.name, info.cpu_percentage * 100.0, counter));
         counter += 4;
     }
 
@@ -80,7 +81,7 @@ void *thread5(void *param)
     {
         uint32_t id = thread_id();
         thread_info_t info = thread_info(id);
-        sprintf(buf, "Thread ID: %ld, Thread Name: %s\nCounter: %ld\nRTC: %lu", id, info.name, counter, rtc_get());
+        ATOMIC(sprintf(buf, "Thread ID: %ld, Thread Name: %s, CPU: %.02f percent\nCounter: %ld\nRTC: %lu", id, info.name, info.cpu_percentage * 100.0, counter, rtc_get()));
 
         timer_wait(500000);
         counter ++;
@@ -98,7 +99,7 @@ void *thread6(void *param)
     {
         uint32_t id = thread_id();
         thread_info_t info = thread_info(id);
-        sprintf(buf, "Thread ID: %ld, Thread Name: %s\nCounter: %ld\nRTC: %lu", id, info.name, counter, rtc_get());
+        ATOMIC(sprintf(buf, "Thread ID: %ld, Thread Name: %s, CPU: %.02f percent\nCounter: %ld\nRTC: %lu", id, info.name, info.cpu_percentage * 100.0, counter, rtc_get()));
 
         thread_sleep(500000);
         counter ++;
@@ -143,7 +144,7 @@ void main()
         // Display our own threading info.
         uint32_t id = thread_id();
         thread_info_t info = thread_info(id);
-        sprintf(tbuf[0], "Thread ID: %ld, Thread Name: %s\nFrame number: %ld", id, info.name, frame_counter++);
+        sprintf(tbuf[0], "Thread ID: %ld, Thread Name: %s, CPU: %.02f percent\nFrame Counter: %ld", id, info.name, info.cpu_percentage * 100.0, frame_counter);
 
         // Go through and display all 5 buffers.
         for (unsigned int i = 0; i < (sizeof(tbuf) / sizeof(tbuf[0])); i++)

@@ -14,6 +14,14 @@ uint32_t irq_disable();
 // Restore interrupts, after calling irq_disable().
 void irq_restore(uint32_t oldstate);
 
+// Run an enclosed statement atomically.
+#define ATOMIC(stmt) \
+do { \
+    uint32_t old_ints = irq_disable(); \
+    stmt; \
+    irq_restore(old_ints); \
+} while( 0 )
+
 // Statistics about interrupts on the system.
 typedef struct
 {

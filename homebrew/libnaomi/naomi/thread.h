@@ -67,10 +67,23 @@ void mutex_free(mutex_t *mutex);
 
 typedef struct
 {
+    // The name of the thread, as given to thread_create().
     char name[64];
+
+    // The priority of the thread, within MIN_PRIORITY and MAX_PRIORITY.
     int priority;
+
+    // Nonzero if the thread is alive (not finished or a zombie).
     int alive;
+
+    // Nonzero if the thread is actively running (not stopped, waiting, finished or a zombie).
     int running;
+
+    // The number of nanoseconds that this thread has occupied the CPU.
+    uint64_t running_time;
+
+    // The percentage of CPU this thread has consumed recently, between 0 and 1 inclusive.
+    float cpu_percentage;
 } thread_info_t;
 
 // Create or destroy a thread object. Threads start in the stopped state and should only
