@@ -4,6 +4,7 @@
 #include <string.h>
 #include "naomi/video.h"
 #include "naomi/maple.h"
+#include "naomi/system.h"
 #include "common.h"
 #include "config.h"
 #include "screens.h"
@@ -1782,10 +1783,10 @@ unsigned int comm_error(state_t *state, int reinit)
 
 unsigned int configuration(state_t *state, int reinit)
 {
-    static uint32_t options[7];
-    static uint32_t maximums[7];
-    static uint32_t lockable[7];
-    static uint32_t disabled[7];
+    static uint32_t options[9];
+    static uint32_t maximums[9];
+    static uint32_t lockable[9];
+    static uint32_t disabled[9];
     static unsigned int cursor = 0;
     static unsigned int top = 0;
     static unsigned int maxoptions = 0;
@@ -1830,12 +1831,20 @@ unsigned int configuration(state_t *state, int reinit)
         // Dummy options for save and exit.
         options[((sizeof(options) / sizeof(options[0])) - 1)] = 0;
         options[((sizeof(options) / sizeof(options[0])) - 2)] = 0;
+        options[((sizeof(options) / sizeof(options[0])) - 3)] = 0;
+        options[((sizeof(options) / sizeof(options[0])) - 4)] = 0;
         maximums[((sizeof(options) / sizeof(options[0])) - 1)] = 0;
         maximums[((sizeof(options) / sizeof(options[0])) - 2)] = 0;
+        maximums[((sizeof(options) / sizeof(options[0])) - 3)] = 0;
+        maximums[((sizeof(options) / sizeof(options[0])) - 4)] = 0;
         lockable[((sizeof(options) / sizeof(options[0])) - 1)] = 0;
         lockable[((sizeof(options) / sizeof(options[0])) - 2)] = 0;
+        lockable[((sizeof(options) / sizeof(options[0])) - 3)] = 0;
+        lockable[((sizeof(options) / sizeof(options[0])) - 4)] = 0;
         disabled[((sizeof(options) / sizeof(options[0])) - 1)] = 0;
-        disabled[((sizeof(options) / sizeof(options[0])) - 2)] = 0;
+        disabled[((sizeof(options) / sizeof(options[0])) - 2)] = 1;
+        disabled[((sizeof(options) / sizeof(options[0])) - 3)] = 0;
+        disabled[((sizeof(options) / sizeof(options[0])) - 4)] = 0;
 
         // Calibration special case.
         joy1_hcenter = state->config->joy1_hcenter;
@@ -1878,12 +1887,7 @@ unsigned int configuration(state_t *state, int reinit)
     if (controls.test_pressed)
     {
         // Test cycles as a safeguard.
-        if (cursor == ((sizeof(options) / sizeof(options[0])) - 1))
-        {
-            // Exit without save.
-            new_screen = SCREEN_MAIN_MENU;
-        }
-        else if (cursor == ((sizeof(options) / sizeof(options[0])) - 2))
+        if (cursor == ((sizeof(options) / sizeof(options[0])) - 4))
         {
             // Exit with save.
             new_screen = SCREEN_MAIN_MENU;
@@ -1909,6 +1913,20 @@ unsigned int configuration(state_t *state, int reinit)
             // Send back to PC.
             message_send(MESSAGE_SAVE_CONFIG, state->config, 64);
             new_screen = SCREEN_CONFIGURATION_SAVE;
+        }
+        else if (cursor == ((sizeof(options) / sizeof(options[0])) - 3))
+        {
+            // Exit without save.
+            new_screen = SCREEN_MAIN_MENU;
+        }
+        else if (cursor == ((sizeof(options) / sizeof(options[0])) - 2))
+        {
+            // Blank option, shouldn't get here.
+        }
+        else if (cursor == ((sizeof(options) / sizeof(options[0])) - 1))
+        {
+            // Bail out of our program, go to system test.
+            enter_test_mode();
         }
         else if (!disabled[cursor])
         {
@@ -1941,12 +1959,7 @@ unsigned int configuration(state_t *state, int reinit)
     }
     else if (controls.start_pressed)
     {
-        if (cursor == ((sizeof(options) / sizeof(options[0])) - 1))
-        {
-            // Exit without save.
-            new_screen = SCREEN_MAIN_MENU;
-        }
-        else if (cursor == ((sizeof(options) / sizeof(options[0])) - 2))
+        if (cursor == ((sizeof(options) / sizeof(options[0])) - 4))
         {
             // Exit with save.
             new_screen = SCREEN_MAIN_MENU;
@@ -1972,6 +1985,20 @@ unsigned int configuration(state_t *state, int reinit)
             // Send back to PC.
             message_send(MESSAGE_SAVE_CONFIG, state->config, 64);
             new_screen = SCREEN_CONFIGURATION_SAVE;
+        }
+        else if (cursor == ((sizeof(options) / sizeof(options[0])) - 3))
+        {
+            // Exit without save.
+            new_screen = SCREEN_MAIN_MENU;
+        }
+        else if (cursor == ((sizeof(options) / sizeof(options[0])) - 2))
+        {
+            // Blank option, shouldn't get here.
+        }
+        else if (cursor == ((sizeof(options) / sizeof(options[0])) - 1))
+        {
+            // Bail out of our program, go to system test.
+            enter_test_mode();
         }
         else if (!disabled[cursor])
         {
@@ -2127,20 +2154,20 @@ unsigned int configuration(state_t *state, int reinit)
                 case 0:
                 {
                     // Enable analog
-                    sprintf(buffer, "Analog controls: %s", options[option] ? "enabled" : "disabled");
+                    sprintf(buffer, "analog controls: %s", options[option] ? "enabled" : "disabled");
                     break;
                 }
                 case 1:
                 {
                     // System region
                     char *regions[4] = {"japan", "usa", "export", "korea"};
-                    sprintf(buffer, "Naomi region: %s*", regions[options[option]]);
+                    sprintf(buffer, "naomi region: %s*", regions[options[option]]);
                     break;
                 }
                 case 2:
                 {
                     // Filename display
-                    sprintf(buffer, "Game name display: %s*", options[option] ? "from filename" : "from ROM");
+                    sprintf(buffer, "game name display: %s*", options[option] ? "from filename" : "from ROM");
                     break;
                 }
                 case 3:
@@ -2161,7 +2188,7 @@ unsigned int configuration(state_t *state, int reinit)
                     }
                     else
                     {
-                        strcpy(buffer, "Player 1 analog calibration");
+                        strcpy(buffer, "player 1 analog calibration");
                     }
                     break;
                 }
@@ -2183,20 +2210,32 @@ unsigned int configuration(state_t *state, int reinit)
                     }
                     else
                     {
-                        strcpy(buffer, "Player 2 analog calibration");
+                        strcpy(buffer, "player 2 analog calibration");
                     }
+                    break;
+                }
+                case ((sizeof(options) / sizeof(options[0])) - 4):
+                {
+                    // Save and exit display.
+                    strcpy(buffer, "save and go back to main menu");
+                    break;
+                }
+                case ((sizeof(options) / sizeof(options[0])) - 3):
+                {
+                    // Exit without saving.
+                    strcpy(buffer, "go back to main menu without saving");
                     break;
                 }
                 case ((sizeof(options) / sizeof(options[0])) - 2):
                 {
-                    // Save and exit display
-                    strcpy(buffer, "Save and exit");
+                    // Empty.
+                    strcpy(buffer, "");
                     break;
                 }
                 case ((sizeof(options) / sizeof(options[0])) - 1):
                 {
-                    // Save and exit display
-                    strcpy(buffer, "Exit without save");
+                    // Go to system test menu.
+                    strcpy(buffer, "enter system test menu");
                     break;
                 }
                 default:

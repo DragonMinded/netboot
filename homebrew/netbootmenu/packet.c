@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "naomi/dimmcomms.h"
+#include "naomi/interrupt.h"
 #include "common.h"
 #include "packet.h"
 
@@ -33,6 +34,7 @@ void poke_memory(unsigned int address, int size, uint32_t data);
 void packetlib_init()
 {
     // Initialize packet library.
+    uint32_t old_interrupts = irq_disable();
     for (int i = 0; i < MAX_OUTSTANDING_PACKETS; i++) {
         packetlib_state.pending_packets[i] = 0;
         packetlib_state.received_packets[i] = 0;
@@ -49,11 +51,13 @@ void packetlib_init()
 
     // Attach our handlers for sending/receiving data.
     dimm_comms_attach_hooks(&peek_memory, &poke_memory);
+    irq_restore(old_interrupts);
 }
 
 void packetlib_free()
 {
     // No more receiving messages.
+    uint32_t old_interrupts = irq_disable();
     dimm_comms_detach_hooks();
 
     // Free any outstanding packets.
@@ -67,12 +71,15 @@ void packetlib_free()
             packetlib_state.received_packets[i] = 0;
         }
     }
+
+    irq_restore(old_interrupts);
 }
 
 packetlib_stats_t packetlib_stats()
 {
     packetlib_stats_t stats;
 
+    uint32_t old_interrupts = irq_disable();
     stats.packets_sent = packetlib_state.success_sent;
     stats.packets_received = packetlib_state.success_received;
     stats.packets_cancelled = packetlib_state.cancelled_packets;
@@ -89,6 +96,8 @@ packetlib_stats_t packetlib_stats()
     }
     stats.send_in_progress = packetlib_state.pending_send_size > 0 ? 1 : 0;
     stats.receive_in_progress = packetlib_state.pending_recv_size > 0 ? 1 : 0;
+    irq_restore(old_interrupts);
+
     return stats;
 }
 
@@ -99,6 +108,9 @@ int packetlib_send(void *data, unsigned int length)
         return -1;
     }
 
+    uint32_t old_interrupts = irq_disable();
+    int retval = -2;
+
     for (int i = 0; i < MAX_OUTSTANDING_PACKETS; i ++)
     {
         if (packetlib_state.pending_packets[i] == 0)
@@ -106,15 +118,20 @@ int packetlib_send(void *data, unsigned int length)
             packetlib_state.pending_packets[i] = (packet_t *)malloc(sizeof(packet_t));
             memcpy(packetlib_state.pending_packets[i]->data, data, length);
             packetlib_state.pending_packets[i]->len = length;
-            return 0;
+            retval = 0;
+            break;
         }
     }
 
-    return -2;
+    irq_restore(old_interrupts);
+    return retval;
 }
 
 int packetlib_recv(void *data, unsigned int *length)
 {
+    uint32_t old_interrupts = irq_disable();
+    int retval = -1;
+
     for (int i = 0; i < MAX_OUTSTANDING_PACKETS; i ++)
     {
         if (packetlib_state.received_packets[i] != 0)
@@ -128,35 +145,45 @@ int packetlib_recv(void *data, unsigned int *length)
             packetlib_state.received_packets[i] = 0;
 
             // Success!
-            return 0;
+            retval = 0;
+            break;
         }
     }
 
-    return -1;
+    irq_restore(old_interrupts);
+    return retval;
 }
 
 void *packetlib_peek(int packetno, unsigned int *length)
 {
+    void *data;
+
+    uint32_t old_interrupts = irq_disable();
     if (packetlib_state.received_packets[packetno] != 0)
     {
         *length = packetlib_state.received_packets[packetno]->len;
-        return packetlib_state.received_packets[packetno]->data;
+        data = packetlib_state.received_packets[packetno]->data;
     }
     else
     {
         *length = 0;
-        return 0;
+        data = 0;
     }
+    irq_restore(old_interrupts);
+
+    return data;
 }
 
 void packetlib_discard(int packetno)
 {
+    uint32_t old_interrupts = irq_disable();
     if (packetlib_state.received_packets[packetno] != 0)
     {
         // Free up the packet for later use.
         free(packetlib_state.received_packets[packetno]);
         packetlib_state.received_packets[packetno] = 0;
     }
+    irq_restore(old_interrupts);
 }
 
 uint32_t checksum_add(uint32_t value)
@@ -395,22 +422,32 @@ void write_recv_status(uint32_t status)
 
 void packetlib_write_scratch1(uint32_t data)
 {
+    uint32_t old_interrupts = irq_disable();
     packetlib_state.scratch1 = data;
+    irq_restore(old_interrupts);
 }
 
 void packetlib_write_scratch2(uint32_t data)
 {
+    uint32_t old_interrupts = irq_disable();
     packetlib_state.scratch2 = data;
+    irq_restore(old_interrupts);
 }
 
 uint32_t packetlib_read_scratch1()
 {
-    return packetlib_state.scratch1;
+    uint32_t old_interrupts = irq_disable();
+    uint32_t scratch = packetlib_state.scratch1;
+    irq_restore(old_interrupts);
+    return scratch;
 }
 
 uint32_t packetlib_read_scratch2()
 {
-    return packetlib_state.scratch2;
+    uint32_t old_interrupts = irq_disable();
+    uint32_t scratch = packetlib_state.scratch2;
+    irq_restore(old_interrupts);
+    return scratch;
 }
 
 uint32_t peek_memory(unsigned int address, int size)
@@ -431,11 +468,11 @@ uint32_t peek_memory(unsigned int address, int size)
         }
         else if ((address & 0xFFFFFF) == 0xC0DE40) {
             // Read scratch register 1.
-            return packetlib_read_scratch1();
+            return packetlib_state.scratch1;
         }
         else if ((address & 0xFFFFFF) == 0xC0DE50) {
             // Read scratch register 1.
-            return packetlib_read_scratch2();
+            return packetlib_state.scratch2;
         }
     }
 
@@ -462,11 +499,11 @@ void poke_memory(unsigned int address, int size, uint32_t data)
         }
         else if ((address & 0xFFFFFF) == 0xC0DE40) {
             // Write scratch register 1.
-            packetlib_write_scratch1(data);
+            packetlib_state.scratch1 = data;
         }
         else if ((address & 0xFFFFFF) == 0xC0DE50) {
             // Write scratch register 2.
-            packetlib_write_scratch2(data);
+            packetlib_state.scratch2 = data;
         }
     }
 }
