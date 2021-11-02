@@ -11,7 +11,7 @@ ARTIFACT = ${NAME}.tar.gz
 USES_AUTOCONF = 1
 NO_INSTALL = 1
 
-CONFIGURE_ARGS = --host=sh-elf --enable-static --disable-mmap --with-brotli=no
+CONFIGURE_ARGS = --host=sh-elf --enable-static --disable-mmap --with-brotli=no --with-harfbuzz=no
 
 REQUIRED_LIBS = -lbz2 -lz -lpng16
 
