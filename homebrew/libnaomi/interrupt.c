@@ -8,6 +8,7 @@
 #include "naomi/console.h"
 #include "naomi/thread.h"
 #include "irqstate.h"
+#include "holly.h"
 
 // Saved state of SR and VBR when we initialize interrupts. We will use these
 // to restore SR/VBR when de-initializing again.
@@ -132,6 +133,31 @@ uint32_t _irq_enable();
 uint32_t _irq_read_sr();
 uint32_t _irq_read_vbr();
 
+// Hardware drivers which need init/free after IRQ setup.
+void _dimm_comms_init();
+void _dimm_comms_free();
+void _dimm_command_handler();
+
+uint32_t _holly_interrupt()
+{
+    uint32_t requested = *HOLLY_EXTERNAL_IRQ_STATUS;
+    uint32_t serviced = 0;
+
+    if ((requested & HOLLY_INTERRUPT_DIMM_COMMS) != 0)
+    {
+        _dimm_command_handler();
+        serviced |= HOLLY_INTERRUPT_DIMM_COMMS;
+    }
+
+    uint32_t left = requested & (~serviced);
+    if (left)
+    {
+        _irq_display_invariant("uncaught holly interrupt", "pending irq status %08lx", left);
+    }
+
+    return serviced;
+}
+
 irq_state_t * _irq_external_interrupt(irq_state_t *cur_state)
 {
     stats.last_event = INTEVT;
@@ -154,6 +180,14 @@ irq_state_t * _irq_external_interrupt(irq_state_t *cur_state)
         {
             int ret = _timer_interrupt(2);
             cur_state = _syscall_timer(cur_state, ret);
+            break;
+        }
+        case IRQ_EVENT_HOLLY_LEVEL2:
+        case IRQ_EVENT_HOLLY_LEVEL4:
+        case IRQ_EVENT_HOLLY_LEVEL6:
+        {
+            uint32_t ret = _holly_interrupt();
+            cur_state = _syscall_holly(cur_state, ret);
             break;
         }
         default:
@@ -229,8 +263,8 @@ void _irq_init()
     // Ignore SCIF1 and UDI interrupts.
     INTC_IPRC = 0x0000;
 
-    // Ignore IRL0-IRL3 interrupts.
-    INTC_IPRD = 0x0000;
+    // Allow IRL1-2 interrupts so we can receive interrupts from HOLLY.
+    INTC_IPRD = 0x0FF0;
 
     // Now, enable interrupts for the whole system!
     _irq_enable();
@@ -239,6 +273,9 @@ void _irq_init()
     // if we do it anywhere else the idle thread will get the wrong VBR
     // and SR and the first time we enter it we will freeze forever.
     _thread_create_idle();
+
+    // Now, set up hardware that needs interrupts from HOLLY
+    _dimm_comms_init();
 }
 
 void _irq_free()
@@ -246,6 +283,9 @@ void _irq_free()
     // TODO: This should only ever be called from the main thread. We should
     // verify that the current irq_state is the main thread with the threads
     // module, and if not display an error message to the screen.
+
+    // Tear down hardware that needed interrupts from HOLLY.
+    _dimm_comms_free();
 
     // Restore SR and VBR to their pre-init state.
     __asm__(

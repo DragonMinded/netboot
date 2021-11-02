@@ -2,18 +2,14 @@
 #include <stdint.h>
 #include "naomi/dimmcomms.h"
 #include "naomi/timer.h"
-
-#define USE_INTERRUPT_MODE 0
+#include "naomi/interrupt.h"
+#include "holly.h"
 
 #define NAOMI_DIMM_COMMAND ((volatile uint16_t *)0xA05F703C)
 #define NAOMI_DIMM_OFFSETL ((volatile uint16_t *)0xA05F7040)
 #define NAOMI_DIMM_PARAMETERL ((volatile uint16_t *)0xA05F7044)
 #define NAOMI_DIMM_PARAMETERH ((volatile uint16_t *)0xA05F7048)
 #define NAOMI_DIMM_STATUS ((volatile uint16_t *)0xA05F704C)
-
-#define HOLLY_EXTERNAL_IRQ_STATUS ((volatile uint32_t *)0xA05F6904)
-#define HOLLY_EXTERNAL_IRQ_MASK ((volatile uint32_t *)0xA05F6914)
-#define NAOMI_GD_DMA_START ((volatile int32_t *)0xA05F7418)
 
 #define CONST_NO_DIMM 0xFFFF
 #define CONST_DIMM_HAS_COMMAND 0x8000
@@ -23,26 +19,24 @@
 static peek_call_t global_peek_hook = 0;
 static poke_call_t global_poke_hook = 0;
 
-int check_has_dimm_inserted(int check_gd_dma_first)
+int check_has_dimm_inserted()
 {
-    if ((check_gd_dma_first != 0) && (*NAOMI_GD_DMA_START != 0)) {
-        return 0;
-    }
     if (*NAOMI_DIMM_COMMAND == CONST_NO_DIMM) {
         return -1;
     }
     return 1;
 }
 
-void marshall_dimm_command()
+void _dimm_command_handler()
 {
+    // Keep track of the top 8 bits of the address for peek/poke commands.
     static uint32_t base_address = 0;
 
-    if (*NAOMI_GD_DMA_START == 0) {
-        // Do stuff here
+    if ((*HOLLY_EXTERNAL_IRQ_STATUS & HOLLY_INTERRUPT_DIMM_COMMS) != 0)
+    {
         uint16_t dimm_command = *NAOMI_DIMM_COMMAND;
-
-        if (dimm_command & CONST_DIMM_HAS_COMMAND) {
+        if (dimm_command & CONST_DIMM_HAS_COMMAND)
+        {
             // Get the command ID
             unsigned int dimm_command_id = (dimm_command & CONST_DIMM_COMMAND_MASK) >> 9;
             unsigned short retval = 0;
@@ -209,7 +203,7 @@ void marshall_dimm_command()
 
             do {
                 /* Do a spinloop to wait for external IRQ to clear. */
-            } while ((*HOLLY_EXTERNAL_IRQ_STATUS & 8) != 0);
+            } while ((*HOLLY_EXTERNAL_IRQ_STATUS & HOLLY_INTERRUPT_DIMM_COMMS) != 0);
 
             /* Send interrupt to the DIMM itself saying we have data. */
             *NAOMI_DIMM_STATUS = *NAOMI_DIMM_STATUS & 0xFFFE;
@@ -219,49 +213,52 @@ void marshall_dimm_command()
             *NAOMI_DIMM_STATUS = *NAOMI_DIMM_STATUS | 0x100;
             do {
                 /* Do a spinloop to wait for external IRQ to clear. */
-            } while ((*HOLLY_EXTERNAL_IRQ_STATUS & 8) != 0);
+            } while ((*HOLLY_EXTERNAL_IRQ_STATUS & HOLLY_INTERRUPT_DIMM_COMMS) != 0);
         }
     }
-#if USE_INTERRUPT_MODE
-    else {
-        // Disable external IRQ for Naomi DIMM.
-        *HOLLY_EXTERNAL_IRQ_MASK = *HOLLY_EXTERNAL_IRQ_MASK & 0xfffffff7;
-    }
-#endif
 }
 
-void dimm_comms_poll()
+void _dimm_comms_init()
 {
-    // Copy BIOS DIMM service routine basics.
-    static int dimm_present = 0;
-    static int dimm_init = 0;
+    uint32_t old_interrupts = irq_disable();
 
-    if (dimm_init == 0) {
-        dimm_init = 1;
-        dimm_present = check_has_dimm_inserted(1);
-
-#if USE_INTERRUPT_MODE
-        if ((*HOLLY_EXTERNAL_IRQ_MASK & 8) == 0) {
-            *HOLLY_EXTERNAL_IRQ_MASK = *HOLLY_EXTERNAL_IRQ_MASK | 8;
+    if (check_has_dimm_inserted())
+    {
+        if ((*HOLLY_EXTERNAL_IRQ_2_MASK & HOLLY_INTERRUPT_DIMM_COMMS) == 0)
+        {
+            *HOLLY_EXTERNAL_IRQ_2_MASK = *HOLLY_EXTERNAL_IRQ_2_MASK | HOLLY_INTERRUPT_DIMM_COMMS;
         }
-#endif
     }
 
-    if (dimm_present == 1) {
-        marshall_dimm_command();
+    irq_restore(old_interrupts);
+}
+
+void _dimm_comms_free()
+{
+    uint32_t old_interrupts = irq_disable();
+
+    if ((*HOLLY_EXTERNAL_IRQ_2_MASK & HOLLY_INTERRUPT_DIMM_COMMS) != 0)
+    {
+        *HOLLY_EXTERNAL_IRQ_2_MASK = *HOLLY_EXTERNAL_IRQ_2_MASK & (~HOLLY_INTERRUPT_DIMM_COMMS);
     }
+
+    irq_restore(old_interrupts);
 }
 
 void dimm_comms_attach_hooks(peek_call_t peek_hook, poke_call_t poke_hook)
 {
+    uint32_t old_interrupts = irq_disable();
     global_peek_hook = peek_hook;
     global_poke_hook = poke_hook;
+    irq_restore(old_interrupts);
 }
 
 void dimm_comms_detach_hooks()
 {
+    uint32_t old_interrupts = irq_disable();
     global_peek_hook = 0;
     global_poke_hook = 0;
+    irq_restore(old_interrupts);
 }
 
 // These are hooks that implement peek/poke as actual memory address handlers.
@@ -300,6 +297,8 @@ void __address_poke_memory(unsigned int address, int size, uint32_t data)
 
 void dimm_comms_attach_default_hooks()
 {
+    uint32_t old_interrupts = irq_disable();
     global_peek_hook = &__address_peek_memory;
     global_poke_hook = &__address_poke_memory;
+    irq_restore(old_interrupts);
 }

@@ -54,9 +54,9 @@ void video_init_simple();
 // call.
 void video_free();
 
-// Wait for an appropriate time to swap buffers and then do so. Also polls
-// for dimm communications. Also fills the next screen's background with a
-// previously set background color if a background color was set.
+// Wait for an appropriate time to swap buffers and then do so. Also fills
+// the next screen's background with a previously set background color if
+// a background color was set, while waiting for vblank to happen.
 void video_display_on_vblank();
 
 // Request that every frame be cleared to this color (use rgb() or

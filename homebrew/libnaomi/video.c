@@ -50,11 +50,6 @@ void video_display_on_vblank()
     // Draw any registered console to the screen.
     console_render();
 
-    // Poll for dimm communications during wait for vblank, since this is
-    // a convenient place to put this. It probably should go int an interrupt
-    // handler or something, but for now this is how it works.
-    dimm_comms_poll();
-
     // Handle filling the background of the other screen while we wait.
     if (global_background_set) {
         global_background_fill_start = ((VRAM_BASE + global_buffer_offset[buffer_loc ? 0 : 1]) | 0xA0000000);

@@ -4,7 +4,6 @@
 #include <stdint.h>
 #include "naomi/video.h"
 #include "naomi/maple.h"
-#include "naomi/dimmcomms.h"
 #include "naomi/timer.h"
 
 void main()
@@ -98,13 +97,7 @@ void main()
 
     video_display_on_vblank();
 
-    while ( 1 )
-    {
-        // TODO: Don't display anything, but make this example rebootable.
-        // This should go away as soon as we have interrupt-driven dimm comms.
-        dimm_comms_poll();
-        timer_wait(1000000 / 60);
-    }
+    while ( 1 ) { ; }
 }
 
 void test()

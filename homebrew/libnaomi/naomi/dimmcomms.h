@@ -10,12 +10,6 @@ extern "C" {
 typedef uint32_t (*peek_call_t)(unsigned int address, int size);
 typedef void (*poke_call_t)(unsigned int address, int size, uint32_t data);
 
-// The following API is if you wish to manually poll for dimm
-// communication events. It is done for you automatically inside
-// the VBLANK handler. However, if you wish to poll for your own
-// events this can be used as well.
-void dimm_comms_poll();
-
 // If you want to handle peek and poke events in your code, you
 // can register handlers for such events. Normally, the Naomi
 // BIOS would handle peek and poke by actually reading/writing

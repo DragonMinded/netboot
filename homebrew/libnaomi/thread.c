@@ -659,6 +659,12 @@ irq_state_t *_syscall_timer(irq_state_t *current, int timer)
     }
 }
 
+irq_state_t *_syscall_holly(irq_state_t *current, uint32_t irq_mask)
+{
+    // TODO: Wake up various threads based on HOLLY interrupts here.
+    return current;
+}
+
 irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
 {
     int schedule = THREAD_SCHEDULE_CURRENT;
