@@ -625,7 +625,7 @@ void _thread_calc_stats(irq_state_t *current, uint32_t elapsed)
 
         if (threads[i] == current_thread && threads[i]->state == THREAD_STATE_RUNNING)
         {
-            // We spent the last elapsed ns on this thread.
+            // We spent the last elapsed us on this thread.
             threads[i]->running_time += elapsed;
             threads[i]->running_time_recent += elapsed;
         }
@@ -918,7 +918,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
             thread_t *thread = _thread_find_by_context(current);
             if (thread)
             {
-                // Put the thread to sleep, waiting for the number of ns requested.
+                // Put the thread to sleep, waiting for the number of us requested.
                 // Adjust that number based on how close to the periodic interrupt
                 // we are, since when it fires it will not necessarily have lasted
                 // the right amount of time for this particular timer.
@@ -1376,8 +1376,8 @@ void thread_exit(void *retval)
     asm("trapa #9" : : "r" (syscall_param0));
 }
 
-void thread_sleep(uint32_t ns)
+void thread_sleep(uint32_t us)
 {
-    register uint32_t syscall_param0 asm("r4") = ns;
+    register uint32_t syscall_param0 asm("r4") = us;
     asm("trapa #12" : : "r" (syscall_param0));
 }

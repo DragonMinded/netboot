@@ -79,7 +79,7 @@ typedef struct
     // Nonzero if the thread is actively running (not stopped, waiting, finished or a zombie).
     int running;
 
-    // The number of nanoseconds that this thread has occupied the CPU.
+    // The number of microseconds that this thread has occupied the CPU.
     uint64_t running_time;
 
     // The percentage of CPU this thread has consumed recently, between 0 and 1 inclusive.
@@ -109,8 +109,8 @@ void thread_stop(uint32_t tid);
 // Yield to the thread scheduler, which can choose a new thread to schedule.
 void thread_yield();
 
-// Sleep the thread until at least the specified number of nanoseconds has elapsed.
-void thread_sleep(uint32_t ns);
+// Sleep the thread until at least the specified number of microseconds has elapsed.
+void thread_sleep(uint32_t us);
 
 // Exit a thread early, returning return value. Identical to letting control reach the end
 // of the thread function with a return statement.

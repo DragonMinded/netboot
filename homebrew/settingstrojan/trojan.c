@@ -213,10 +213,10 @@ void main()
         video_display_on_vblank();
 
         // Wait some seconds to display debugging.
-        for (int i = 0; i < 60 * (VERBOSE_DEBUG_MODE ? WAIT_TIME_DEBUG : WAIT_TIME_NORMAL); i++) {
-            // TODO: This should really be a single timer wait call once we fix that interface.
-            timer_wait(1000000 / 60);
-        }
+        timer_wait(1000000 * (VERBOSE_DEBUG_MODE ? WAIT_TIME_DEBUG : WAIT_TIME_NORMAL));
+
+        video_fill_screen(rgb(0, 0, 0));
+        video_display_on_vblank();
     }
 
     // Boot original code.

@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#define NANOSECONDS_IN_ONE_SECOND 1000000
+#define MICROSECONDS_IN_ONE_SECOND 1000000
 #define PREEMPTION_HZ 1000
 
 // Should match up with save and restore code in sh-crt0.s.

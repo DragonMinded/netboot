@@ -128,7 +128,7 @@ void _preempt_init()
     preempt_timer = _timer_available();
     if (preempt_timer >= 0 && preempt_timer < MAX_HW_TIMERS)
     {
-        _timer_start(preempt_timer, NANOSECONDS_IN_ONE_SECOND / PREEMPTION_HZ, _preempt_cb);
+        _timer_start(preempt_timer, MICROSECONDS_IN_ONE_SECOND / PREEMPTION_HZ, _preempt_cb);
     }
 
     // Enable interrupts again now that we're done.
@@ -287,7 +287,7 @@ int _timer_available()
 
 // Maximum number of microseconds a timer can be set to before an interrupt
 // occurs to reset it. Higher numbers equal fewer interrupts but less accuracy.
-#define MAX_PROFILE_MICROSECONDS NANOSECONDS_IN_ONE_SECOND
+#define MAX_PROFILE_MICROSECONDS MICROSECONDS_IN_ONE_SECOND
 
 static uint64_t profile_timers[MAX_PROFILERS];
 static uint64_t profile_current;
@@ -391,7 +391,7 @@ void timer_wait(uint32_t microseconds)
     int timer = profile_timer;
     irq_restore(old_interrupts);
 
-    // Now, wait until the profile timer has passed our elapsed nanoseconds.
+    // Now, wait until the profile timer has passed our elapsed microseconds.
     if (timer >= 0 && timer < MAX_HW_TIMERS)
     {
         // We base this busyloop wait on the profile timer.
