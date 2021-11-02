@@ -1,12 +1,16 @@
 #include <string.h>
+#include "naomi/timer.h"
 #include "naomi/maple.h"
 #include "common.h"
 #include "config.h"
 #include "controls.h"
 
-unsigned int repeat(unsigned int cur_state, int *repeat_count, double fps)
+#define REPEAT_INITIAL_DELAY 500000
+#define REPEAT_SUBSEQUENT_DELAY 50000
+
+unsigned int repeat(unsigned int cur_state, int *repeat_count)
 {
-    // Based on 60fps. A held button will "repeat" itself ~16x a second
+    // A held button will "repeat" itself 20x a second
     // after a 0.5 second hold delay.
     if (*repeat_count < 0)
     {
@@ -18,23 +22,21 @@ unsigned int repeat(unsigned int cur_state, int *repeat_count, double fps)
     if (cur_state == 0)
     {
         // Button isn't held, no repeats.
-        *repeat_count = 0;
+        timer_stop(*repeat_count);
+        *repeat_count = -1;
         return 0;
     }
 
-    // Calculate repeat values based on current FPS.
-    int count = *repeat_count;
-    *repeat_count = count + 1;
-
-    int thresh = (int)(30.0 * (fps / 60.0));
-    int repeat = thresh / 5;
-
-    if (count >= thresh)
+    if (timer_left(*repeat_count) == 0)
     {
-        // Repeat every 1/16 second after 0.5 second.
-        return (count % repeat) ? 0 : 1;
+        // We should restart this timer with a shorter delay
+        // because we're in a repeat zone.
+        timer_stop(*repeat_count);
+        *repeat_count = timer_start(REPEAT_SUBSEQUENT_DELAY);
+        return 1;
     }
 
+    // Not currently being repeated.
     return 0;
 }
 
@@ -45,11 +47,15 @@ void repeat_init(unsigned int pushed_state, int *repeat_count)
         // Haven't pushed the button yet.
         return;
     }
-    if (*repeat_count < 0)
+
+    // Clear out old timer if needed.
+    if (*repeat_count >= 0)
     {
-        // Mark that we've seen this button pressed.
-        *repeat_count = 0;
+        timer_stop(*repeat_count);
     }
+
+    // Set up a half-second timer for our first repeat.
+    *repeat_count = timer_start(REPEAT_INITIAL_DELAY);
 }
 
 #define ANALOG_DEAD_ZONE 8
@@ -292,11 +298,11 @@ controls_t get_controls(state_t *state, int reinit)
                 repeat_init(pressed.player1.down, &repeats[2]);
                 repeat_init(pressed.player2.down, &repeats[3]);
             }
-            if (repeat(held.player1.up, &repeats[0], state->fps) || (state->settings->system.players >= 2 && repeat(held.player2.up, &repeats[1], state->fps)))
+            if (repeat(held.player1.up, &repeats[0]) || (state->settings->system.players >= 2 && repeat(held.player2.up, &repeats[1])))
             {
                 controls.up_pressed = 1;
             }
-            else if (repeat(held.player1.down, &repeats[2], state->fps) || (state->settings->system.players >= 2 && repeat(held.player2.down, &repeats[3], state->fps)))
+            else if (repeat(held.player1.down, &repeats[2]) || (state->settings->system.players >= 2 && repeat(held.player2.down, &repeats[3])))
             {
                 controls.down_pressed = 1;
             }
@@ -314,11 +320,11 @@ controls_t get_controls(state_t *state, int reinit)
                 repeat_init(pressed.player1.right, &repeats[6]);
                 repeat_init(pressed.player2.right, &repeats[7]);
             }
-            if (repeat(held.player1.left, &repeats[4], state->fps) || (state->settings->system.players >= 2 && repeat(held.player2.left, &repeats[5], state->fps)))
+            if (repeat(held.player1.left, &repeats[4]) || (state->settings->system.players >= 2 && repeat(held.player2.left, &repeats[5])))
             {
                 controls.left_pressed = 1;
             }
-            else if (repeat(held.player1.right, &repeats[6], state->fps) || (state->settings->system.players >= 2 && repeat(held.player2.right, &repeats[7], state->fps)))
+            else if (repeat(held.player1.right, &repeats[6]) || (state->settings->system.players >= 2 && repeat(held.player2.right, &repeats[7])))
             {
                 controls.right_pressed = 1;
             }
