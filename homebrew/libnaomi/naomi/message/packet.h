@@ -28,20 +28,45 @@ typedef struct
     unsigned int receive_in_progress;
 } packetlib_stats_t;
 
+// Initialize or free the packetlib library. Note that this will
+// install a DIMM communication hook, so be sure that you aren't
+// using any other DIMM communication callbacks.
 void packetlib_init();
 void packetlib_free();
 
+// Send a single packet with at least 1 byte of data and at most
+// MAX_PACKET_LENGTH bytes of data. Returns 0 on success or a negative
+// number indicating failure.
 int packetlib_send(void *data, unsigned int length);
+
+// Receive a single packet. Returns 0 on success or a negative number
+// indicating failure. Note that having no packets to receive is considered
+// a failure.
 int packetlib_recv(void *data, unsigned int *length);
+
+// Peek at a particular packet (Betweeen 0 and MAX_OUTSTANDING_PACKETS)
+// but do not consider it received. If there is a packet in that slot
+// then a pointer to the data is returned and length is set.
 void *packetlib_peek(int packetno, unsigned int *length);
+
+// Discard a packet that was peeked at but not recv'd. Takes the same
+// packet range as packetlib_peek().
 void packetlib_discard(int packetno);
 
+// Read or write one of two 32-bit scratch registers, available to be
+// written to or read from on the host side as well. Use this for
+// communicating small bits of data that do not deserve their own packet.
 void packetlib_write_scratch1(uint32_t data);
 void packetlib_write_scratch2(uint32_t data);
 uint32_t packetlib_read_scratch1();
 uint32_t packetlib_read_scratch2();
 
+// Grab statistics about the packetlib execution.
 packetlib_stats_t packetlib_stats();
+
+// Render statistics to a buffer that can be displayed for debugging
+// purposes. Calls packetlib_stats() under the hood and renders the
+// statistics in an easy to view manner.
 void packetlib_render_stats(char *buffer);
 
 #ifdef __cplusplus
