@@ -13,9 +13,18 @@ extern "C" {
 #define max(a,b) (((a) > (b)) ? (a) : (b))
 #endif
 
-void host_printf(char *msg, ...);
+#define MESSAGE_SELECTION 0x1000
+#define MESSAGE_LOAD_SETTINGS 0x1001
+#define MESSAGE_LOAD_SETTINGS_ACK 0x1002
+#define MESSAGE_LOAD_SETTINGS_DATA 0x1005
+#define MESSAGE_LOAD_PROGRESS 0x1009
+#define MESSAGE_SAVE_SETTINGS_DATA 0x1007
+#define MESSAGE_SAVE_SETTINGS_ACK 0x1008
+#define MESSAGE_SAVE_CONFIG 0x1003
+#define MESSAGE_SAVE_CONFIG_ACK 0x1004
+#define MESSAGE_HOST_PRINT 0x1006
 
-int zlib_decompress(uint8_t *compressed, unsigned int compressedlen, uint8_t *decompressed, unsigned int decompressedlen);
+void host_printf(char *msg, ...);
 
 #ifdef __cplusplus
 }

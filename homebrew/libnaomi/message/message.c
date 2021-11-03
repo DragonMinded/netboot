@@ -1,11 +1,34 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include "common.h"
-#include "message.h"
-#include "packet.h"
+#include <zlib.h>
+#include "naomi/message/message.h"
+#include "naomi/message/packet.h"
 
-#define MAX_MESSAGE_LENGTH 0xFFFF
+int zlib_decompress(uint8_t *compressed, unsigned int compressedlen, uint8_t *decompressed, unsigned int decompressedlen)
+{
+    int ret;
+    z_stream strm;
+
+    /* allocate inflate state */
+    strm.zalloc = Z_NULL;
+    strm.zfree = Z_NULL;
+    strm.opaque = Z_NULL;
+    strm.avail_in = compressedlen;
+    strm.next_in = compressed;
+    strm.avail_out = decompressedlen;
+    strm.next_out = decompressed;
+    ret = inflateInit(&strm);
+    if (ret != Z_OK)
+    {
+        return -1;
+    }
+
+    ret = inflate(&strm, Z_NO_FLUSH);
+    (void)inflateEnd(&strm);
+    return ret == Z_STREAM_END ? 0 : -2;
+}
+
 #define MESSAGE_HEADER_LENGTH 8
 #define MAX_MESSAGE_DATA_LENGTH (MAX_PACKET_LENGTH - MESSAGE_HEADER_LENGTH)
 #define MESSAGE_ID_LOC 0

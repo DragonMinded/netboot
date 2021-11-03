@@ -1,8 +1,12 @@
-all: libnaomi examples tests
+all: libnaomi libnaomimessage examples tests
 
 .PHONY: libnaomi
 libnaomi:
 	$(MAKE) -C libnaomi
+
+.PHONY: libnaomimessage
+libnaomimessage:
+	$(MAKE) -C libnaomi/message
 
 .PHONY: examples
 examples:
@@ -23,5 +27,6 @@ copy: libnaomi examples
 .PHONY: clean
 clean:
 	$(MAKE) -C libnaomi clean
+	$(MAKE) -C libnaomi/message clean
 	$(MAKE) -C examples clean
 	$(MAKE) -C tests clean

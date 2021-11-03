@@ -9,8 +9,6 @@ all: netbootmenu.bin
 # missing missing `build/naomi.bin' target, so make sure all of
 # these files exist.
 SRCS += main.c
-SRCS += packet.c
-SRCS += message.c
 SRCS += config.c
 SRCS += controls.c
 SRCS += screens.c
@@ -21,7 +19,7 @@ SRCS += build/dn.o
 SRCS += build/cursor.o
 
 # Libraries we need to link against.
-LIBS += -lfreetype -lbz2 -lz -lpng16
+LIBS += -lnaomimessage -lfreetype -lbz2 -lz -lpng16
 
 # Override the default serial so this program has its own settings.
 SERIAL = BRP0

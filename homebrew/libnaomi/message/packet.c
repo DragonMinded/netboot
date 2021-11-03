@@ -4,8 +4,7 @@
 #include <string.h>
 #include "naomi/dimmcomms.h"
 #include "naomi/interrupt.h"
-#include "common.h"
-#include "packet.h"
+#include "naomi/message/packet.h"
 
 typedef struct
 {

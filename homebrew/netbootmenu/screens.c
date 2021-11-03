@@ -5,11 +5,11 @@
 #include "naomi/video.h"
 #include "naomi/maple.h"
 #include "naomi/system.h"
+#include "naomi/message/packet.h"
+#include "naomi/message/message.h"
 #include "common.h"
 #include "config.h"
 #include "screens.h"
-#include "packet.h"
-#include "message.h"
 #include "controls.h"
 
 #define READ_ONLY_ALWAYS -1

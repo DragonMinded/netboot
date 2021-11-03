@@ -4,8 +4,8 @@
 #include "naomi/system.h"
 #include "naomi/eeprom.h"
 #include "naomi/timer.h"
+#include "naomi/message/packet.h"
 #include "config.h"
-#include "packet.h"
 #include "screens.h"
 
 void main()
