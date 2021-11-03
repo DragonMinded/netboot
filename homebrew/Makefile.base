@@ -144,6 +144,12 @@ ARMLIBS = -lgcc
 # A list of base libraries that always get included.
 BASELIBS = -lc -lm -lgcc -lstdc++
 
+ifeq ($(BARE_METAL), 1)
+LIBNAOMI =
+else
+LIBNAOMI = -lnaomi
+endif
+
 # A List of source files that should be included.
 SRCS ?=
 
@@ -180,7 +186,7 @@ build/%.bin: build/%.elf
 # A rule for how we go about building the elf file from objects.
 build/%.elf: ${OBJS}
 	@mkdir -p $(dir $@)
-	${LD} -defsym START_ADDR=${START_ADDR} -o $@ $^ -lnaomi ${LIBS} ${BASELIBS}
+	${LD} -defsym START_ADDR=${START_ADDR} -o $@ $^ ${LIBNAOMI} ${LIBS} ${BASELIBS}
 
 # A rule for how to build assembly files. Depends on the build dir being created.
 # This runs the C preprocessor for convenience, so you can #define registers and
