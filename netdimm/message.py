@@ -14,8 +14,12 @@ MAX_FAILED_WRITES: int = 10
 DATA_REGISTER: int = 0xC0DE10
 SEND_STATUS_REGISTER: int = 0xC0DE20
 RECV_STATUS_REGISTER: int = 0xC0DE30
-SCRATCH1_REGISTER: int = 0xC0DE40
-SCRATCH2_REGISTER: int = 0xC0DE50
+CONFIG_REGISTER: int = 0xC0DE40
+SCRATCH1_REGISTER: int = 0xC0DE50
+SCRATCH2_REGISTER: int = 0xC0DE60
+
+CONFIG_MESSAGE_EXISTS: int = 0x00000001
+CONFIG_MESSAGE_HAS_ZLIB: int = 0x00000002
 
 
 def checksum_valid(data: int) -> bool:
@@ -92,6 +96,24 @@ def read_recv_status_register(netdimm: NetDimm) -> Optional[int]:
 def write_recv_status_register(netdimm: NetDimm, value: int) -> None:
     with netdimm.connection():
         netdimm.poke(RECV_STATUS_REGISTER, PeekPokeTypeEnum.TYPE_LONG, checksum_stamp(value))
+
+
+def read_config_register(netdimm: NetDimm) -> Optional[int]:
+    with netdimm.connection():
+        valid = False
+        config: int = 0
+        start = time.time()
+
+        while not valid:
+            config = 0
+            while config == 0 or config == 0xFFFFFFFF and (time.time() - start <= MAX_READ_TIMEOUT):
+                config = netdimm.peek(CONFIG_REGISTER, PeekPokeTypeEnum.TYPE_LONG)
+
+            valid = checksum_valid(config)
+            if not valid and (time.time() - start > MAX_READ_TIMEOUT):
+                return None
+
+        return config
 
 
 def receive_packet(netdimm: NetDimm) -> Optional[bytes]:
@@ -228,6 +250,10 @@ class Message:
         self.data = data
 
 
+class MessageException(Exception):
+    pass
+
+
 MESSAGE_HEADER_LENGTH: int = 8
 MAX_MESSAGE_DATA_LENGTH: int = MAX_PACKET_LENGTH - MESSAGE_HEADER_LENGTH
 MAX_MESSAGE_LENGTH: int = 0xFFFF
@@ -240,17 +266,24 @@ MESSAGE_HOST_STDERR: int = 0x7FFF
 send_sequence: int = 1
 
 
-def send_message(netdimm: NetDimm, message: Message, verbose: bool = False) -> bool:
+def send_message(netdimm: NetDimm, message: Message, verbose: bool = False) -> None:
     global send_sequence
     if send_sequence == 0:
         send_sequence = 1
+
+    config = read_config_register(netdimm)
+    if config is None:
+        raise MessageException("Cannot read packetlib config register!")
+    if (config & CONFIG_MESSAGE_EXISTS) == 0:
+        raise MessageException("Host is not running message protocol!")
+    zlib_enabled = (config & CONFIG_MESSAGE_HAS_ZLIB) != 0
 
     if verbose:
         print(f"Sending type: {hex(message.id)}, length: {len(message.data)}")
 
     data = message.data
     compressed = False
-    if data:
+    if data and zlib_enabled:
         compresseddata = zlib.compress(data, level=9)
         if (len(compresseddata) + 4) < len(data):
             # Worth it to compress.
@@ -267,7 +300,7 @@ def send_message(netdimm: NetDimm, message: Message, verbose: bool = False) -> b
             send_sequence = (send_sequence + 1) & 0xFFFF
             if verbose:
                 print(f"Packet transfer failed in {time.time() - t} seconds")
-            return False
+            raise MessageException("Cannot send message!")
     else:
         location = 0
         for chunk in [data[i:(i + MAX_MESSAGE_DATA_LENGTH)] for i in range(0, total_length, MAX_MESSAGE_DATA_LENGTH)]:
@@ -278,18 +311,24 @@ def send_message(netdimm: NetDimm, message: Message, verbose: bool = False) -> b
                 send_sequence = (send_sequence + 1) & 0xFFFF
                 if verbose:
                     print(f"Packet transfer failed in {time.time() - t} seconds")
-                return False
+                raise MessageException("Cannot send message!")
 
     if verbose:
         print(f"Packet transfer took {time.time() - t} seconds")
     send_sequence = (send_sequence + 1) & 0xFFFF
-    return True
 
 
 pending_received_chunks: Dict[int, Dict[int, bytes]] = {}
 
 
 def receive_message(netdimm: NetDimm, verbose: bool = False) -> Optional[Message]:
+    config = read_config_register(netdimm)
+    if config is None:
+        return None
+    if (config & CONFIG_MESSAGE_EXISTS) == 0:
+        raise MessageException("Host is not running message protocol!")
+    zlib_enabled = (config & CONFIG_MESSAGE_HAS_ZLIB) != 0
+
     # Try to receive a new packet.
     new_packet = receive_packet(netdimm)
     if new_packet is None:
@@ -297,7 +336,7 @@ def receive_message(netdimm: NetDimm, verbose: bool = False) -> Optional[Message
 
     # Make sure it isn't a dud packet.
     if len(new_packet) < MESSAGE_HEADER_LENGTH:
-        return None
+        raise MessageException("Got dud packet from target!")
 
     # See if this packet can be reassembled.
     msgid, sequence, total_length, location = struct.unpack("<HHHH", new_packet[0:8])
@@ -316,17 +355,17 @@ def receive_message(netdimm: NetDimm, verbose: bool = False) -> Optional[Message
     msgdata = b"".join(pending_received_chunks[sequence][position] for position in range(0, total_length, MAX_MESSAGE_DATA_LENGTH))
     del pending_received_chunks[sequence]
 
-    if msgid & 0x8000 != 0:
+    if zlib_enabled and (msgid & 0x8000 != 0):
         # It was compressed.
         if len(msgdata) >= 4:
             uncompressed_length = struct.unpack("<I", msgdata[0:4])[0]
             uncompressed_data = zlib.decompress(msgdata[4:])
             if len(uncompressed_data) != uncompressed_length:
-                raise Exception("Decompress error!")
+                raise MessageException("Decompress error!")
             msgdata = uncompressed_data
             msgid = msgid & 0x7FFF
         else:
-            raise Exception("Decompress error!")
+            raise MessageException("Decompress error!")
 
     if verbose:
         print(f"Received type: {hex(msgid)}, length: {len(msgdata)}")

@@ -34,6 +34,13 @@ typedef struct
 void packetlib_init();
 void packetlib_free();
 
+// Set a config register that can be read by the host to determine
+// current capabilities.
+#define CONFIG_MESSAGE_EXISTS 0x00000001
+#define CONFIG_MESSAGE_HAS_ZLIB 0x00000002
+
+void packetlib_set_config(uint32_t config_mask);
+
 // Send a single packet with at least 1 byte of data and at most
 // MAX_PACKET_LENGTH bytes of data. Returns 0 on success or a negative
 // number indicating failure.

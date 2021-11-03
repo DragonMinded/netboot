@@ -20,11 +20,13 @@ typedef struct
     unsigned int success_received;
     unsigned int cancelled_packets;
     unsigned int checksum_errors;
+    uint32_t config;
     uint32_t scratch1;
     uint32_t scratch2;
 } packetlib_state_t;
 
 static packetlib_state_t packetlib_state;
+static int initialized = 0;
 
 // Forward definitions for stuff that needs to be both before and after other functions.
 uint32_t peek_memory(unsigned int address, int size);
@@ -34,22 +36,29 @@ void packetlib_init()
 {
     // Initialize packet library.
     uint32_t old_interrupts = irq_disable();
-    for (int i = 0; i < MAX_OUTSTANDING_PACKETS; i++) {
-        packetlib_state.pending_packets[i] = 0;
-        packetlib_state.received_packets[i] = 0;
+    if (!initialized)
+    {
+        for (int i = 0; i < MAX_OUTSTANDING_PACKETS; i++) {
+            packetlib_state.pending_packets[i] = 0;
+            packetlib_state.received_packets[i] = 0;
+        }
+
+        packetlib_state.pending_send_size = 0;
+        packetlib_state.pending_recv_size = 0;
+        packetlib_state.success_sent = 0;
+        packetlib_state.success_received = 0;
+        packetlib_state.cancelled_packets = 0;
+        packetlib_state.checksum_errors = 0;
+        packetlib_state.scratch1 = 0;
+        packetlib_state.scratch2 = 0;
+
+        // Set config register to empty.
+        packetlib_set_config(0);
+
+        // Attach our handlers for sending/receiving data.
+        dimm_comms_attach_hooks(&peek_memory, &poke_memory);
+        initialized = 1;
     }
-
-    packetlib_state.pending_send_size = 0;
-    packetlib_state.pending_recv_size = 0;
-    packetlib_state.success_sent = 0;
-    packetlib_state.success_received = 0;
-    packetlib_state.cancelled_packets = 0;
-    packetlib_state.checksum_errors = 0;
-    packetlib_state.scratch1 = 0;
-    packetlib_state.scratch2 = 0;
-
-    // Attach our handlers for sending/receiving data.
-    dimm_comms_attach_hooks(&peek_memory, &poke_memory);
     irq_restore(old_interrupts);
 }
 
@@ -57,17 +66,21 @@ void packetlib_free()
 {
     // No more receiving messages.
     uint32_t old_interrupts = irq_disable();
-    dimm_comms_detach_hooks();
+    if (initialized)
+    {
+        initialized = 0;
+        dimm_comms_detach_hooks();
 
-    // Free any outstanding packets.
-    for (int i = 0; i < MAX_OUTSTANDING_PACKETS; i++) {
-        if (packetlib_state.pending_packets[i] != 0) {
-            free(packetlib_state.pending_packets[i]);
-            packetlib_state.pending_packets[i] = 0;
-        }
-        if (packetlib_state.received_packets[i] == 0) {
-            free(packetlib_state.received_packets[i]);
-            packetlib_state.received_packets[i] = 0;
+        // Free any outstanding packets.
+        for (int i = 0; i < MAX_OUTSTANDING_PACKETS; i++) {
+            if (packetlib_state.pending_packets[i] != 0) {
+                free(packetlib_state.pending_packets[i]);
+                packetlib_state.pending_packets[i] = 0;
+            }
+            if (packetlib_state.received_packets[i] == 0) {
+                free(packetlib_state.received_packets[i]);
+                packetlib_state.received_packets[i] = 0;
+            }
         }
     }
 
@@ -195,6 +208,13 @@ int checksum_verify(uint32_t value)
 {
     uint32_t sum = (value & 0xFF) + ((value >> 8) & 0xFF) + ((value >> 16) & 0xFF);
     return (((~sum) & 0xFF) == ((value >> 24) & 0xFF)) ? 1 : 0;
+}
+
+void packetlib_set_config(uint32_t config_mask)
+{
+    uint32_t old_interrupts = irq_disable();
+    packetlib_state.config = checksum_add(config_mask & 0x00FFFFFF);
+    irq_restore(old_interrupts);
 }
 
 uint32_t read_data()
@@ -466,11 +486,15 @@ uint32_t peek_memory(unsigned int address, int size)
             return read_recv_status();
         }
         else if ((address & 0xFFFFFF) == 0xC0DE40) {
-            // Read scratch register 1.
-            return packetlib_state.scratch1;
+            // Read config register.
+            return packetlib_state.config;
         }
         else if ((address & 0xFFFFFF) == 0xC0DE50) {
             // Read scratch register 1.
+            return packetlib_state.scratch1;
+        }
+        else if ((address & 0xFFFFFF) == 0xC0DE60) {
+            // Read scratch register 2.
             return packetlib_state.scratch2;
         }
     }
@@ -497,10 +521,13 @@ void poke_memory(unsigned int address, int size, uint32_t data)
             write_recv_status(data);
         }
         else if ((address & 0xFFFFFF) == 0xC0DE40) {
+            // Config register is read-only.
+        }
+        else if ((address & 0xFFFFFF) == 0xC0DE50) {
             // Write scratch register 1.
             packetlib_state.scratch1 = data;
         }
-        else if ((address & 0xFFFFFF) == 0xC0DE50) {
+        else if ((address & 0xFFFFFF) == 0xC0DE60) {
             // Write scratch register 2.
             packetlib_state.scratch2 = data;
         }

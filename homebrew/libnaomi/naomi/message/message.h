@@ -9,10 +9,17 @@ extern "C" {
 
 #define MAX_MESSAGE_LENGTH 0xFFFF
 
+// Initialize or free the messaeg library. Note that this calls packetlib_init()
+// and packetlib_free() for you under the hood so you do not need to do so. Note
+// also that once this library is initialized, any other DIMM communications hooks
+// you installed will be gone.
+void message_init();
+void message_free();
+
 // Send or receive an arbitrary message, tagged with a type. Note that the type
 // can be any integer between 0x0000 and 0x7FFF. The data can be any length, or
 // zero length. This takes care of packetizing up and compressing/decompressing
-// the data. Before calling these, make sure that you call packetlib_init().
+// the data. Before calling these, make sure that you call message_init().
 // Both functions will return 0 on success and a negative integer on failure.
 // Note that for message_recv(), having no pending message is considered a failure.
 int message_send(uint16_t type, void * data, unsigned int length);

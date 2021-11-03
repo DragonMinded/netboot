@@ -9,6 +9,7 @@ from netdimm.netdimm import (
 )
 from netdimm.message import (
     Message,
+    MessageException,
     receive_packet,
     send_packet,
     read_scratch1_register,
@@ -32,6 +33,7 @@ __all__ = [
     "NetDimmPacket",
     "NetDimm",
     "Message",
+    "MessageException",
     "receive_packet",
     "send_packet",
     "read_scratch1_register",

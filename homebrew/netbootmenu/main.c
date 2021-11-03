@@ -4,7 +4,6 @@
 #include "naomi/system.h"
 #include "naomi/eeprom.h"
 #include "naomi/timer.h"
-#include "naomi/message/packet.h"
 #include "naomi/message/message.h"
 #include "config.h"
 #include "screens.h"
@@ -19,8 +18,8 @@ void main()
     settings.game.size = 0;
     eeprom_write(&settings);
 
-    // Attach our communication handler for packet sending/receiving.
-    packetlib_init();
+    // Attach our communication handler for message sending/receiving.
+    message_init();
 
     // Allow printf to go to the host.
     message_stdio_redirect_init();

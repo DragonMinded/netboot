@@ -1,12 +1,16 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#if __has_include(<zlib.h>)
 #include <zlib.h>
+#define ZLIB_INCLUDED 1
+#endif
 #include "naomi/system.h"
 #include "naomi/interrupt.h"
 #include "naomi/message/message.h"
 #include "naomi/message/packet.h"
 
+#ifdef ZLIB_INCLUDED
 int zlib_decompress(uint8_t *compressed, unsigned int compressedlen, uint8_t *decompressed, unsigned int decompressedlen)
 {
     int ret;
@@ -30,6 +34,7 @@ int zlib_decompress(uint8_t *compressed, unsigned int compressedlen, uint8_t *de
     (void)inflateEnd(&strm);
     return ret == Z_STREAM_END ? 0 : -2;
 }
+#endif
 
 #define MESSAGE_HEADER_LENGTH 8
 #define MAX_MESSAGE_DATA_LENGTH (MAX_PACKET_LENGTH - MESSAGE_HEADER_LENGTH)
@@ -38,6 +43,30 @@ int zlib_decompress(uint8_t *compressed, unsigned int compressedlen, uint8_t *de
 #define MESSAGE_LEN_LOC 4
 #define MESSAGE_LOC_LOC 6
 #define MESSAGE_DATA_LOC 8
+
+void message_init()
+{
+    uint32_t old_interrupts = irq_disable();
+
+    // Initialize high-level message library.
+    packetlib_init();
+
+    // Set info about our state so the host can coordinate.
+    uint32_t config = CONFIG_MESSAGE_EXISTS;
+#ifdef ZLIB_INCLUDED
+    config |= CONFIG_MESSAGE_HAS_ZLIB;
+#endif
+    packetlib_set_config(config);
+
+    irq_restore(old_interrupts);
+}
+
+void message_free()
+{
+    uint32_t old_interrupts = irq_disable();
+    packetlib_free();
+    irq_restore(old_interrupts);
+}
 
 int message_send(uint16_t type, void * data, unsigned int length)
 {
@@ -274,6 +303,7 @@ int message_recv(uint16_t *type, void ** data, unsigned int *length)
         }
     }
 
+#ifdef ZLIB_INCLUDED
     // Now, possibly decompress the data.
     if (success == 0 && (*data) != 0 && (*length) >= 4 && ((*type) & 0x8000) != 0)
     {
@@ -304,6 +334,7 @@ int message_recv(uint16_t *type, void ** data, unsigned int *length)
             success = -6;
         }
     }
+#endif
 
     // Return the possibly reassembled packet.
     return success;
