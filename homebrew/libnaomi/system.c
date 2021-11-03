@@ -464,14 +464,18 @@ void *_sbrk_impl(struct _reent *reent, ptrdiff_t incr)
     extern char end;      /* Defined by the linker in naomi.ld */
     static char *heap_end;
     char *prev_heap_end;
-    register char *stack_ptr asm("r15");
 
     if(heap_end == 0)
     {
         heap_end = &end;
     }
     prev_heap_end = heap_end;
-    if(heap_end + incr > stack_ptr)
+
+    // This really should be checking for the end of stack, but
+    // that only really works in the main thread and that only really
+    // makes sense if the stack will never grow larger than after
+    // this check. So just use the top of memory.
+    if(heap_end + incr > (char *)0x0E000000)
     {
         reent->_errno = ENOMEM;
         return (void *)-1;

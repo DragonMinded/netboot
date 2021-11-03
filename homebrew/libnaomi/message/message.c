@@ -312,7 +312,7 @@ int message_recv(uint16_t *type, void ** data, unsigned int *length)
 #define MESSAGE_HOST_STDOUT 0x7FFE
 #define MESSAGE_HOST_STDERR 0x7FFF
 
-#define MAX_CONSOLE_MESSAGE 1024
+#define MAX_CONSOLE_MESSAGE 512
 static char *stdout_buffer = 0;
 static char *stderr_buffer = 0;
 

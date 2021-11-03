@@ -18,7 +18,7 @@ from netdimm.message import (
     receive_message,
     send_message,
     MAX_PACKET_LENGTH,
-    MAX_MESSAGE_DATA_LENGTH as MAX_MESSAGE_LENGTH,
+    MAX_MESSAGE_LENGTH,
     MESSAGE_HOST_STDOUT,
     MESSAGE_HOST_STDERR,
 )
