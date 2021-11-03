@@ -132,6 +132,8 @@ void _enter()
         status = test();
     }
 
+    mutex_free(&queue_mutex);
+
     // Free those things now that we're done. We should usually never get here
     // because it would be unusual to exit from main/test by returning.
     _irq_free();
@@ -286,6 +288,8 @@ int hw_memcpy(void *dest, void *src, unsigned int amount)
 
 void call_unmanaged(void (*call)())
 {
+    mutex_free(&queue_mutex);
+
     // Shut down everything since we're leaving our executable.
     _irq_free();
     _maple_free();

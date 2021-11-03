@@ -2,6 +2,11 @@
 #include "naomi/audio.h"
 #include "naomi/system.h"
 
+#define AICA_BASE 0xA0700000
+
+#define AICA_VERSION (0x2800 >> 2)
+#define AICA_RESET (0x2C00 >> 2)
+
 void load_aica_binary(void *binary, unsigned int length)
 {
     // Note that for this to work without bugs or weirdness on the ARM side, the ARM

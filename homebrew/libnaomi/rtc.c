@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include "naomi/rtc.h"
+#include "naomi/interrupt.h"
 
 #define AICA_RTC_SECS_H (*((volatile uint32_t *)0xa0710000))
 #define AICA_RTC_SECS_L (*((volatile uint32_t *)0xa0710004))
@@ -10,11 +11,13 @@ uint32_t rtc_get()
     uint32_t val1;
     uint32_t val2;
 
+    uint32_t old_interrupts = irq_disable();
     do
     {
         val1 = ((AICA_RTC_SECS_H & 0xffff) << 16) | (AICA_RTC_SECS_L & 0xffff);
         val2 = ((AICA_RTC_SECS_H & 0xffff) << 16) | (AICA_RTC_SECS_L & 0xffff);
     } while (val1 != val2);
+    irq_restore(old_interrupts);
 
     return val1;
 }
@@ -24,6 +27,7 @@ void rtc_set(uint32_t newtime)
     uint32_t val1;
     uint32_t val2;
 
+    uint32_t old_interrupts = irq_disable();
     do
     {
         AICA_RTC_WREN = 1;
@@ -35,4 +39,5 @@ void rtc_set(uint32_t newtime)
         val1 = ((AICA_RTC_SECS_H & 0xffff) << 16) | (AICA_RTC_SECS_L & 0xffff);
         val2 = ((AICA_RTC_SECS_H & 0xffff) << 16) | (AICA_RTC_SECS_L & 0xffff);
     } while (val1 != val2);
+    irq_restore(old_interrupts);
 }

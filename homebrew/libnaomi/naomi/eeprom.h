@@ -85,7 +85,11 @@ typedef struct eeprom
     eeprom_game_t game;
 } eeprom_t;
 
-// API for working with parsed data without worry.
+// API for working with parsed data without worry. If the eeprom was successfully
+// read or written, returns zero. If the eeprom was not able to be read or written
+// then returns nonzero. Note that if you attempt to read the eeprom from multiple
+// threads it is indeterminate which one will succeed. Therefore it is recommended
+// to keep reading and writing to one thread.
 int eeprom_read(eeprom_t *eeprom);
 int eeprom_write(eeprom_t *eeprom);
 

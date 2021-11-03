@@ -50,7 +50,8 @@ void main()
         console_restore(reset_loc);
 
         printf("Liveness indicator: %d\n", liveness++);
-        jvs_buttons_t buttons = maple_request_jvs_buttons(0x01);
+        jvs_buttons_t buttons;
+        maple_request_jvs_buttons(0x01, &buttons);
 
         printf("\n\nSystem buttons: ");
         if(buttons.dip1)

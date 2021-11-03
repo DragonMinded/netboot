@@ -3,6 +3,64 @@
 #include <stdint.h>
 #include "naomi/maple.h"
 #include "naomi/system.h"
+#include "naomi/thread.h"
+#include "naomi/interrupt.h"
+
+#define MAPLE_BASE 0xA05F6C00
+
+#define MAPLE_DMA_BUFFER_ADDR (0x04 >> 2)
+#define MAPLE_DMA_TRIGGER_SELECT (0x10 >> 2)
+#define MAPLE_DEVICE_ENABLE (0x14 >> 2)
+#define MAPLE_DMA_START (0x18 >> 2)
+#define MAPLE_TIMEOUT_AND_SPEED (0x80 >> 2)
+#define MAPLE_STATUS (0x84 >> 2)
+#define MAPLE_DMA_TRIGGER_CLEAR (0x88 >> 2)
+#define MAPLE_DMA_HW_INIT (0x8C >> 2)
+#define MAPLE_ENDIAN_SELECT (0x0E8 >> 2)
+
+#define MAPLE_ADDRESS_RANGE(x) (((x) >> 20) - 0x80)
+
+#define MAPLE_DEVICE_INFO_REQUEST 0x01
+#define MAPLE_DEVICE_RESET_REQUEST 0x03
+#define MAPLE_DEVICE_INFO_RESPONSE 0x05
+#define MAPLE_COMMAND_ACKNOWLEDGE_RESPONSE 0x07
+#define MAPLE_NAOMI_UPLOAD_CODE_REQUEST 0x80
+#define MAPLE_NAOMI_UPLOAD_CODE_RESPONSE 0x80
+#define MAPLE_NAOMI_UPLOAD_CODE_BOOTUP_RESPONSE 0x81
+#define MAPLE_NAOMI_VERSION_REQUEST 0x82
+#define MAPLE_NAOMI_VERSION_RESPONSE 0x83
+#define MAPLE_NAOMI_SELF_TEST_REQUEST 0x84
+#define MAPLE_NAOMI_SELF_TEST_RESPONSE 0x85
+#define MAPLE_NAOMI_IO_REQUEST 0x86
+#define MAPLE_NAOMI_IO_RESPONSE 0x87
+
+#define MAPLE_NO_RESPONSE 0xFF
+#define MAPLE_BAD_FUNCTION_CODE 0xFE
+#define MAPLE_UNKNOWN_COMMAND 0xFD
+
+// Under most circumstances, an 0xFC response includes 0 words of
+// data, giving no reason. However, the MIE will sometimes send a
+// 1-word response. In this case, the word represents the error that
+// caused an 0xFC to be generated. Those are as follows:
+//
+// 0x1 - Parity error on command receipt.
+// 0x2 - Overflow error on command receipt.
+#define MAPLE_RESEND_COMMAND 0xFC
+
+// Values that get returned in various JVS packets to inform us
+// whether we have a working JVS IO and whether it is addressed.
+#define JVS_SENSE_DISCONNECTED 0x1
+#define JVS_SENSE_ADDRESSED 0x2
+
+typedef struct jvs_status
+{
+    uint8_t jvs_present_bitmask;
+    uint8_t psw1;
+    uint8_t psw2;
+    uint8_t dip_switches;
+    unsigned int packet_length;
+    uint8_t packet[128];
+} jvs_status_t;
 
 // Our base address for sending/receiving maple commands.
 static uint8_t *maple_base = 0;
@@ -16,7 +74,10 @@ static jvs_buttons_t last_buttons;
 static jvs_buttons_t cur_buttons;
 static int first_poll = 0;
 
-void maple_wait_for_dma()
+/* Global hardware access mutexes. */
+static mutex_t maple_mutex;
+
+void _maple_wait_for_dma()
 {
     volatile unsigned int *maplebase = (volatile unsigned int *)MAPLE_BASE;
 
@@ -27,6 +88,7 @@ void maple_wait_for_dma()
 void _maple_init()
 {
     volatile unsigned int *maplebase = (volatile unsigned int *)MAPLE_BASE;
+    uint32_t old_interrupts = irq_disable();
 
     // Reset button polling API.
     memset(&last_buttons, 0, sizeof(last_buttons));
@@ -48,19 +110,28 @@ void _maple_init()
     maplebase[MAPLE_DEVICE_ENABLE] = 1;
 
     // Wait for any DMA transfer to finish, like real HW does.
-    maple_wait_for_dma();
+    _maple_wait_for_dma();
 
     // Allocate enough memory for a request and a response, as well as
     // 32 bytes of padding.
     maple_base = malloc(1024 + 1024 + 32);
+
+    // Alow ourselves exclusive access to the hardware.
+    mutex_init(&maple_mutex);
+    irq_restore(old_interrupts);
 }
 
 void _maple_free()
 {
+    // Do the reverse of the above init.
+    uint32_t old_interrupts = irq_disable();
+    mutex_free(&maple_mutex);
     free(maple_base);
+    maple_base = 0;
+    irq_restore(old_interrupts);
 }
 
-uint32_t *maple_swap_data(unsigned int port, int peripheral, unsigned int cmd, unsigned int datalen, void *data)
+uint32_t *_maple_swap_data(unsigned int port, int peripheral, unsigned int cmd, unsigned int datalen, void *data)
 {
     volatile uint32_t *maplebase = (volatile uint32_t *)MAPLE_BASE;
 
@@ -88,7 +159,7 @@ uint32_t *maple_swap_data(unsigned int port, int peripheral, unsigned int cmd, u
 
     // Wait until any transfer finishes before messing with memory, then point at
     // our buffer.
-    maple_wait_for_dma();
+    _maple_wait_for_dma();
 
     // Now, construct the maple request transfer descriptor.
     send[0] = (
@@ -111,23 +182,23 @@ uint32_t *maple_swap_data(unsigned int port, int peripheral, unsigned int cmd, u
     }
 
     // Set the first word of the recv buffer like real BIOS does.
-    // This lets us check the response with maple_response_valid().
+    // This lets us check the response with _maple_response_valid().
     recv[0] = 0xFFFFFFFF;
 
     // Kick off the DMA request
-    maple_wait_for_dma();
+    _maple_wait_for_dma();
     maplebase[MAPLE_DMA_BUFFER_ADDR] = (uint32_t)send & PHYSICAL_MASK;
     maplebase[MAPLE_DEVICE_ENABLE] = 1;
     maplebase[MAPLE_DMA_START] = 1;
 
     // Wait for it to finish
-    maple_wait_for_dma();
+    _maple_wait_for_dma();
 
     // Return the receive buffer.
     return recv;
 }
 
-int maple_response_valid(uint32_t *response)
+int _maple_response_valid(uint32_t *response)
 {
     if(response[0] == 0xFFFFFFFF)
     {
@@ -139,24 +210,24 @@ int maple_response_valid(uint32_t *response)
     }
 }
 
-uint8_t maple_response_code(uint32_t *response)
+uint8_t _maple_response_code(uint32_t *response)
 {
     return response[0] & 0xFF;
 }
 
-uint8_t maple_response_payload_length_words(uint32_t *response)
+uint8_t _maple_response_payload_length_words(uint32_t *response)
 {
     return (response[0] >> 24) & 0xFF;
 }
 
-uint32_t *maple_skip_response(uint32_t *response)
+uint32_t *_maple_skip_response(uint32_t *response)
 {
-    if (!maple_response_valid(response))
+    if (!_maple_response_valid(response))
     {
         return response;
     }
 
-    return response + (1 + maple_response_payload_length_words(response));
+    return response + (1 + _maple_response_payload_length_words(response));
 }
 
 /**
@@ -165,9 +236,9 @@ uint32_t *maple_skip_response(uint32_t *response)
  * Returns 1 if the MIE is busy (can't fulfill requests) or 0 if it is
  * ready to respond to requests.
  */
-int maple_busy()
+int _maple_busy()
 {
-    uint32_t *resp = maple_swap_data(0, 0, MAPLE_DEVICE_INFO_REQUEST, 0, NULL);
+    uint32_t *resp = _maple_swap_data(0, 0, MAPLE_DEVICE_INFO_REQUEST, 0, NULL);
 
     // MIE on Naomi doesn't respond to MAPLE_DEVICE_INFO_REQUEST, however it will
     // send a MAPLE_RESEND_COMMAND response if it is busy, and a UNKNOWN_COMMAND
@@ -175,7 +246,7 @@ int maple_busy()
     // So, we check to see if either MAPLE_RESEND_COMMAND or MAPLE_NO_RESPONSE was
     // returned, and claim busy for both. We can't just check against
     // UNKNOWN_COMMAND because demul incorrectly emulates the MIE.
-    uint8_t code = maple_response_code(resp);
+    uint8_t code = _maple_response_code(resp);
     if (code == MAPLE_RESEND_COMMAND || code == MAPLE_NO_RESPONSE)
     {
         return 1;
@@ -187,12 +258,12 @@ int maple_busy()
 /**
  * Wait until the MIE is ready for commands.
  */
-void maple_wait_for_ready()
+void _maple_wait_for_ready()
 {
-    while (maple_busy())
+    while (_maple_busy())
     {
         // Spin and try again
-        for(int x = 0x2710; x > 0; x--) { ; }
+        for(volatile int x = 10000; x > 0; x--) { ; }
     }
 }
 
@@ -202,88 +273,112 @@ void maple_wait_for_ready()
  * Note that this takes awhile since the MIE needs to run memory tests. Expect
  * that this function takes upwards of a second to return. Note that after
  * executing this, you will need to re-send the custom MIE ROM image or the
- * MAPLE_NAOMI_IO_REQUEST handler will not be present!
+ * MAPLE_NAOMI_IO_REQUEST handler will not be present! Returns 0 on success
+ * or a negative value to indicate we could not access the hardware.
  */
-void maple_request_reset()
+int maple_request_reset()
 {
-    while( 1 )
+    if (mutex_try_lock(&maple_mutex))
     {
-        uint32_t *resp = maple_swap_data(0, 0, MAPLE_DEVICE_RESET_REQUEST, 0, NULL);
-        if (maple_response_code(resp) == MAPLE_COMMAND_ACKNOWLEDGE_RESPONSE)
+        while( 1 )
         {
-            break;
+            uint32_t *resp = _maple_swap_data(0, 0, MAPLE_DEVICE_RESET_REQUEST, 0, NULL);
+            if (_maple_response_code(resp) == MAPLE_COMMAND_ACKNOWLEDGE_RESPONSE)
+            {
+                break;
+            }
+
+            // Spin and try again
+            for(volatile int x = 10000; x > 0; x--) { ; }
         }
 
-        // Spin and try again
-        for(int x = 0x2710; x > 0; x--) { ; }
+        _maple_wait_for_ready();
+        mutex_unlock(&maple_mutex);
+        return 0;
     }
 
-    maple_wait_for_ready();
+    return -1;
 }
 
 /**
  * Request the MIE version string embedded in the MIE ROM.
  *
  * Copies the version string to outptr. This should be at least
- * 49 bytes in length.
+ * 49 bytes in length. Returns 0 on success or a negative value
+ * to signify that we could not access the hardware.
  */
-void maple_request_version(char *outptr)
+int maple_request_version(char *outptr)
 {
-    uint32_t *resp;
-    while( 1 )
+    if (mutex_try_lock(&maple_mutex))
     {
-        resp = maple_swap_data(0, 0, MAPLE_NAOMI_VERSION_REQUEST, 0, NULL);
-        if (maple_response_code(resp) == MAPLE_NAOMI_VERSION_RESPONSE)
+        uint32_t *resp;
+        while( 1 )
         {
-            break;
+            resp = _maple_swap_data(0, 0, MAPLE_NAOMI_VERSION_REQUEST, 0, NULL);
+            if (_maple_response_code(resp) == MAPLE_NAOMI_VERSION_RESPONSE)
+            {
+                break;
+            }
+
+            // Spin and try again
+            for(volatile int x = 10000; x > 0; x--) { ; }
         }
 
-        // Spin and try again
-        for(int x = 0x2710; x > 0; x--) { ; }
+        // Copy the first half of the response string
+        memcpy(outptr, &resp[1], _maple_response_payload_length_words(resp) * 4);
+        outptr += _maple_response_payload_length_words(resp) * 4;
+
+        // Copy the second half of the response string
+        resp = _maple_skip_response(resp);
+        memcpy(outptr, &resp[1], _maple_response_payload_length_words(resp) * 4);
+        outptr += _maple_response_payload_length_words(resp) * 4;
+
+        // Cap it off
+        outptr[0] = 0;
+        mutex_unlock(&maple_mutex);
+        return 0;
     }
 
-    // Copy the first half of the response string
-    memcpy(outptr, &resp[1], maple_response_payload_length_words(resp) * 4);
-    outptr += maple_response_payload_length_words(resp) * 4;
-
-    // Copy the second half of the response string
-    resp = maple_skip_response(resp);
-    memcpy(outptr, &resp[1], maple_response_payload_length_words(resp) * 4);
-    outptr += maple_response_payload_length_words(resp) * 4;
-
-    // Cap it off
-    outptr[0] = 0;
+    return -1;
 }
 
 /**
  * Request the results of the power-on self-test run by the MIE.
  *
- * Returns nonzero (true) if the self-test was successful, or zero (false)
- * if the MIE reports that its RAM test has failed.
+ * Returns nonzero (true) if the self-test was successful, zero (false)
+ * if the MIE reports that its RAM test has failed, and negative if we
+ * could not get access to the hardware.
  */
 int maple_request_self_test()
 {
-    uint32_t *resp;
-    while( 1 )
+    if (mutex_try_lock(&maple_mutex))
     {
-        resp = maple_swap_data(0, 0, MAPLE_NAOMI_SELF_TEST_REQUEST, 0, NULL);
-        if (maple_response_code(resp) == MAPLE_NAOMI_SELF_TEST_RESPONSE)
+        uint32_t *resp;
+        while( 1 )
         {
-            break;
+            resp = _maple_swap_data(0, 0, MAPLE_NAOMI_SELF_TEST_REQUEST, 0, NULL);
+            if (_maple_response_code(resp) == MAPLE_NAOMI_SELF_TEST_RESPONSE)
+            {
+                break;
+            }
+
+            // Spin and try again
+            for(volatile int x = 10000; x > 0; x--) { ; }
         }
 
-        // Spin and try again
-        for(int x = 0x2710; x > 0; x--) { ; }
+        if(_maple_response_payload_length_words(resp) != 1)
+        {
+            // This is an invalid response, consider the test failed.
+            mutex_unlock(&maple_mutex);
+            return 0;
+        }
+
+        // MIE sets this word to all 0's if the memtest passes.
+        mutex_unlock(&maple_mutex);
+        return resp[1] == 0 ? 1 : 0;
     }
 
-    if(maple_response_payload_length_words(resp) != 1)
-    {
-        // This is an invalid response, consider the test failed.
-        return 0;
-    }
-
-    // MIE sets this word to all 0's if the memtest passes.
-    return resp[1] == 0 ? 1 : 0;
+    return -1;
 }
 
 /**
@@ -297,163 +392,192 @@ int maple_request_self_test()
  */
 int maple_request_update(void *binary, unsigned int len)
 {
-    uint8_t *binloc = (uint8_t *)binary;
-    unsigned int memloc = 0x8010;
-    uint32_t *resp;
-
-    while(len > 0)
+    if (mutex_try_lock(&maple_mutex))
     {
-        // We send in 24-byte chunks.
-        uint8_t data[28];
+        uint8_t *binloc = (uint8_t *)binary;
+        unsigned int memloc = 0x8010;
+        uint32_t *resp;
 
-        // First, copy the data itself over.
-        memset(data, 0, 28);
-        memcpy(&data[4], binloc, len > 24 ? 24 : len);
-
-        // Now, set the address to copy to.
-        data[3] = memloc & 0xFF;
-        data[2] = (memloc >> 8) & 0xFF;
-
-        // Now, calculate the checksum.
-        uint8_t checksum = 0;
-        for(int i = 0; i < 28; i++)
+        while(len > 0)
         {
-            checksum = (checksum + data[i]) & 0xFF;
+            // We send in 24-byte chunks.
+            uint8_t data[28];
+
+            // First, copy the data itself over.
+            memset(data, 0, 28);
+            memcpy(&data[4], binloc, len > 24 ? 24 : len);
+
+            // Now, set the address to copy to.
+            data[3] = memloc & 0xFF;
+            data[2] = (memloc >> 8) & 0xFF;
+
+            // Now, calculate the checksum.
+            uint8_t checksum = 0;
+            for(int i = 0; i < 28; i++)
+            {
+                checksum = (checksum + data[i]) & 0xFF;
+            }
+
+            resp = _maple_swap_data(0, 0, MAPLE_NAOMI_UPLOAD_CODE_REQUEST, 28 / 4, data);
+
+            if(_maple_response_code(resp) != MAPLE_NAOMI_UPLOAD_CODE_RESPONSE && (_maple_response_code(resp) != MAPLE_NAOMI_UPLOAD_CODE_BOOTUP_RESPONSE))
+            {
+                mutex_unlock(&maple_mutex);
+                return -1;
+            }
+            if(_maple_response_payload_length_words(resp) != 0x1)
+            {
+                mutex_unlock(&maple_mutex);
+                return -1;
+            }
+            if((((resp[1] & 0xFF0000) >> 8) | ((resp[1] & 0xFF000000) >> 24)) != memloc)
+            {
+                mutex_unlock(&maple_mutex);
+                return -2;
+            }
+            if((resp[1] & 0xFF) != checksum)
+            {
+                mutex_unlock(&maple_mutex);
+                return -3;
+            }
+
+            // Success! Move to next chunk
+            binloc += len > 24 ? 24 : len;
+            memloc += len > 24 ? 24 : len;
+            len -= len > 24 ? 24 : len;
         }
 
-        resp = maple_swap_data(0, 0, MAPLE_NAOMI_UPLOAD_CODE_REQUEST, 28 / 4, data);
-
-        if(maple_response_code(resp) != MAPLE_NAOMI_UPLOAD_CODE_RESPONSE && (maple_response_code(resp) != MAPLE_NAOMI_UPLOAD_CODE_BOOTUP_RESPONSE))
+        // Now, ask the MIE to execute this chunk. Technically only the first
+        // two bytes need to be 0xFF (the load addr), but Naomi BIOS sends
+        // all 0xFF so let's do the same.
+        uint8_t execdata[4] = { 0xFF, 0xFF, 0xFF, 0xFF };
+        resp = _maple_swap_data(0, 0, MAPLE_NAOMI_UPLOAD_CODE_REQUEST, 1, execdata);
+        if (_maple_response_code(resp) != MAPLE_COMMAND_ACKNOWLEDGE_RESPONSE)
         {
-            return -1;
-        }
-        if(maple_response_payload_length_words(resp) != 0x1)
-        {
-            return -1;
-        }
-        if((((resp[1] & 0xFF0000) >> 8) | ((resp[1] & 0xFF000000) >> 24)) != memloc)
-        {
-            return -2;
-        }
-        if((resp[1] & 0xFF) != checksum)
-        {
-            return -3;
+            // TODO: A different value is returned by different revisions of the
+            // MIE which depend on the Naomi BIOS. However, since netboot only
+            // works on Rev. H BIOS, I think we're good here.
+            mutex_unlock(&maple_mutex);
+            return -4;
         }
 
-        // Success! Move to next chunk
-        binloc += len > 24 ? 24 : len;
-        memloc += len > 24 ? 24 : len;
-        len -= len > 24 ? 24 : len;
+        mutex_unlock(&maple_mutex);
+        return 0;
     }
 
-    // Now, ask the MIE to execute this chunk. Technically only the first
-    // two bytes need to be 0xFF (the load addr), but Naomi BIOS sends
-    // all 0xFF so let's do the same.
-    uint8_t execdata[4] = { 0xFF, 0xFF, 0xFF, 0xFF };
-    resp = maple_swap_data(0, 0, MAPLE_NAOMI_UPLOAD_CODE_REQUEST, 1, execdata);
-    if (maple_response_code(resp) != MAPLE_COMMAND_ACKNOWLEDGE_RESPONSE)
-    {
-        // TODO: A different value is returned by different revisions of the
-        // MIE which depend on the Naomi BIOS. However, since netboot only
-        // works on Rev. H BIOS, I think we're good here.
-        return -4;
-    }
-
-    return 0;
+    return -5;
 }
 
 /**
  * Request the EEPROM contents from the MIE.
  *
  * Returns 0 on success
- *         -1 on unexpected packet received
+ *         -1 on unexpected packet received or failed to lock hardware
  */
 int maple_request_eeprom_read(uint8_t *outbytes)
 {
-    uint8_t req_subcommand[4] = {
-        0x01,         // Subcommand 0x01, read whole EEPROM to MIE.
-        0x00,
-        0x00,
-        0x00,
-    };
-
-    uint32_t *resp = maple_swap_data(0, 0, MAPLE_NAOMI_IO_REQUEST, 1, req_subcommand);
-    if(maple_response_code(resp) != MAPLE_NAOMI_IO_RESPONSE)
+    if (mutex_try_lock(&maple_mutex))
     {
-        // Invalid response packet
-        return -1;
-    }
-    if(maple_response_payload_length_words(resp) < 1)
-    {
-        // Invalid payload length. We would check against exactly 1 word, but
-        // it looks like sometimes the MIE responds with 2 words.
-        return -1;
-    }
-    if(resp[1] != 0x02)
-    {
-        // Invalid subcommand response
-        return -1;
+        uint8_t req_subcommand[4] = {
+            0x01,         // Subcommand 0x01, read whole EEPROM to MIE.
+            0x00,
+            0x00,
+            0x00,
+        };
+
+        uint32_t *resp = _maple_swap_data(0, 0, MAPLE_NAOMI_IO_REQUEST, 1, req_subcommand);
+        if(_maple_response_code(resp) != MAPLE_NAOMI_IO_RESPONSE)
+        {
+            // Invalid response packet
+            mutex_unlock(&maple_mutex);
+            return -1;
+        }
+        if(_maple_response_payload_length_words(resp) < 1)
+        {
+            // Invalid payload length. We would check against exactly 1 word, but
+            // it looks like sometimes the MIE responds with 2 words.
+            mutex_unlock(&maple_mutex);
+            return -1;
+        }
+        if(resp[1] != 0x02)
+        {
+            // Invalid subcommand response
+            mutex_unlock(&maple_mutex);
+            return -1;
+        }
+
+        // Now, wait until the EEPROM is read to fetch it.
+        _maple_wait_for_ready();
+
+        uint8_t fetch_subcommand[4] = {
+            0x03,         // Subcommand 0x03, read EEPROM result.
+            0x00,
+            0x00,
+            0x00,
+        };
+
+        resp = _maple_swap_data(0, 0, MAPLE_NAOMI_IO_REQUEST, 1, fetch_subcommand);
+        if(_maple_response_code(resp) != MAPLE_NAOMI_IO_RESPONSE)
+        {
+            // Invalid response packet
+            mutex_unlock(&maple_mutex);
+            return -1;
+        }
+        if(_maple_response_payload_length_words(resp) != 32)
+        {
+            // Invalid payload length
+            mutex_unlock(&maple_mutex);
+            return -1;
+        }
+
+        // Copy the data out, we did it!
+        memcpy(outbytes, &resp[1], 128);
+        mutex_unlock(&maple_mutex);
+        return 0;
     }
 
-    // Now, wait until the EEPROM is read to fetch it.
-    maple_wait_for_ready();
-
-    uint8_t fetch_subcommand[4] = {
-        0x03,         // Subcommand 0x03, read EEPROM result.
-        0x00,
-        0x00,
-        0x00,
-    };
-
-    resp = maple_swap_data(0, 0, MAPLE_NAOMI_IO_REQUEST, 1, fetch_subcommand);
-    if(maple_response_code(resp) != MAPLE_NAOMI_IO_RESPONSE)
-    {
-        // Invalid response packet
-        return -1;
-    }
-    if(maple_response_payload_length_words(resp) != 32)
-    {
-        // Invalid payload length
-        return -1;
-    }
-
-    // Copy the data out, we did it!
-    memcpy(outbytes, &resp[1], 128);
-    return 0;
+    return -1;
 }
 
 /**
  * Request writing a new EEPROM contents to the MIE.
  *
  * Returns 0 on success
- *         -1 on unexpected packet received
+ *         -1 on unexpected packet received or failed to lock hardware
  */
 int maple_request_eeprom_write(uint8_t *inbytes)
 {
-    for(unsigned int i = 0; i < 0x80; i += 0x10)
+    if (mutex_try_lock(&maple_mutex))
     {
-        // First, craft the subcommand requesting an EEPROM chunk write.
-        uint8_t req_subcommand[20];
-        req_subcommand[0] = 0x0B;      // Subcommand 0x0B, write chunk of EEPROM.
-        req_subcommand[1] = i & 0xFF;  // Write offset, relative to start of EEPROM.
-        req_subcommand[2] = 0x10;      // Chunk size, always 0x10 in practice.
-        req_subcommand[3] = 0x00;
-        memcpy(&req_subcommand[4], &inbytes[i], 0x10);
-
-        // Now, send it, verifying that it acknowledged the data
-        uint32_t *resp = maple_swap_data(0, 0, MAPLE_NAOMI_IO_REQUEST, 5, req_subcommand);
-        if(maple_response_code(resp) != MAPLE_NAOMI_IO_RESPONSE)
+        for(unsigned int i = 0; i < 0x80; i += 0x10)
         {
-            // Invalid response packet
-            return -1;
+            // First, craft the subcommand requesting an EEPROM chunk write.
+            uint8_t req_subcommand[20];
+            req_subcommand[0] = 0x0B;      // Subcommand 0x0B, write chunk of EEPROM.
+            req_subcommand[1] = i & 0xFF;  // Write offset, relative to start of EEPROM.
+            req_subcommand[2] = 0x10;      // Chunk size, always 0x10 in practice.
+            req_subcommand[3] = 0x00;
+            memcpy(&req_subcommand[4], &inbytes[i], 0x10);
+
+            // Now, send it, verifying that it acknowledged the data
+            uint32_t *resp = _maple_swap_data(0, 0, MAPLE_NAOMI_IO_REQUEST, 5, req_subcommand);
+            if(_maple_response_code(resp) != MAPLE_NAOMI_IO_RESPONSE)
+            {
+                // Invalid response packet
+                mutex_unlock(&maple_mutex);
+                return -1;
+            }
+
+            // Now, wait for the write operation to finish.
+            _maple_wait_for_ready();
         }
 
-        // Now, wait for the write operation to finish.
-        maple_wait_for_ready();
+        // Succeeded in writing new EEPROM!
+        mutex_unlock(&maple_mutex);
+        return 0;
     }
 
-    // Succeeded in writing new EEPROM!
-    return 0;
+    return -1;
 }
 
 /**
@@ -462,7 +586,7 @@ int maple_request_eeprom_write(uint8_t *inbytes)
  * Return 0 on success
  *        -1 on unexpected packet received
  */
-int maple_request_send_jvs(uint8_t addr, unsigned int len, void *bytes)
+int _maple_request_send_jvs(uint8_t addr, unsigned int len, void *bytes)
 {
     uint8_t subcommand[12] = {
         0x17,         // Subcommand 0x17, send simple JVS packet
@@ -480,8 +604,8 @@ int maple_request_send_jvs(uint8_t addr, unsigned int len, void *bytes)
     };
 
     memcpy(&subcommand[8], bytes, (len > 4 ? 4 : len));
-    uint32_t *resp = maple_swap_data(0, 0, MAPLE_NAOMI_IO_REQUEST, 3, subcommand);
-    if(maple_response_code(resp) != MAPLE_NAOMI_IO_RESPONSE)
+    uint32_t *resp = _maple_swap_data(0, 0, MAPLE_NAOMI_IO_REQUEST, 3, subcommand);
+    if(_maple_response_code(resp) != MAPLE_NAOMI_IO_RESPONSE)
     {
         return -1;
     }
@@ -496,7 +620,7 @@ int maple_request_send_jvs(uint8_t addr, unsigned int len, void *bytes)
  *
  * Returns a struct representing the JVS resp for the last request.
  */
-jvs_status_t maple_request_recv_jvs()
+jvs_status_t _maple_request_recv_jvs()
 {
     // Initialize with sane values in case we got a bad packetback.
     jvs_status_t status;
@@ -509,18 +633,18 @@ jvs_status_t maple_request_recv_jvs()
     while( 1 )
     {
         uint32_t subcommand[1] = { 0x00000015 };
-        resp = maple_swap_data(0, 0, MAPLE_NAOMI_IO_REQUEST, 1, subcommand);
-        if(maple_response_code(resp) != MAPLE_RESEND_COMMAND)
+        resp = _maple_swap_data(0, 0, MAPLE_NAOMI_IO_REQUEST, 1, subcommand);
+        if(_maple_response_code(resp) != MAPLE_RESEND_COMMAND)
         {
             break;
         }
     }
 
-    if(maple_response_code(resp) != MAPLE_NAOMI_IO_RESPONSE)
+    if(_maple_response_code(resp) != MAPLE_NAOMI_IO_RESPONSE)
     {
         return status;
     }
-    if(maple_response_payload_length_words(resp) < 5)
+    if(_maple_response_payload_length_words(resp) < 5)
     {
         return status;
     }
@@ -530,7 +654,7 @@ jvs_status_t maple_request_recv_jvs()
     status.psw2 = (~(resp[2] >> 21)) & 0x1;
     status.jvs_present_bitmask = (resp[5] >> 16) & 0x3;
 
-    if(maple_response_payload_length_words(resp) >= 6)
+    if(_maple_response_payload_length_words(resp) >= 6)
     {
         // We have a valid packet on the end, lets grab the length first
         status.packet_length = (resp[6] >> 8) & 0xFF;
@@ -543,7 +667,7 @@ jvs_status_t maple_request_recv_jvs()
     return status;
 }
 
-int jvs_packet_valid(uint8_t *data)
+int _jvs_packet_valid(uint8_t *data)
 {
     if(data[0] != 0xE0)
     {
@@ -568,17 +692,17 @@ int jvs_packet_valid(uint8_t *data)
     return 1;
 }
 
-unsigned int jvs_packet_payload_length_bytes(uint8_t *data)
+unsigned int _jvs_packet_payload_length_bytes(uint8_t *data)
 {
     return data[2] - 1;
 }
 
-unsigned int jvs_packet_code(uint8_t *data)
+unsigned int _jvs_packet_code(uint8_t *data)
 {
     return data[3];
 }
 
-uint8_t *jvs_packet_payload(uint8_t *data)
+uint8_t *_jvs_packet_payload(uint8_t *data)
 {
     return data + 4;
 }
@@ -586,63 +710,89 @@ uint8_t *jvs_packet_payload(uint8_t *data)
 /**
  * Request JVS IO at address addr to perform a reset.
  */
-void maple_request_jvs_reset(uint8_t addr)
+int maple_request_jvs_reset(uint8_t addr)
 {
-    // We don't bother fetching the response, much like the Naomi BIOS doesn't.
-    uint8_t jvs_payload[2] = { 0xF0, 0xD9 };
-    maple_request_send_jvs(addr, 2, jvs_payload);
+    if (mutex_try_lock(&maple_mutex))
+    {
+        // We don't bother fetching the response, much like the Naomi BIOS doesn't.
+        uint8_t jvs_payload[2] = { 0xF0, 0xD9 };
+        _maple_request_send_jvs(addr, 2, jvs_payload);
+
+        mutex_unlock(&maple_mutex);
+        return 0;
+    }
+
+    return -1;
 }
 
 /**
  * Request JVS IO at address old_addr reassign to new_addr.
  */
-void maple_request_jvs_assign_address(uint8_t old_addr, uint8_t new_addr)
+int maple_request_jvs_assign_address(uint8_t old_addr, uint8_t new_addr)
 {
-    // We don't bother fetching the response, much like the Naomi BIOS doesn't.
-    uint8_t jvs_payload[2] = { 0xF1, new_addr };
-    maple_request_send_jvs(old_addr, 2, jvs_payload);
+    if (mutex_try_lock(&maple_mutex))
+    {
+        // We don't bother fetching the response, much like the Naomi BIOS doesn't.
+        uint8_t jvs_payload[2] = { 0xF1, new_addr };
+        _maple_request_send_jvs(old_addr, 2, jvs_payload);
+
+        mutex_unlock(&maple_mutex);
+        return 0;
+    }
+
+    return -1;
 }
 
 /**
  * Request JVS IO at addr to return a version ID string.
  *
  * Return 0 on success
- *        -1 on invalid packet received
+ *        -1 on invalid packet received or couldn't lock the hardware.
  */
 int maple_request_jvs_id(uint8_t addr, char *outptr)
 {
-    uint8_t jvs_payload[1] = { 0x10 };
-    maple_request_send_jvs(addr, 1, jvs_payload);
-    jvs_status_t status = maple_request_recv_jvs();
-    if(!status.packet_length)
+    if (mutex_try_lock(&maple_mutex))
     {
-        // Didn't get a packet
-        outptr[0] = 0;
-        return -1;
+        uint8_t jvs_payload[1] = { 0x10 };
+        _maple_request_send_jvs(addr, 1, jvs_payload);
+        jvs_status_t status = _maple_request_recv_jvs();
+        if(!status.packet_length)
+        {
+            // Didn't get a packet
+            outptr[0] = 0;
+            mutex_unlock(&maple_mutex);
+            return -1;
+        }
+
+        if(!_jvs_packet_valid(status.packet))
+        {
+            // Packet failed CRC
+            outptr[0] = 0;
+            mutex_unlock(&maple_mutex);
+            return -1;
+        }
+
+        if(_jvs_packet_code(status.packet) != 0x01)
+        {
+            // Packet is not response type.
+            outptr[0] = 0;
+            mutex_unlock(&maple_mutex);
+            return -1;
+        }
+        if(_jvs_packet_payload(status.packet)[0] != 0x01)
+        {
+            // Packet is not report type.
+            outptr[0] = 0;
+            mutex_unlock(&maple_mutex);
+            return -1;
+        }
+
+        memcpy(outptr, _jvs_packet_payload(status.packet) + 1, _jvs_packet_payload_length_bytes(status.packet) - 1);
+        mutex_unlock(&maple_mutex);
+        return 0;
     }
 
-    if(!jvs_packet_valid(status.packet))
-    {
-        // Packet failed CRC
-        outptr[0] = 0;
-        return -1;
-    }
-
-    if(jvs_packet_code(status.packet) != 0x01)
-    {
-        // Packet is not response type.
-        outptr[0] = 0;
-        return -1;
-    }
-    if(jvs_packet_payload(status.packet)[0] != 0x01)
-    {
-        // Packet is not report type.
-        outptr[0] = 0;
-        return -1;
-    }
-
-    memcpy(outptr, jvs_packet_payload(status.packet) + 1, jvs_packet_payload_length_bytes(status.packet) - 1);
-    return 0;
+    return -1;
 }
 
 int __maple_request_jvs_send_buttons_packet(uint8_t addr, unsigned int unknown)
@@ -662,8 +812,8 @@ int __maple_request_jvs_send_buttons_packet(uint8_t addr, unsigned int unknown)
         0x00,
     };
 
-    uint32_t *resp = maple_swap_data(0, 0, MAPLE_NAOMI_IO_REQUEST, sizeof(subcommand) / 4, subcommand);
-    if(maple_response_code(resp) != MAPLE_NAOMI_IO_RESPONSE)
+    uint32_t *resp = _maple_swap_data(0, 0, MAPLE_NAOMI_IO_REQUEST, sizeof(subcommand) / 4, subcommand);
+    if(_maple_response_code(resp) != MAPLE_NAOMI_IO_RESPONSE)
     {
         return 0;
     }
@@ -673,119 +823,137 @@ int __maple_request_jvs_send_buttons_packet(uint8_t addr, unsigned int unknown)
 
 /**
  * Request JVS button read from JVS ID addr and return buttons.
+ *
+ * Returns: 0 on success, and buttons is updated.
+ *          -1 on failure to receive, or couldn't lock hardware.
  */
-jvs_buttons_t maple_request_jvs_buttons(uint8_t addr)
+int maple_request_jvs_buttons(uint8_t addr, jvs_buttons_t *buttons)
 {
-    // Set up a sane response.
-    jvs_buttons_t buttons;
-    memset(&buttons, 0, sizeof(buttons));
-
-    if (!__outstanding_request || __outstanding_request_addr != addr)
+    if (mutex_try_lock(&maple_mutex))
     {
-        if(!__maple_request_jvs_send_buttons_packet(addr, 1))
+        if (!__outstanding_request || __outstanding_request_addr != addr)
         {
-            // Didn't get a valid response for sending JVS.
-            return buttons;
+            if(!__maple_request_jvs_send_buttons_packet(addr, 1))
+            {
+                // Didn't get a valid response for sending JVS.
+                mutex_unlock(&maple_mutex);
+                return -1;
+            }
         }
+
+        jvs_status_t status = _maple_request_recv_jvs();
+        if(!status.packet_length)
+        {
+            // Didn't get a packet
+            mutex_unlock(&maple_mutex);
+            return -1;
+        }
+
+        if(!_jvs_packet_valid(status.packet))
+        {
+            // Packet failed CRC
+            mutex_unlock(&maple_mutex);
+            return -1;
+        }
+
+        if(_jvs_packet_code(status.packet) != 0x01)
+        {
+            // Packet is not response type.
+            mutex_unlock(&maple_mutex);
+            return -1;
+        }
+        if(_jvs_packet_payload(status.packet)[0] != 0x01)
+        {
+            // Packet is not report type.
+            mutex_unlock(&maple_mutex);
+            return -1;
+        }
+
+        // Parse out the buttons
+        uint8_t *payload = _jvs_packet_payload(status.packet) + 1;
+        buttons->dip1 = status.dip_switches & 0x1;
+        buttons->dip2 = (status.dip_switches >> 1) & 0x1;
+        buttons->dip3 = (status.dip_switches >> 2) & 0x1;
+        buttons->dip4 = (status.dip_switches >> 3) & 0x1;
+        buttons->psw1 = status.psw1;
+        buttons->psw2 = status.psw2;
+        buttons->test = (payload[0] >> 7) & 0x1;
+
+        // Player 1 controls
+        buttons->player1.service = (payload[1] >> 6) & 0x1;
+        buttons->player1.start = (payload[1] >> 7) & 0x1;
+        buttons->player1.up = (payload[1] >> 5) & 0x1;
+        buttons->player1.down = (payload[1] >> 4) & 0x1;
+        buttons->player1.left = (payload[1] >> 3) & 0x1;
+        buttons->player1.right = (payload[1] >> 2) & 0x1;
+        buttons->player1.button1 = (payload[1] >> 1) & 0x1;
+        buttons->player1.button2 = payload[1] & 0x1;
+        buttons->player1.button3 = (payload[2] >> 7) & 0x1;
+        buttons->player1.button4 = (payload[2] >> 6) & 0x1;
+        buttons->player1.button5 = (payload[2] >> 5) & 0x1;
+        buttons->player1.button6 = (payload[2] >> 4) & 0x1;
+        buttons->player1.analog1 = payload[11];
+        buttons->player1.analog2 = payload[13];
+        buttons->player1.analog3 = payload[15];
+        buttons->player1.analog4 = payload[17];
+
+        // Player 2 controls
+        buttons->player2.service = (payload[3] >> 6) & 0x1;
+        buttons->player2.start = (payload[3] >> 7) & 0x1;
+        buttons->player2.up = (payload[3] >> 5) & 0x1;
+        buttons->player2.down = (payload[3] >> 4) & 0x1;
+        buttons->player2.left = (payload[3] >> 3) & 0x1;
+        buttons->player2.right = (payload[3] >> 2) & 0x1;
+        buttons->player2.button1 = (payload[3] >> 1) & 0x1;
+        buttons->player2.button2 = payload[3] & 0x1;
+        buttons->player2.button3 = (payload[4] >> 7) & 0x1;
+        buttons->player2.button4 = (payload[4] >> 6) & 0x1;
+        buttons->player2.button5 = (payload[4] >> 5) & 0x1;
+        buttons->player2.button6 = (payload[4] >> 4) & 0x1;
+        buttons->player2.analog1 = payload[19];
+        buttons->player2.analog2 = payload[21];
+        buttons->player2.analog3 = payload[23];
+        buttons->player2.analog4 = payload[25];
+
+        // Finally, send another request to be ready next time we poll.
+        __outstanding_request = __maple_request_jvs_send_buttons_packet(addr, 1);
+        __outstanding_request_addr = addr;
+        mutex_unlock(&maple_mutex);
+        return 0;
     }
 
-    jvs_status_t status = maple_request_recv_jvs();
-    if(!status.packet_length)
-    {
-        // Didn't get a packet
-        return buttons;
-    }
-
-    if(!jvs_packet_valid(status.packet))
-    {
-        // Packet failed CRC
-        return buttons;
-    }
-
-    if(jvs_packet_code(status.packet) != 0x01)
-    {
-        // Packet is not response type.
-        return buttons;
-    }
-    if(jvs_packet_payload(status.packet)[0] != 0x01)
-    {
-        // Packet is not report type.
-        return buttons;
-    }
-
-    // Parse out the buttons
-    uint8_t *payload = jvs_packet_payload(status.packet) + 1;
-    buttons.dip1 = status.dip_switches & 0x1;
-    buttons.dip2 = (status.dip_switches >> 1) & 0x1;
-    buttons.dip3 = (status.dip_switches >> 2) & 0x1;
-    buttons.dip4 = (status.dip_switches >> 3) & 0x1;
-    buttons.psw1 = status.psw1;
-    buttons.psw2 = status.psw2;
-    buttons.test = (payload[0] >> 7) & 0x1;
-
-    // Player 1 controls
-    buttons.player1.service = (payload[1] >> 6) & 0x1;
-    buttons.player1.start = (payload[1] >> 7) & 0x1;
-    buttons.player1.up = (payload[1] >> 5) & 0x1;
-    buttons.player1.down = (payload[1] >> 4) & 0x1;
-    buttons.player1.left = (payload[1] >> 3) & 0x1;
-    buttons.player1.right = (payload[1] >> 2) & 0x1;
-    buttons.player1.button1 = (payload[1] >> 1) & 0x1;
-    buttons.player1.button2 = payload[1] & 0x1;
-    buttons.player1.button3 = (payload[2] >> 7) & 0x1;
-    buttons.player1.button4 = (payload[2] >> 6) & 0x1;
-    buttons.player1.button5 = (payload[2] >> 5) & 0x1;
-    buttons.player1.button6 = (payload[2] >> 4) & 0x1;
-    buttons.player1.analog1 = payload[11];
-    buttons.player1.analog2 = payload[13];
-    buttons.player1.analog3 = payload[15];
-    buttons.player1.analog4 = payload[17];
-
-    // Player 2 controls
-    buttons.player2.service = (payload[3] >> 6) & 0x1;
-    buttons.player2.start = (payload[3] >> 7) & 0x1;
-    buttons.player2.up = (payload[3] >> 5) & 0x1;
-    buttons.player2.down = (payload[3] >> 4) & 0x1;
-    buttons.player2.left = (payload[3] >> 3) & 0x1;
-    buttons.player2.right = (payload[3] >> 2) & 0x1;
-    buttons.player2.button1 = (payload[3] >> 1) & 0x1;
-    buttons.player2.button2 = payload[3] & 0x1;
-    buttons.player2.button3 = (payload[4] >> 7) & 0x1;
-    buttons.player2.button4 = (payload[4] >> 6) & 0x1;
-    buttons.player2.button5 = (payload[4] >> 5) & 0x1;
-    buttons.player2.button6 = (payload[4] >> 4) & 0x1;
-    buttons.player2.analog1 = payload[19];
-    buttons.player2.analog2 = payload[21];
-    buttons.player2.analog3 = payload[23];
-    buttons.player2.analog4 = payload[25];
-
-    // Finally, send another request to be ready next time we poll.
-    __outstanding_request = __maple_request_jvs_send_buttons_packet(addr, 1);
-    __outstanding_request_addr = addr;
-    return buttons;
+    return -1;
 }
 
-void maple_poll_buttons()
+int maple_poll_buttons()
 {
-    if (first_poll)
+    jvs_buttons_t new_buttons;
+    if (maple_request_jvs_buttons(0x01, &new_buttons) == 0)
     {
-        // We already polled at least once, so copy what we have to
-        // the previous buttons.
-        last_buttons = cur_buttons;
+        if (first_poll)
+        {
+            // We already polled at least once, so copy what we have to
+            // the previous buttons.
+            last_buttons = cur_buttons;
+        }
+
+        // Update the current buttons.
+        cur_buttons = new_buttons;
+
+        if (!first_poll)
+        {
+            // We haven't polled yet, set the last buttons to what we just
+            // polled so if a user starts a game with a button held that is
+            // doesn't register as pressed on the first loop. No half an A
+            // press here!
+            last_buttons = cur_buttons;
+            first_poll = 1;
+        }
+
+        return 0;
     }
 
-    // Grab the new current buttons.
-    cur_buttons = maple_request_jvs_buttons(0x01);
-
-    if (!first_poll)
-    {
-        // We haven't polled yet, set the last buttons to what we just
-        // polled so if a user starts a game with a button held that is
-        // doesn't register as pressed on the first loop. No half an A
-        // press here!
-        last_buttons = cur_buttons;
-        first_poll = 1;
-    }
+    return -1;
 }
 
 jvs_buttons_t maple_buttons_current()

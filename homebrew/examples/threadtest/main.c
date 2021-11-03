@@ -144,7 +144,7 @@ void main()
         // Display our own threading info.
         uint32_t id = thread_id();
         thread_info_t info = thread_info(id);
-        sprintf(tbuf[0], "Thread ID: %ld, Thread Name: %s, CPU: %.02f percent\nFrame Counter: %ld", id, info.name, info.cpu_percentage * 100.0, frame_counter);
+        sprintf(tbuf[0], "Thread ID: %ld, Thread Name: %s, CPU: %.02f percent\nFrame Counter: %ld", id, info.name, info.cpu_percentage * 100.0, frame_counter++);
 
         // Go through and display all 5 buffers.
         for (unsigned int i = 0; i < (sizeof(tbuf) / sizeof(tbuf[0])); i++)
