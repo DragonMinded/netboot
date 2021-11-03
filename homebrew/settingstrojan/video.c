@@ -63,7 +63,6 @@ unsigned int global_video_width = 0;
 unsigned int global_video_height = 0;
 unsigned int cached_actual_width = 0;
 unsigned int cached_actual_height = 0;
-unsigned int global_video_vertical = 0;
 void *buffer_base = 0;
 
 void video_wait_for_vblank()
@@ -94,6 +93,7 @@ void video_init_simple()
 {
     volatile unsigned int *videobase = (volatile unsigned int *)POWERVR2_BASE;
 
+    buffer_loc = 0;
     global_video_width = 640;
     global_video_height = 480;
 
