@@ -1,4 +1,27 @@
-from netdimm.netdimm import NetDimmException, NetDimmVersionEnum, CRCStatusEnum, PeekPokeTypeEnum, NetDimmInfo, NetDimmPacket, NetDimm
+from netdimm.netdimm import (
+    NetDimmException,
+    NetDimmVersionEnum,
+    CRCStatusEnum,
+    PeekPokeTypeEnum,
+    NetDimmInfo,
+    NetDimmPacket,
+    NetDimm,
+)
+from netdimm.message import (
+    Message,
+    receive_packet,
+    send_packet,
+    read_scratch1_register,
+    read_scratch2_register,
+    write_scratch1_register,
+    write_scratch2_register,
+    receive_message,
+    send_message,
+    MAX_PACKET_LENGTH,
+    MAX_MESSAGE_DATA_LENGTH as MAX_MESSAGE_LENGTH,
+    MESSAGE_HOST_STDOUT,
+    MESSAGE_HOST_STDERR,
+)
 
 __all__ = [
     "NetDimmException",
@@ -8,4 +31,17 @@ __all__ = [
     "NetDimmInfo",
     "NetDimmPacket",
     "NetDimm",
+    "Message",
+    "receive_packet",
+    "send_packet",
+    "read_scratch1_register",
+    "read_scratch2_register",
+    "write_scratch1_register",
+    "write_scratch2_register",
+    "receive_message",
+    "send_message",
+    "MAX_PACKET_LENGTH",
+    "MAX_MESSAGE_LENGTH",
+    "MESSAGE_HOST_STDOUT",
+    "MESSAGE_HOST_STDERR",
 ]
