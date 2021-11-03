@@ -22,9 +22,6 @@ extern "C" {
 #define MESSAGE_SAVE_SETTINGS_ACK 0x1008
 #define MESSAGE_SAVE_CONFIG 0x1003
 #define MESSAGE_SAVE_CONFIG_ACK 0x1004
-#define MESSAGE_HOST_PRINT 0x1006
-
-void host_printf(char *msg, ...);
 
 #ifdef __cplusplus
 }

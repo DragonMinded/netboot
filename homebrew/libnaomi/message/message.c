@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <zlib.h>
+#include "naomi/system.h"
+#include "naomi/interrupt.h"
 #include "naomi/message/message.h"
 #include "naomi/message/packet.h"
 
@@ -305,4 +307,106 @@ int message_recv(uint16_t *type, void ** data, unsigned int *length)
 
     // Return the possibly reassembled packet.
     return success;
+}
+
+#define MESSAGE_HOST_STDOUT 0x7FFE
+#define MESSAGE_HOST_STDERR 0x7FFF
+
+#define MAX_CONSOLE_MESSAGE 1024
+static char *stdout_buffer = 0;
+static char *stderr_buffer = 0;
+
+static int __flush(char *buffer, unsigned int length, uint16_t message)
+{
+    if (length == MAX_CONSOLE_MESSAGE || (length > 0 && buffer[length - 1] == '\n'))
+    {
+        // Just send it now!
+        message_send(message, buffer, length);
+        memset(buffer, 0, MAX_CONSOLE_MESSAGE + 1);
+        length = 0;
+    }
+
+    return length;
+}
+
+static int __stdout_write( const char * const buf, unsigned int len )
+{
+    uint32_t old_interrupts = irq_disable();
+
+    if (stdout_buffer)
+    {
+        unsigned int length = strlen(stdout_buffer);
+
+        for (unsigned int i = 0; i < len; i++)
+        {
+            // Flush if we ran out of buffer, or if we got a newline.
+            length = __flush(stdout_buffer, length, MESSAGE_HOST_STDOUT);
+
+            // Add to the buffer.
+            stdout_buffer[length++] = buf[i];
+        }
+
+        // One final flush.
+        __flush(stdout_buffer, length, MESSAGE_HOST_STDOUT);
+    }
+
+    irq_restore(old_interrupts);
+    return len;
+}
+
+static int __stderr_write( const char * const buf, unsigned int len )
+{
+    uint32_t old_interrupts = irq_disable();
+
+    if (stderr_buffer)
+    {
+        unsigned int length = strlen(stderr_buffer);
+
+        for (unsigned int i = 0; i < len; i++)
+        {
+            // Flush if we ran out of buffer, or if we got a newline.
+            length = __flush(stderr_buffer, length, MESSAGE_HOST_STDERR);
+
+            // Add to the buffer.
+            stderr_buffer[length++] = buf[i];
+        }
+
+        // One final flush.
+        __flush(stderr_buffer, length, MESSAGE_HOST_STDERR);
+    }
+
+    irq_restore(old_interrupts);
+    return len;
+}
+
+void message_stdio_redirect_init()
+{
+    if (!stdout_buffer)
+    {
+        /* Get memory for that size */
+        stdout_buffer = malloc(MAX_CONSOLE_MESSAGE + 1);
+        memset(stdout_buffer, 0, MAX_CONSOLE_MESSAGE + 1);
+        stderr_buffer = malloc(MAX_CONSOLE_MESSAGE + 1);
+        memset(stderr_buffer, 0, MAX_CONSOLE_MESSAGE + 1);
+
+        /* Register ourselves with newlib */
+        stdio_t message_calls = { 0, __stdout_write, __stderr_write };
+        hook_stdio_calls( &message_calls );
+    }
+}
+
+void message_stdio_redirect_free()
+{
+    if (stdout_buffer)
+    {
+        /* Nuke the message buffer */
+        free(stdout_buffer);
+        stdout_buffer = 0;
+        free(stderr_buffer);
+        stderr_buffer = 0;
+
+        /* Unregister ourselves from newlib */
+        stdio_t message_calls = { 0, __stdout_write, __stderr_write };
+        unhook_stdio_calls( &message_calls );
+    }
 }

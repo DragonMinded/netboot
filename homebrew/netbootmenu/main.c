@@ -5,6 +5,7 @@
 #include "naomi/eeprom.h"
 #include "naomi/timer.h"
 #include "naomi/message/packet.h"
+#include "naomi/message/message.h"
 #include "config.h"
 #include "screens.h"
 
@@ -20,6 +21,9 @@ void main()
 
     // Attach our communication handler for packet sending/receiving.
     packetlib_init();
+
+    // Allow printf to go to the host.
+    message_stdio_redirect_init();
 
     // Init the screen for a simple 640x480 framebuffer.
     video_init_simple();

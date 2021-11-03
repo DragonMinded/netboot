@@ -18,6 +18,14 @@ extern "C" {
 int message_send(uint16_t type, void * data, unsigned int length);
 int message_recv(uint16_t *type, void ** data, unsigned int *length);
 
+// Set up stdin/stdout/stderr console redirection to a host program that will
+// react accordingly. Note that this requires a host program that understands
+// particular stdin/stdout/stderr messages. If such a program exists and is
+// connected, then printf() and friends will appear on the host as debugging
+// messages.
+void message_stdio_redirect_init();
+void message_stdio_redirect_free();
+
 #ifdef __cplusplus
 }
 #endif

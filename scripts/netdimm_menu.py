@@ -458,10 +458,13 @@ MESSAGE_LOAD_SETTINGS_ACK: int = 0x1002
 MESSAGE_SAVE_CONFIG: int = 0x1003
 MESSAGE_SAVE_CONFIG_ACK: int = 0x1004
 MESSAGE_LOAD_SETTINGS_DATA: int = 0x1005
-MESSAGE_HOST_PRINT: int = 0x1006
 MESSAGE_SAVE_SETTINGS_DATA: int = 0x1007
 MESSAGE_SAVE_SETTINGS_ACK: int = 0x1008
 MESSAGE_LOAD_PROGRESS: int = 0x1009
+
+MESSAGE_HOST_STDOUT: int = 0x7FFE
+MESSAGE_HOST_STDERR: int = 0x7FFF
+
 SETTINGS_SIZE: int = 64
 
 READ_ONLY_ALWAYS: int = -1
@@ -951,8 +954,10 @@ def main() -> int:
                                     settings_save(args.menu_settings_file, args.ip, settings)
 
                                     send_message(netdimm, Message(MESSAGE_SAVE_CONFIG_ACK), verbose=verbose)
-                            elif msg.id == MESSAGE_HOST_PRINT:
-                                print(msg.data.decode('utf-8'))
+                            elif msg.id == MESSAGE_HOST_STDOUT:
+                                print(msg.data.decode('utf-8'), end="")
+                            elif msg.id == MESSAGE_HOST_STDERR:
+                                print(msg.data.decode('utf-8'), end="", file=sys.stderr)
 
             except NetDimmException:
                 # Mark failure so we don't try to wait for power down below.

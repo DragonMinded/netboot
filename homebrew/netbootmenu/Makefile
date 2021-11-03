@@ -12,7 +12,6 @@ SRCS += main.c
 SRCS += config.c
 SRCS += controls.c
 SRCS += screens.c
-SRCS += common.c
 SRCS += dejavusans.ttf
 SRCS += build/up.o
 SRCS += build/dn.o

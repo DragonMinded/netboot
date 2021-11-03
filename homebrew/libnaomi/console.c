@@ -103,7 +103,7 @@ void console_init(unsigned int overscan)
     }
 }
 
-void console_close()
+void console_free()
 {
     if (render_buffer)
     {

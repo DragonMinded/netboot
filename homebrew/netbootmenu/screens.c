@@ -93,7 +93,7 @@ int parse_setting(uint8_t *data, unsigned int length, setting_t *setting, unsign
 
     if (length < ((*expected_length) + 1))
     {
-        host_printf("Not enough data for setting name!");
+        printf("Not enough data for setting name!\n");
         return 0;
     }
 
@@ -108,7 +108,7 @@ int parse_setting(uint8_t *data, unsigned int length, setting_t *setting, unsign
         /* We only need the current value just in case other settings depend on this one */
         if (length < ((*expected_length) + 4))
         {
-            host_printf("Not enough data for current value!");
+            printf("Not enough data for current value!\n");
             return 0;
         }
 
@@ -120,7 +120,7 @@ int parse_setting(uint8_t *data, unsigned int length, setting_t *setting, unsign
 
     if (length < ((*expected_length) + settingnamelen))
     {
-        host_printf("Not enough data for setting name!");
+        printf("Not enough data for setting name!\n");
         return 0;
     }
 
@@ -133,7 +133,7 @@ int parse_setting(uint8_t *data, unsigned int length, setting_t *setting, unsign
 
     if (length < ((*expected_length) + 4))
     {
-        host_printf("Not enough data for number of values!");
+        printf("Not enough data for number of values!\n");
         return 0;
     }
 
@@ -148,7 +148,7 @@ int parse_setting(uint8_t *data, unsigned int length, setting_t *setting, unsign
         {
             if (length < ((*expected_length) + 5))
             {
-                host_printf("Not enough data for setting value %d!", valueno);
+                printf("Not enough data for setting value %d!\n", valueno);
 
                 free(setting->values);
                 return 0;
@@ -162,7 +162,7 @@ int parse_setting(uint8_t *data, unsigned int length, setting_t *setting, unsign
 
             if (length < ((*expected_length) + valuenamelen))
             {
-                host_printf("Not enough data for setting value %d!", valueno);
+                printf("Not enough data for setting value %d!\n", valueno);
                 free(setting->values);
                 return 0;
             }
@@ -183,7 +183,7 @@ int parse_setting(uint8_t *data, unsigned int length, setting_t *setting, unsign
             free(setting->values);
         }
 
-        host_printf("Not enough data for current value!");
+        printf("Not enough data for current value!\n");
         return 0;
     }
 
@@ -197,7 +197,7 @@ int parse_setting(uint8_t *data, unsigned int length, setting_t *setting, unsign
             free(setting->values);
         }
 
-        host_printf("Not enough data for read-only specifier!");
+        printf("Not enough data for read-only specifier!\n");
         return 0;
     }
 
@@ -214,7 +214,7 @@ int parse_setting(uint8_t *data, unsigned int length, setting_t *setting, unsign
                 free(setting->values);
             }
 
-            host_printf("Not enough data for read-only negate specifier!");
+            printf("Not enough data for read-only negate specifier!\n");
             return 0;
         }
 
@@ -228,7 +228,7 @@ int parse_setting(uint8_t *data, unsigned int length, setting_t *setting, unsign
                 free(setting->values);
             }
 
-            host_printf("Not enough data for read-only depdendent values count!");
+            printf("Not enough data for read-only dependent values count!\n");
             return 0;
         }
 
@@ -247,7 +247,7 @@ int parse_setting(uint8_t *data, unsigned int length, setting_t *setting, unsign
                 }
                 free(setting->read_only.values);
 
-                host_printf("Not enough data for read-only dependent values!");
+                printf("Not enough data for read-only dependent values!\n");
 
                 return 0;
             }
@@ -297,7 +297,7 @@ game_options_t *parse_game_options(uint8_t *data, unsigned int length)
 
     if (length < (expected_length + 4))
     {
-        host_printf("Not enough data for selected game!");
+        printf("Not enough data for selected game!\n");
         free(parsed_options);
         return 0;
     }
@@ -307,7 +307,7 @@ game_options_t *parse_game_options(uint8_t *data, unsigned int length)
 
     if (length < (expected_length + 1))
     {
-        host_printf("Not enough data for patch count!");
+        printf("Not enough data for patch count!\n");
         free(parsed_options);
         return 0;
     }
@@ -323,7 +323,7 @@ game_options_t *parse_game_options(uint8_t *data, unsigned int length)
         {
             if (length < (expected_length + 2))
             {
-                host_printf("Not enough data for patch %d!", patchno);
+                printf("Not enough data for patch %d!\n", patchno);
                 free(parsed_options->patches);
                 free(parsed_options);
                 return 0;
@@ -337,7 +337,7 @@ game_options_t *parse_game_options(uint8_t *data, unsigned int length)
 
             if (length < (expected_length + patchnamelen))
             {
-                host_printf("Not enough data for patch %d!", patchno);
+                printf("Not enough data for patch %d!\n", patchno);
                 free(parsed_options->patches);
                 free(parsed_options);
                 return 0;
@@ -354,7 +354,7 @@ game_options_t *parse_game_options(uint8_t *data, unsigned int length)
 
     if (length < (expected_length + 1))
     {
-        host_printf("Not enough data for force settings option!");
+        printf("Not enough data for force settings option!\n");
         if (parsed_options->patches)
         {
             free(parsed_options->patches);
@@ -368,7 +368,7 @@ game_options_t *parse_game_options(uint8_t *data, unsigned int length)
 
     if (length < (expected_length + 1))
     {
-        host_printf("Not enough data for system settings count!");
+        printf("Not enough data for system settings count!\n");
         if (parsed_options->patches)
         {
             free(parsed_options->patches);
@@ -388,7 +388,7 @@ game_options_t *parse_game_options(uint8_t *data, unsigned int length)
         {
             if (parse_setting(data, length, &parsed_options->system_settings[settingno], &expected_length) == 0)
             {
-                host_printf("Not enough data for system setting %d!", settingno);
+                printf("Not enough data for system setting %d!\n", settingno);
 
                 for (unsigned int fs = 0; fs < settingno; fs++)
                 {
@@ -407,7 +407,7 @@ game_options_t *parse_game_options(uint8_t *data, unsigned int length)
 
     if (length < (expected_length + 1))
     {
-        host_printf("Not enough data for game settings count!");
+        printf("Not enough data for game settings count!\n");
         if (parsed_options->system_settings)
         {
             free(parsed_options->system_settings);
@@ -431,7 +431,7 @@ game_options_t *parse_game_options(uint8_t *data, unsigned int length)
         {
             if (parse_setting(data, length, &parsed_options->game_settings[settingno], &expected_length) == 0)
             {
-                host_printf("Not enough data for game setting %d!", settingno);
+                printf("Not enough data for game setting %d!\n", settingno);
 
                 for (unsigned int fs = 0; fs < settingno; fs++)
                 {
@@ -727,7 +727,7 @@ unsigned int main_menu(state_t *state, int reinit)
             else
             {
                 // Unexpected packet?
-                host_printf("Unexpected packet %04X!", type);
+                printf("Unexpected packet %04X!\n", type);
             }
 
             // Wipe any data that we need.
@@ -884,13 +884,13 @@ unsigned int game_settings_load(state_t *state, int reinit)
                 {
                     // Uh oh, failed to parse data.
                     new_screen = SCREEN_COMM_ERROR;
-                    host_printf("Failed to parse game settings!");
+                    printf("Failed to parse game settings!\n");
                 }
                 if (game_options->selected_game != selected_game)
                 {
                     // Uh oh, failed to parse data.
                     new_screen = SCREEN_COMM_ERROR;
-                    host_printf("Wrong game settings returned!");
+                    printf("Wrong game settings returned!\n");
                 }
 
                 new_screen = SCREEN_GAME_SETTINGS;
@@ -904,7 +904,7 @@ unsigned int game_settings_load(state_t *state, int reinit)
             else
             {
                 // Unexpected packet?
-                host_printf("Unexpected packet %04X!", type);
+                printf("Unexpected packet %04X!\n", type);
             }
 
             // Wipe any data that we need.
@@ -1353,7 +1353,7 @@ unsigned int game_settings(state_t *state, int reinit)
             else
             {
                 // Unexpected packet?
-                host_printf("Unexpected packet %04X!", type);
+                printf("Unexpected packet %04X!\n", type);
             }
 
             // Wipe any data that we need.
@@ -1721,7 +1721,7 @@ unsigned int game_settings_save(state_t *state, int reinit)
             else
             {
                 // Unexpected packet?
-                host_printf("Unexpected packet %04X!", type);
+                printf("Unexpected packet %04X!\n", type);
             }
 
             // Wipe any data that we need.
@@ -2116,7 +2116,7 @@ unsigned int configuration(state_t *state, int reinit)
             else
             {
                 // Unexpected packet?
-                host_printf("Unexpected packet %04X!", type);
+                printf("Unexpected packet %04X!\n", type);
             }
 
             // Wipe any data that we need.
@@ -2303,7 +2303,7 @@ unsigned int configuration_save(state_t *state, int reinit)
             else
             {
                 // Unexpected packet?
-                host_printf("Unexpected packet %04X!", type);
+                printf("Unexpected packet %04X!\n", type);
             }
 
             // Wipe any data that we need.
@@ -2385,7 +2385,7 @@ unsigned int game_load(state_t *state, int reinit)
             else
             {
                 // Unexpected packet?
-                host_printf("Unexpected packet %04X!", type);
+                printf("Unexpected packet %04X!\n", type);
             }
 
             // Wipe any data that we need.
