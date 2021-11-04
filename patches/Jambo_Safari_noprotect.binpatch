@@ -1,0 +1,5 @@
+# Description: disable header modification protection
+# File size: 75497472
+# Force this patch to only apply to the correct serial
+134: 42 41 55 30 -> 42 41 55 30
+946D0: 0B 43 E2 61 -> 00 E0 09 00
