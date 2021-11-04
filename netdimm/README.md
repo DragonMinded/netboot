@@ -100,3 +100,89 @@ value or 0 if it could not be retrieved.
 Given an address as an integer, a type in the form of either `PeekPokeTypeEnum.TYPE_BYTE`,
 `PeekPokeTypeEnum.TYPE_SHORT` or `PeekPokeTypeEnum.TYPE_LONG` and a data value, attempts
 to write that size of data to that address on the target system running the net dimm.
+
+## Naomi Homebrew Messaging Protocol
+
+The netdimm module provides a series of functions that are capable of talking to a
+Naomi homebrew program through a net dimm. Both low level packet-based and slightly
+higher-level message-based functions are provided for you depending on your needs.
+They correspond to the functions implemented in `naomi/message/packet.h` and
+`naomi/message/message.h` respectively. The packet-based interface provides the
+ability to read or write one packet at a time, read from or write to two scratch
+registers and read from a configuration register. The message-based interface
+provides the ability to send or receive optionally-compressed messages (binary
+data with a type) which can be up to 64kb in size.
+
+The `MAX_MESSAGE_LENGTH` constant gives you the size that you should not exceed
+when sending messages, and the `MAX_PACKET_LENGTH` constant gives you the size you
+should not exceed when sending packets.
+
+The `Message` class is available for you when sending and receiving messages. Its
+constructor takes a type argument which should be an integer in the range 0x0-0x7FFF
+and optionally a data argument containing up to MAX_MESSAGE_LENGTH bytes as the
+message payload. The packet type is available on instantiated `Message` classes
+using the `id` attribute, and optional data is available on the `data` attribute.
+Note that when a message contains no data, the `data` attribute will be Null.
+
+The protocol is entirely host-driven. The Naomi program will not discard or attempt
+to send or receive a packet or message without the host driving it. This is because
+the Naomi has no way of requesting a net dimm send a packet, but the host has the
+ability to request peek and poke messages that are performed on the Naomi's main
+RAM. Thus, it is your responsibility to call either `receive_packet` or `receive_message`
+in an event loop in order to keep the Naomi ROM's buffers from filling.
+
+### send_packet
+
+Takes an instantiated `NetDimm` class and a bytes object representing between 1
+and 253 bytes of data to send to the Naomi program. Returns True if the packet
+was successfully sent or False otherwise.
+
+### receive_packet
+
+Takes an instantiated `NetDimm` class and attempts to receive a single packet
+between 1 and 253 bytes long from the Naomi program. If successful, the byte
+data inside the packet will be returned. Otherwise, None is returned.
+
+### read_scratch1_register
+
+Attempts to read the 32-bit scratch1 register (usable for anything you want).
+Returns the 32-bit value on success or None if the register could not be read.
+
+### read_scratch2_register
+
+Attempts to read the 32-bit scratch2 register (usable for anything you want).
+Returns the 32-bit value on success or None if the register could not be read.
+
+### write_scratch1_register
+
+Attempts to write an integer parameter to the 32-bit scratch1 register. There
+is no checking that this operation succeeded, though it generally does. If you
+wish to be sure, you can read back the contents.
+
+### write_scratch2_register
+
+Attempts to write an integer parameter to the 32-bit scratch2 register. There
+is no checking that this operation succeeded, though it generally does. If you
+wish to be sure, you can read back the contents.
+
+### send_message
+
+Takes an instantiated `NetDimm` class and an instance of `Message` and attempts
+to send that message to a Naomi program. Raises `MessageException` on failure
+to send the message. This can happen if the Naomi program isn't running the message
+protocol or if the program has crashed.
+
+### receive_message
+
+Takes an instantiated `NetDimm` class and attempts to receive a message from a
+Naomi program. Raises `MessageException ` on critical failures, such as malformed
+packets or if the Naomi program isn't running the message protocol. Returns an
+instance of `Message` representing the received message on success, and returns
+None if there was no message ready to receive.
+
+Note that correctly configured Naomi homebrew programs that have installed the
+stdio redirect hooks to send stdout and stderr to a communicating host will send
+message of type `MESSAGE_HOST_STDOUT` and `MESSAGE_HOST_STDERR` when the respective
+streams have data. These are flushed when a newline is received and contain that
+newline in the data. To correctly display these, it is recommended to decode them
+as utf-8 data and display them verbatum.
