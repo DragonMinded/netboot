@@ -78,7 +78,16 @@ def after_request(response: Response) -> Response:
 def home() -> Response:
     cabman = app.config['CabinetManager']
     dirman = app.config['DirectoryManager']
-    return make_response(render_template('index.html', cabinets=[cabinet_to_dict(cab, dirman) for cab in cabman.cabinets]), 200)
+    return make_response(
+        render_template(
+            'index.html',
+            cabinets=sorted(
+                [cabinet_to_dict(cab, dirman) for cab in cabman.cabinets],
+                key=lambda cab: cast(str, cab['description']),
+            ),
+        ),
+        200,
+    )
 
 
 @app.route('/config')
