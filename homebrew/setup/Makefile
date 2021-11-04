@@ -1,4 +1,5 @@
-# Dreamcast toolchain makefile    by Jim Ursetto
+# Naomi toolchain makefile modified by DragonMinded
+# based off of the Dreamcast toolchain makefile by Jim Ursetto
 # adapted from Stalin's build script version 0.3
 #
 # Interesting parameters:
@@ -18,11 +19,15 @@
 # gdb
 # insight
 
+# Optionally change this to build elsewhere, although you will have to
+# edit your env.sh script as well.
+PREFIX?=/opt/toolchains/naomi
+
 # User configuration
 sh_target=sh-elf
 arm_target=arm-eabi
-sh_prefix  := /opt/toolchains/naomi/$(sh_target)
-arm_prefix := /opt/toolchains/naomi/$(arm_target)
+sh_prefix := ${PREFIX}/$(sh_target)
+arm_prefix := ${PREFIX}/$(arm_target)
 sh_binutils_ver=2.34
 sh_gcc_ver=9.4.0
 newlib_ver=4.1.0
@@ -46,7 +51,12 @@ verbose=1
 # with just one running at a time. So, if you run into trouble, then you should
 # clear this variable and try again with just one job running. By default, this
 # is set to number of CPU cores plus one.
-makejobs=-j$(shell echo "processor" | cat /proc/cpuinfo - | grep processor | wc -l)
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+  makejobs=-j$(shell echo $$(sysctl -n hw.activecpu) + 1 | bc)
+else
+  makejobs=-j$(shell echo "processor" | cat /proc/cpuinfo - | grep processor | wc -l)
+endif
 
 # Set the languages to build for pass 2 of building gcc for sh-elf. The default
 # here is to build C and C++. For some reason at least on the current toolchain,
@@ -56,13 +66,6 @@ pass2_languages=c,c++
 # Change this if you don't have Bash installed in /bin
 SHELL = /bin/bash
 
-# GCC compiles fine with clang, but only if we use libstdc++ instead of libc++.
-UNAME_S := $(shell uname -s)
-ifeq ($(UNAME_S),Darwin)
-  ifneq ($(shell $(CXX) --version | grep clang),)
-    CXX := "$(CXX) -stdlib=libstdc++"
-  endif
-endif
 
 # Catch all...
 ifeq ($(CXX),)
