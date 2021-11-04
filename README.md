@@ -81,6 +81,14 @@ This script connects to a net dimm and requests it to peek at system RAM or poke
 ./netdimm_peekpoke --help
 ```
 
+### netdimm_stdio_redirect
+
+This script connects to a homebrew program written using libnaomi (found in the `homebrew/` directory) and redirects its standard output and standard error streams to the console of the computer you ran the script from. Use this to enable printf-style debugging in homebrew that you are developing or debugging. Note that this requres a Naomi ROM that both has the net dimm messaging protocol compiled in and has activated the stdio redirect hook. Invoke the script like so to see options:
+
+```
+./netdimm_stdio_redirect --help
+```
+
 ### binary_patch
 
 This script can either diff two same-length binaries and produce a patch similar to the files found in `patches/` or it can take a binary and one or more patch files and produce a new binary with the patches applied. Note that this is just a frontend to the same utility that lives in <https://github.com/DragonMinded/arcadeutils> and as such all documentation there applies here as well. The patches that this produces in diff mode can also be applied on-the-fly when using `netdimm_send` or `netdimm_ensure` by using the `--patch` argument to either tool. See either of the tools above for more information. Invoke the script like so to see options:
@@ -157,6 +165,8 @@ In 'info' mode, this script will print information about any attached EEPROM set
 
 In 'edit' mode, this script will extract an existing EEPROM settings file from a ROM, let you edit those settings, and then save the settings back to the ROM. If the Naomi ROM does not have any EEPROM settings already attached, it will create them using defaults stored in the definition files before letting you edit those defaults and then save them.
 
+Note that some Naomi games have protection code that prevents successful modification of the header. In these cases, attempting to apply settings to a ROM will result in the game freezing randomly. Usually this can be seen in the attract sequence. To circumvent this and apply settings successfully, check the `patches/` folder to see if a `noprotect` patch for that game exists and apply it first before attempting to attach or edit settings for a ROM.
+
 Invoke the script like so to see options:
 
 ```
@@ -198,6 +208,14 @@ You can also see options available for running by running it with the `--help` o
 ```
 ./make_no_attract_patch --help
 ./make_freeplay_patch --help
+```
+
+### Default Game Settings Patch Generator
+
+The `patch_default_settings` script attempts to take an EEPROM file that was obtained from an emulator or created using `edit_settings` and apply the game section to a ROM such that when it initializes EEPROM it does so with your chosen settings instead of its original defaults. Note that this requires a settings definition file for the game in order to work properly and is not guaranteed to work. It operates under the principle that many games have the entire default game EEPROM compiled into their code somewhere and changing that changes what they write to the EEPROM when creating new settings. It uses the defaults specified in the settings definition file to figure out what EEPROM contents to search for and if it finds a chunk of data matching that contents it will patch the ROM to have the settings found in the specified EEPROM file instead. If you wish to generate a patch instead of patching the ROM itself, you can run with the `--patch-file` argument. Invoke the script like so to see options:
+
+```
+./patch_default_settings --help
 ```
 
 ## Web Interface
