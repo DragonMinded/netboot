@@ -33,8 +33,15 @@ extern irq_state_t *irq_state;
 #define INTC_IPRC *((volatile uint16_t *)(INTC_BASE_ADDRESS + 0x0C))
 #define INTC_IPRD *((volatile uint16_t *)(INTC_BASE_ADDRESS + 0x10))
 
-static irq_stats_t stats;
+// Non-varargs version of debug print, so we can use our own static buffer for safety.
+void __video_draw_debug_text( int x, int y, uint32_t color, const char * const msg );
+
+// Static buffer for displaying exceptions, so we don't have to rely on messing with the
+// stack of the running program or our own internal stack.
 static char exception_buffer[1024];
+
+// Statistics about the interrupt system.
+static irq_stats_t stats;
 
 void _irq_display_exception(irq_state_t *cur_state, char *failure, int code)
 {
@@ -62,7 +69,7 @@ void _irq_display_exception(irq_state_t *cur_state, char *failure, int code)
         cur_state->gp_regs[15], cur_state->pc
     );
 
-    video_draw_debug_text(32, 32, rgb(255, 255, 255), exception_buffer);
+    __video_draw_debug_text(32, 32, rgb(255, 255, 255), exception_buffer);
     video_display_on_vblank();
 
     while( 1 ) { ; }
@@ -80,7 +87,7 @@ void _irq_display_invariant(char *msg, char *failure, ...)
     video_set_background_color(rgb(48, 0, 0));
 
     sprintf(exception_buffer, "INVARIANT VIOLATION: %s", msg);
-    video_draw_debug_text(32, 32, rgb(255, 255, 255), exception_buffer);
+    __video_draw_debug_text(32, 32, rgb(255, 255, 255), exception_buffer);
 
     va_list args;
     va_start(args, failure);
@@ -90,7 +97,7 @@ void _irq_display_invariant(char *msg, char *failure, ...)
     if (length > 0)
     {
         exception_buffer[length < 1023 ? length : 1023] = 0;
-        video_draw_debug_text(32, 32 + (8 * 2), rgb(255, 255, 255), exception_buffer);
+        __video_draw_debug_text(32, 32 + (8 * 2), rgb(255, 255, 255), exception_buffer);
     }
 
     video_display_on_vblank();
@@ -137,22 +144,89 @@ uint32_t _irq_read_vbr();
 void _dimm_comms_init();
 void _dimm_comms_free();
 void _dimm_command_handler();
+void _vblank_init();
+void _vblank_free();
 
 uint32_t _holly_interrupt()
 {
-    uint32_t requested = *HOLLY_EXTERNAL_IRQ_STATUS;
+    // Interrupts we care about that we actually got this round.
     uint32_t serviced = 0;
 
-    if ((requested & HOLLY_INTERRUPT_DIMM_COMMS) != 0)
+    // Internal interrupt handler.
     {
-        _dimm_command_handler();
-        serviced |= HOLLY_INTERRUPT_DIMM_COMMS;
+        uint32_t requested = *HOLLY_INTERNAL_IRQ_STATUS;
+        uint32_t handled = 0;
+
+        // For some reason, even though we don't ask for it, HOLLY gives us IRQ finished
+        // events for anything we tickle in the system, so we just reset those if we
+        // encounter any of them.
+        if (requested & HOLLY_INTERNAL_INTERRUPT_MAPLE_DMA_FINISHED)
+        {
+            // Request to clear the interrupt.
+            *HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_MAPLE_DMA_FINISHED;
+            handled |= HOLLY_INTERNAL_INTERRUPT_MAPLE_DMA_FINISHED;
+        }
+        if (requested & HOLLY_INTERNAL_INTERRUPT_RENDER_FINISHED)
+        {
+            // Request to clear the interrupt.
+            *HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_RENDER_FINISHED;
+            handled |= HOLLY_INTERNAL_INTERRUPT_RENDER_FINISHED;
+        }
+
+        // Handle vblank in/out by making a request to the scheduler to wake
+        // any threads waiting for this.
+        if (requested & HOLLY_INTERNAL_INTERRUPT_VBLANK_IN)
+        {
+            // Request to clear the interrupt.
+            *HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_VBLANK_IN;
+            handled |= HOLLY_INTERNAL_INTERRUPT_VBLANK_IN;
+
+            // Signal to thread scheduler to wake any waiting threads.
+            serviced |= HOLLY_SERVICED_VBLANK_IN;
+        }
+        if (requested & HOLLY_INTERNAL_INTERRUPT_VBLANK_OUT)
+        {
+            // Request to clear the interrupt.
+            *HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_VBLANK_OUT;
+            handled |= HOLLY_INTERNAL_INTERRUPT_VBLANK_OUT;
+
+            // Signal to thread scheduler to wake any waiting threads.
+            serviced |= HOLLY_SERVICED_VBLANK_OUT;
+        }
+        if (requested & HOLLY_INTERNAL_INTERRUPT_HBLANK)
+        {
+            // Request to clear the interrupt.
+            *HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_HBLANK;
+            handled |= HOLLY_INTERNAL_INTERRUPT_HBLANK;
+
+            // Signal to thread scheduler to wake any waiting threads.
+            serviced |= HOLLY_SERVICED_HBLANK;
+        }
+
+        uint32_t left = requested & (~handled);
+        if (left)
+        {
+            _irq_display_invariant("uncaught holly internal interrupt", "pending irq status %08lx", left);
+        }
     }
 
-    uint32_t left = requested & (~serviced);
-    if (left)
+    // External interrupt handler.
     {
-        _irq_display_invariant("uncaught holly interrupt", "pending irq status %08lx", left);
+        uint32_t requested = *HOLLY_EXTERNAL_IRQ_STATUS;
+        uint32_t handled = 0;
+
+        if ((requested & HOLLY_EXTERNAL_INTERRUPT_DIMM_COMMS) != 0)
+        {
+            _dimm_command_handler();
+            handled |= HOLLY_EXTERNAL_INTERRUPT_DIMM_COMMS;
+            serviced |= HOLLY_SERVICED_DIMM_COMMS;
+        }
+
+        uint32_t left = requested & (~handled);
+        if (left)
+        {
+            _irq_display_invariant("uncaught holly external interrupt", "pending irq status %08lx", left);
+        }
     }
 
     return serviced;
@@ -186,8 +260,8 @@ irq_state_t * _irq_external_interrupt(irq_state_t *cur_state)
         case IRQ_EVENT_HOLLY_LEVEL4:
         case IRQ_EVENT_HOLLY_LEVEL6:
         {
-            uint32_t ret = _holly_interrupt();
-            cur_state = _syscall_holly(cur_state, ret);
+            uint32_t serviced = _holly_interrupt();
+            cur_state = _syscall_holly(cur_state, serviced);
             break;
         }
         default:
@@ -254,6 +328,20 @@ void _irq_init()
     // Finally, set the VBR to our vector table.
     _irq_set_vector_table();
 
+    // Disable all HOLLY internal interrupts unless explicitly enabled.
+    // Also cancel any pending interrupts.
+    *HOLLY_INTERNAL_IRQ_2_MASK = 0;
+    *HOLLY_INTERNAL_IRQ_4_MASK = 0;
+    *HOLLY_INTERNAL_IRQ_6_MASK = 0;
+    *HOLLY_INTERNAL_IRQ_STATUS = *HOLLY_INTERNAL_IRQ_STATUS;
+
+    // Disable all HOLLY external interrupts unless explicitly enabled.
+    // We can't cancel any pending interrupts because that's done by
+    // interacting with the external hardware generating the interurpt.
+    *HOLLY_EXTERNAL_IRQ_2_MASK = 0;
+    *HOLLY_EXTERNAL_IRQ_4_MASK = 0;
+    *HOLLY_EXTERNAL_IRQ_6_MASK = 0;
+
     // Allow timer interrupts, ignore RTC interrupts.
     INTC_IPRA = 0xFFF0;
 
@@ -275,6 +363,7 @@ void _irq_init()
     _thread_create_idle();
 
     // Now, set up hardware that needs interrupts from HOLLY
+    _vblank_init();
     _dimm_comms_init();
 }
 
@@ -286,6 +375,20 @@ void _irq_free()
 
     // Tear down hardware that needed interrupts from HOLLY.
     _dimm_comms_free();
+    _vblank_free();
+
+    // Disable any masks that we previously had set, acknowledge all IRQs.
+    *HOLLY_INTERNAL_IRQ_2_MASK = 0;
+    *HOLLY_INTERNAL_IRQ_4_MASK = 0;
+    *HOLLY_INTERNAL_IRQ_6_MASK = 0;
+    *HOLLY_INTERNAL_IRQ_STATUS = *HOLLY_INTERNAL_IRQ_STATUS;
+    *HOLLY_EXTERNAL_IRQ_2_MASK = 0;
+    *HOLLY_EXTERNAL_IRQ_4_MASK = 0;
+    *HOLLY_EXTERNAL_IRQ_6_MASK = 0;
+    INTC_IPRA = 0x0000;
+    INTC_IPRB = 0x0000;
+    INTC_IPRC = 0x0000;
+    INTC_IPRD = 0x0000;
 
     // Restore SR and VBR to their pre-init state.
     __asm__(

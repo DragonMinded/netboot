@@ -137,8 +137,12 @@ void main()
         thread_start(threads[i]);
     }
 
-    uint32_t frame_counter = 0;
+    // Bump our own priority so that we can guarantee 60fps. This is safe to do
+    // since video_display_on_vblank() will wait for vblank while sleeping, so
+    // the other threads will get their turn most of the time.
+    thread_priority(thread_id(), 1);
 
+    uint32_t frame_counter = 0;
     while ( 1 )
     {
         // Display our own threading info.

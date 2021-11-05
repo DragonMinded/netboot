@@ -95,8 +95,12 @@ uint32_t thread_create(char *name, thread_func_t function, void *param);
 void *thread_join(uint32_t tid);
 void thread_destroy(uint32_t tid);
 
+// The minimum and maximum priorities allowed for threads.
 #define MAX_PRIORITY 1000
 #define MIN_PRIORITY -1000
+
+// The amount of time in microseconds that a thread is allowed to keep its high-pri status.
+#define PRIORITY_INVERSION_TIME 1000
 
 // Various thread manipulation functions. Get information about a thread, start and stop a
 // thread, change priority on a thread, etc. All of these are safe to call from within any
@@ -106,11 +110,33 @@ void thread_priority(uint32_t tid, int priority);
 void thread_start(uint32_t tid);
 void thread_stop(uint32_t tid);
 
-// Yield to the thread scheduler, which can choose a new thread to schedule.
+// Yield to the thread scheduler, which can choose a new thread to schedule. Also relinquishes
+// high-priority status if the current thread if it is designated high-priority.
 void thread_yield();
 
 // Sleep the thread until at least the specified number of microseconds has elapsed.
+// When awoken, your thread is guaranteed priority for PRIORITY_INVERSION_TIME microseconds.
+// If you do not need this, you can thread_yield() to return yourself to normal priority
+// after finishing time-dependent work.
 void thread_sleep(uint32_t us);
+
+// Wait until we are inside the vblank period, when it is safe to modify the current video
+// framebuffer without tearing or artifacts. When awoken, your thread is guaranteed priority
+// for PRIORITY_INVERSION_TIME microseconds. If you do not need this, you can thread_yield()
+// to return yourself to normal priority after finishing vblank-dependent work.
+void thread_wait_vblank_in();
+
+// Wait until we are outside the vblank period, when it is not safe to modify the current video
+// framebuffer without tearing or artifacts. When awoken, your thread is guaranteed priority
+// for PRIORITY_INVERSION_TIME microseconds. If you do not need this, you can thread_yield()
+// to return yourself to normal priority after finishing vblank-dependent work.
+void thread_wait_vblank_out();
+
+// Wait until the next hblank period. This is included under the assumption that you might want
+// to perform hblank effects. When awoken, your thread is guaranteed priority for
+// PRIORITY_INVERSION_TIME microseconds. If you do not need this, you can thread_yield()
+// to return yourself to normal priority after finishing vblank-dependent work.
+void thread_wait_hblank();
 
 // Exit a thread early, returning return value. Identical to letting control reach the end
 // of the thread function with a return statement.

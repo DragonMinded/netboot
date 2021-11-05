@@ -32,7 +32,7 @@ void _dimm_command_handler()
     // Keep track of the top 8 bits of the address for peek/poke commands.
     static uint32_t base_address = 0;
 
-    if ((*HOLLY_EXTERNAL_IRQ_STATUS & HOLLY_INTERRUPT_DIMM_COMMS) != 0)
+    if ((*HOLLY_EXTERNAL_IRQ_STATUS & HOLLY_EXTERNAL_INTERRUPT_DIMM_COMMS) != 0)
     {
         uint16_t dimm_command = *NAOMI_DIMM_COMMAND;
         if (dimm_command & CONST_DIMM_HAS_COMMAND)
@@ -203,7 +203,7 @@ void _dimm_command_handler()
 
             do {
                 /* Do a spinloop to wait for external IRQ to clear. */
-            } while ((*HOLLY_EXTERNAL_IRQ_STATUS & HOLLY_INTERRUPT_DIMM_COMMS) != 0);
+            } while ((*HOLLY_EXTERNAL_IRQ_STATUS & HOLLY_EXTERNAL_INTERRUPT_DIMM_COMMS) != 0);
 
             /* Send interrupt to the DIMM itself saying we have data. */
             *NAOMI_DIMM_STATUS = *NAOMI_DIMM_STATUS & 0xFFFE;
@@ -213,7 +213,7 @@ void _dimm_command_handler()
             *NAOMI_DIMM_STATUS = *NAOMI_DIMM_STATUS | 0x100;
             do {
                 /* Do a spinloop to wait for external IRQ to clear. */
-            } while ((*HOLLY_EXTERNAL_IRQ_STATUS & HOLLY_INTERRUPT_DIMM_COMMS) != 0);
+            } while ((*HOLLY_EXTERNAL_IRQ_STATUS & HOLLY_EXTERNAL_INTERRUPT_DIMM_COMMS) != 0);
         }
     }
 }
@@ -224,9 +224,9 @@ void _dimm_comms_init()
 
     if (check_has_dimm_inserted())
     {
-        if ((*HOLLY_EXTERNAL_IRQ_2_MASK & HOLLY_INTERRUPT_DIMM_COMMS) == 0)
+        if ((*HOLLY_EXTERNAL_IRQ_2_MASK & HOLLY_EXTERNAL_INTERRUPT_DIMM_COMMS) == 0)
         {
-            *HOLLY_EXTERNAL_IRQ_2_MASK = *HOLLY_EXTERNAL_IRQ_2_MASK | HOLLY_INTERRUPT_DIMM_COMMS;
+            *HOLLY_EXTERNAL_IRQ_2_MASK = *HOLLY_EXTERNAL_IRQ_2_MASK | HOLLY_EXTERNAL_INTERRUPT_DIMM_COMMS;
         }
     }
 
@@ -237,9 +237,9 @@ void _dimm_comms_free()
 {
     uint32_t old_interrupts = irq_disable();
 
-    if ((*HOLLY_EXTERNAL_IRQ_2_MASK & HOLLY_INTERRUPT_DIMM_COMMS) != 0)
+    if ((*HOLLY_EXTERNAL_IRQ_2_MASK & HOLLY_EXTERNAL_INTERRUPT_DIMM_COMMS) != 0)
     {
-        *HOLLY_EXTERNAL_IRQ_2_MASK = *HOLLY_EXTERNAL_IRQ_2_MASK & (~HOLLY_INTERRUPT_DIMM_COMMS);
+        *HOLLY_EXTERNAL_IRQ_2_MASK = *HOLLY_EXTERNAL_IRQ_2_MASK & (~HOLLY_EXTERNAL_INTERRUPT_DIMM_COMMS);
     }
 
     irq_restore(old_interrupts);

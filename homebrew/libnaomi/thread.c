@@ -66,7 +66,8 @@ typedef struct
     // State for priority bumping and real-time threads.
     int priority_bump;
     uint32_t running_time_inversion;
-    uint32_t priority_reason;
+    unsigned int priority_reason;
+    uint32_t inversion_timeout;
 
     // Thread statistics.
     uint64_t running_time;
@@ -77,6 +78,7 @@ typedef struct
     semaphore_internal_t * waiting_semaphore;
     uint32_t waiting_thread;
     uint32_t waiting_timer;
+    unsigned int waiting_interrupt;
 
     // The actual context of the thread, including all of the registers and such.
     int main_thread;
@@ -85,13 +87,19 @@ typedef struct
     void *retval;
 } thread_t;
 
+// Waiting interupt values.
+#define WAITING_FOR_VBLANK_IN 1
+#define WAITING_FOR_VBLANK_OUT 2
+#define WAITING_FOR_HBLANK 3
+
 // Priority for the idle thread. This is chosen to always be lower than the lowest
 // priority possible to request, and never possible to bump past the minimum priority
 // even with inversions.
 #define IDLE_THREAD_PRIORITY -1000000
 
 // Priority reason bitmask defines.
-#define RESOURCE_WAKE_INVERSION 0x00000001
+#define PRIORITY_WAKE_INVERSION 1
+#define CRITICAL_WAKE_INVERSION 2
 
 // Calculate stats every second.
 #define STATS_DENOMINATOR 1000000
@@ -224,27 +232,44 @@ void _thread_create_idle()
     idle_thread->state = THREAD_STATE_RUNNING;
 }
 
-void _thread_enable_inversion(thread_t *thread, uint32_t reasons, unsigned int amount)
+uint32_t _thread_time_elapsed()
 {
-    if ((thread->priority_reason & reasons) == 0)
+    if (current_profile != 0)
     {
-        thread->priority_bump += amount;
-        thread->running_time_inversion = 0;
-        thread->priority_reason |= reasons;
+        return _profile_get_current(0) - current_profile;
+    }
+    else
+    {
+        return 0;
     }
 }
 
-void _thread_disable_inversion(thread_t *thread, uint32_t reasons, unsigned int amount)
+int _thread_enable_inversion(thread_t *thread, uint32_t reason, unsigned int amount)
 {
-    if ((thread->priority_reason & reasons) != 0)
+    if (thread->priority_reason == 0)
     {
-        thread->priority_bump -= amount;
-        thread->priority_reason &= (~reasons);
-        if (thread->priority_reason == 0)
-        {
-            thread->running_time_inversion = 0;
-        }
+        thread->priority_bump = amount;
+        thread->priority_reason = reason;
+        thread->running_time_inversion = 0;
+        thread->inversion_timeout = PRIORITY_INVERSION_TIME + _thread_time_elapsed();
+
+        return 1;
     }
+
+    return 0;
+}
+
+int _thread_disable_inversion(thread_t *thread, uint32_t reason, unsigned int amount)
+{
+    if (thread->priority_reason == reason)
+    {
+        thread->priority_bump = 0;
+        thread->priority_reason = 0;
+        thread->running_time_inversion = 0;
+        return 1;
+    }
+
+    return 0;
 }
 
 // The amount of priority we add for an 'inversion' to give a task high-pri status.
@@ -252,29 +277,58 @@ void _thread_disable_inversion(thread_t *thread, uint32_t reasons, unsigned int 
 // the highest priority that's possible without inversion.
 #define PRIORITY_INVERSION_AMOUNT 3000
 
-// The amount of time in microseconds that the thread is allowed to keep its high-pri status.
-#define PRIORITY_INVERSION_TIME 1000
+// Similar rationale as above, but also ensuring that it takes priority over regular
+// priority events as well.
+#define CRITICAL_INVERSION_AMOUNT 13000
 
-void _thread_enable_priority(thread_t *thread)
+int _thread_enable_priority(thread_t *thread)
 {
-    _thread_enable_inversion(thread, RESOURCE_WAKE_INVERSION, PRIORITY_INVERSION_AMOUNT);
+    return _thread_enable_inversion(thread, PRIORITY_WAKE_INVERSION, PRIORITY_INVERSION_AMOUNT);
 }
 
-void _thread_disable_priority(thread_t *thread)
+int _thread_disable_priority(thread_t *thread)
 {
-    _thread_disable_inversion(thread, RESOURCE_WAKE_INVERSION, PRIORITY_INVERSION_AMOUNT);
+    return _thread_disable_inversion(thread, PRIORITY_WAKE_INVERSION, PRIORITY_INVERSION_AMOUNT);
 }
 
-void _thread_check_and_disable_priority(thread_t *thread)
+int _thread_enable_critical(thread_t *thread)
 {
-    if ((thread->priority_reason & RESOURCE_WAKE_INVERSION) != 0 && thread->running_time_inversion >= PRIORITY_INVERSION_TIME)
+    if (thread->priority_reason == PRIORITY_WAKE_INVERSION)
     {
+        // Disable the lower priority and bump higher.
         _thread_disable_priority(thread);
     }
+    return _thread_enable_inversion(thread, CRITICAL_WAKE_INVERSION, PRIORITY_INVERSION_AMOUNT);
 }
 
+int _thread_disable_critical(thread_t *thread)
+{
+    return _thread_disable_inversion(thread, CRITICAL_WAKE_INVERSION, PRIORITY_INVERSION_AMOUNT);
+}
+
+int _thread_check_and_disable_timed_bumps(thread_t *thread)
+{
+    int retval = 0;
+
+    if (thread->priority_reason == PRIORITY_WAKE_INVERSION && thread->running_time_inversion >= thread->inversion_timeout)
+    {
+        retval |= _thread_disable_priority(thread);
+    }
+    if (thread->priority_reason == CRITICAL_WAKE_INVERSION && thread->running_time_inversion >= thread->inversion_timeout)
+    {
+        retval |= _thread_disable_critical(thread);
+    }
+
+    return retval;
+}
+
+// Prefer the current thread, unless it is not runnable.
 #define THREAD_SCHEDULE_CURRENT 0
+
+// Prefer another thread, and schedule ourselves if we have no other choice.
 #define THREAD_SCHEDULE_OTHER 1
+
+// Prefer any thread in our own priority band.
 #define THREAD_SCHEDULE_ANY 2
 
 irq_state_t *_thread_schedule(irq_state_t *state, int request)
@@ -563,18 +617,6 @@ void _thread_wake_waiting_semaphore(semaphore_internal_t *semaphore)
     }
 }
 
-uint32_t _thread_time_elapsed()
-{
-    if (current_profile != 0)
-    {
-        return _profile_get_current(0) - current_profile;
-    }
-    else
-    {
-        return 0;
-    }
-}
-
 uint32_t _thread_wake_waiting_timer()
 {
     // Calculate the time since we did our last adjustments.
@@ -629,6 +671,42 @@ uint32_t _thread_wake_waiting_timer()
     return time_elapsed;
 }
 
+int _thread_wake_waiting_irq(unsigned int which)
+{
+    if (which == 0)
+    {
+        // Nothing to do here!
+        return 0;
+    }
+
+    int scheduled = 0;
+    for (unsigned int i = 0; i < MAX_THREADS; i++)
+    {
+        if (threads[i] == 0)
+        {
+            // Not a real thread.
+            continue;
+        }
+
+        if (threads[i]->state != THREAD_STATE_WAITING)
+        {
+            // Not waiting on any resources.
+            continue;
+        }
+
+        if (threads[i]->waiting_interrupt == which)
+        {
+            // This thread is waiting on the resource that just became available!
+            threads[i]->waiting_interrupt = 0;
+            threads[i]->state = THREAD_STATE_RUNNING;
+            _thread_enable_critical(threads[i]);
+            scheduled = 1;
+        }
+    }
+
+    return scheduled;
+}
+
 void _thread_calc_stats(irq_state_t *current, uint32_t elapsed)
 {
     if (elapsed == 0)
@@ -674,7 +752,7 @@ void _thread_calc_stats(irq_state_t *current, uint32_t elapsed)
             if (threads[i]->priority_reason > 0)
             {
                 threads[i]->running_time_inversion += elapsed;
-                _thread_check_and_disable_priority(threads[i]);
+                _thread_check_and_disable_timed_bumps(threads[i]);
             }
         }
 
@@ -707,10 +785,36 @@ irq_state_t *_syscall_timer(irq_state_t *current, int timer)
     }
 }
 
-irq_state_t *_syscall_holly(irq_state_t *current, uint32_t irq_mask)
+irq_state_t *_syscall_holly(irq_state_t *current, uint32_t serviced_holly_interrupts)
 {
-    // TODO: Wake up various threads based on HOLLY interrupts here.
-    return current;
+    int should_schedule = 0;
+
+    if (serviced_holly_interrupts & HOLLY_SERVICED_VBLANK_IN)
+    {
+        // Wake any threads waiting for vblank in interrupt.
+        should_schedule = should_schedule | _thread_wake_waiting_irq(WAITING_FOR_VBLANK_IN);
+    }
+    if (serviced_holly_interrupts & HOLLY_SERVICED_VBLANK_OUT)
+    {
+        // Wake any threads waiting for vblank out interrupt.
+        should_schedule = should_schedule | _thread_wake_waiting_irq(WAITING_FOR_VBLANK_OUT);
+    }
+    if (serviced_holly_interrupts & HOLLY_SERVICED_HBLANK)
+    {
+        // Wake any threads waiting for hblank interrupt.
+        should_schedule = should_schedule | _thread_wake_waiting_irq(WAITING_FOR_HBLANK);
+    }
+
+    if (should_schedule)
+    {
+        uint32_t elapsed = _thread_wake_waiting_timer();
+        _thread_calc_stats(current, elapsed);
+        return _thread_schedule(current, THREAD_SCHEDULE_ANY);
+    }
+    else
+    {
+        return current;
+    }
 }
 
 irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
@@ -754,10 +858,14 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
             if (thread)
             {
                 // Give up some of our inversion status because we chose to yield.
-                _thread_disable_priority(thread);
+                int was_priority = _thread_disable_priority(thread);
+                was_priority |= _thread_disable_critical(thread);
 
-                // Schedule another thread other than ourselves, unless we have no other choice.
-                schedule = THREAD_SCHEDULE_OTHER;
+                if (!was_priority)
+                {
+                    // Schedule another thread other than ourselves, unless we have no other choice.
+                    schedule = THREAD_SCHEDULE_OTHER;
+                }
             }
             else
             {
@@ -984,6 +1092,24 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
                 // the right amount of time for this particular timer.
                 thread->state = THREAD_STATE_WAITING;
                 thread->waiting_timer = current->gp_regs[4] + _thread_time_elapsed();
+                schedule = THREAD_SCHEDULE_OTHER;
+            }
+            else
+            {
+                // Should never happen.
+                _irq_display_exception(current, "cannot locate thread object", which);
+            }
+            break;
+        }
+        case 13:
+        {
+            // thread_wait_vblank_in, thread_wait_vblank_out, thread_wait_hblank.
+            thread_t *thread = _thread_find_by_context(current);
+            if (thread)
+            {
+                // Put the thread to sleep, waiting for a specific interrupt.
+                thread->state = THREAD_STATE_WAITING;
+                thread->waiting_interrupt = current->gp_regs[4];
                 schedule = THREAD_SCHEDULE_OTHER;
             }
             else
@@ -1436,4 +1562,22 @@ void thread_sleep(uint32_t us)
 {
     register uint32_t syscall_param0 asm("r4") = us;
     asm("trapa #12" : : "r" (syscall_param0));
+}
+
+void thread_wait_vblank_in()
+{
+    register uint32_t syscall_param0 asm("r4") = WAITING_FOR_VBLANK_IN;
+    asm("trapa #13" : : "r" (syscall_param0));
+}
+
+void thread_wait_vblank_out()
+{
+    register uint32_t syscall_param0 asm("r4") = WAITING_FOR_VBLANK_OUT;
+    asm("trapa #13" : : "r" (syscall_param0));
+}
+
+void thread_wait_hblank()
+{
+    register uint32_t syscall_param0 asm("r4") = WAITING_FOR_HBLANK;
+    asm("trapa #13" : : "r" (syscall_param0));
 }

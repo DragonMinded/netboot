@@ -43,17 +43,22 @@ typedef struct
 irq_state_t *_irq_new_state(thread_func_t func, void *funcparam, void *stackptr);
 void _irq_free_state(irq_state_t *state);
 
+// What interrupts we actually serviced in our handler.
+#define HOLLY_SERVICED_DIMM_COMMS 0x00000001
+#define HOLLY_SERVICED_VBLANK_IN 0x00000002
+#define HOLLY_SERVICED_VBLANK_OUT 0x00000004
+#define HOLLY_SERVICED_HBLANK 0x00000008
+
 irq_state_t *_syscall_trapa(irq_state_t *state, unsigned int which);
 irq_state_t *_syscall_timer(irq_state_t *state, int timer);
-irq_state_t *_syscall_holly(irq_state_t *current, uint32_t irq_mask);
+irq_state_t *_syscall_holly(irq_state_t *current, uint32_t serviced_holly_interrupts);
 
 void _thread_create_idle();
 void _thread_register_main(irq_state_t *state);
 uint64_t _profile_get_current(uint32_t adjustments);
 
 void _irq_display_exception(irq_state_t *cur_state, char *failure, int code);
-void _irq_display_invariant(char *msg, char *failure, ...);
 
-int _irq_was_disabled(uint32_t sr);
+#include "irqinternal.h"
 
 #endif
