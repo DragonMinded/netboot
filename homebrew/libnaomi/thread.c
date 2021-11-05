@@ -65,6 +65,8 @@ typedef struct
 
     // State for priority bumping and real-time threads.
     int priority_bump;
+    uint32_t running_time_inversion;
+    uint32_t priority_reason;
 
     // Thread statistics.
     uint64_t running_time;
@@ -87,6 +89,9 @@ typedef struct
 // priority possible to request, and never possible to bump past the minimum priority
 // even with inversions.
 #define IDLE_THREAD_PRIORITY -1000000
+
+// Priority reason bitmask defines.
+#define RESOURCE_WAKE_INVERSION 0x00000001
 
 // Calculate stats every second.
 #define STATS_DENOMINATOR 1000000
@@ -219,21 +224,52 @@ void _thread_create_idle()
     idle_thread->state = THREAD_STATE_RUNNING;
 }
 
-#define INVERSION_AMOUNT 100000
-
-void _thread_enable_inversion(thread_t *thread)
+void _thread_enable_inversion(thread_t *thread, uint32_t reasons, unsigned int amount)
 {
-    if (thread->priority_bump < INVERSION_AMOUNT)
+    if ((thread->priority_reason & reasons) == 0)
     {
-        thread->priority_bump += INVERSION_AMOUNT;
+        thread->priority_bump += amount;
+        thread->running_time_inversion = 0;
+        thread->priority_reason |= reasons;
     }
 }
 
-void _thread_disable_inversion(thread_t *thread)
+void _thread_disable_inversion(thread_t *thread, uint32_t reasons, unsigned int amount)
 {
-    if (thread->priority_bump >= INVERSION_AMOUNT)
+    if ((thread->priority_reason & reasons) != 0)
     {
-        thread->priority_bump -= INVERSION_AMOUNT;
+        thread->priority_bump -= amount;
+        thread->priority_reason &= (~reasons);
+        if (thread->priority_reason == 0)
+        {
+            thread->running_time_inversion = 0;
+        }
+    }
+}
+
+// The amount of priority we add for an 'inversion' to give a task high-pri status.
+// This is picked to bump any thread within the range of allowed priorities past
+// the highest priority that's possible without inversion.
+#define PRIORITY_INVERSION_AMOUNT 3000
+
+// The amount of time in microseconds that the thread is allowed to keep its high-pri status.
+#define PRIORITY_INVERSION_TIME 1000
+
+void _thread_enable_priority(thread_t *thread)
+{
+    _thread_enable_inversion(thread, RESOURCE_WAKE_INVERSION, PRIORITY_INVERSION_AMOUNT);
+}
+
+void _thread_disable_priority(thread_t *thread)
+{
+    _thread_disable_inversion(thread, RESOURCE_WAKE_INVERSION, PRIORITY_INVERSION_AMOUNT);
+}
+
+void _thread_check_and_disable_priority(thread_t *thread)
+{
+    if ((thread->priority_reason & RESOURCE_WAKE_INVERSION) != 0 && thread->running_time_inversion >= PRIORITY_INVERSION_TIME)
+    {
+        _thread_disable_priority(thread);
     }
 }
 
@@ -260,7 +296,6 @@ irq_state_t *_thread_schedule(irq_state_t *state, int request)
         if (current_thread->state == THREAD_STATE_RUNNING && current_thread->priority != IDLE_THREAD_PRIORITY)
         {
             // It is, just return it.
-            _thread_disable_inversion(current_thread);
             return current_thread->context;
         }
     }
@@ -329,7 +364,6 @@ irq_state_t *_thread_schedule(irq_state_t *state, int request)
         {
             // Okay, we found our current thread last iteration, so this is
             // the next applicable thread in a round-robin scheduler.
-            _thread_disable_inversion(threads[i]);
             return threads[i]->context;
         }
 
@@ -367,7 +401,6 @@ irq_state_t *_thread_schedule(irq_state_t *state, int request)
         }
 
         // Okay, we found an applicable thread, return it as the scheduled thread.
-        _thread_disable_inversion(threads[i]);
         return threads[i]->context;
     }
 
@@ -584,7 +617,7 @@ uint32_t _thread_wake_waiting_timer()
             // We hit our timeout, this thread is now wakeable!
             threads[i]->waiting_timer = 0;
             threads[i]->state = THREAD_STATE_RUNNING;
-            _thread_enable_inversion(threads[i]);
+            _thread_enable_priority(threads[i]);
         }
         else
         {
@@ -636,6 +669,13 @@ void _thread_calc_stats(irq_state_t *current, uint32_t elapsed)
             // We spent the last elapsed us on this thread.
             threads[i]->running_time += elapsed;
             threads[i]->running_time_recent += elapsed;
+
+            // Also keep track of how long this thread has been at priority.
+            if (threads[i]->priority_reason > 0)
+            {
+                threads[i]->running_time_inversion += elapsed;
+                _thread_check_and_disable_priority(threads[i]);
+            }
         }
 
         if (running_time_denominator >= STATS_DENOMINATOR)
@@ -710,7 +750,19 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
         case 3:
         {
             // thread_yield
-            schedule = THREAD_SCHEDULE_OTHER;
+            thread_t *thread = _thread_find_by_context(current);
+            if (thread)
+            {
+                // Give up some of our inversion status because we chose to yield.
+                _thread_disable_priority(thread);
+
+                // Schedule another thread other than ourselves, unless we have no other choice.
+                schedule = THREAD_SCHEDULE_OTHER;
+            }
+            else
+            {
+                _irq_display_exception(current, "cannot locate thread object", which);
+            }
             break;
         }
         case 4:
