@@ -101,21 +101,28 @@ static const struct test_suite
 // =================================================
 };
 
-void main()
+void * video(void * param)
 {
-    // Grab the system configuration
-    eeprom_t settings;
-    eeprom_read(&settings);
-
     // Set up a crude console.
     video_init_simple();
     video_set_background_color(rgb(0, 0, 0));
     console_init(16);
 
+    // Signal to the main thread that we're up.
+    global_counter_increment(param);
+
+    // Now just display the console.
+    while( 1 )
+    {
+        video_display_on_vblank();
+    }
+}
+
+void run_suite()
+{
     printf("====================\n");
     printf("Starting tests\n%d tests to run\n", (sizeof(tests) / sizeof(tests[0])));
     printf("====================\n\n");
-    video_display_on_vblank();
 
     // Run the tests!
     char logbuffer[2048];
@@ -129,7 +136,6 @@ void main()
     {
         // Set the test up to be run.
         printf("%s...", tests[testno].name);
-        video_display_on_vblank();
 
         test_context_t context;
         context.name = tests[testno].file;
@@ -203,18 +209,30 @@ void main()
 
             failed ++;
         }
-
-        video_display_on_vblank();
     }
 
     printf("\n====================\n");
     printf("Finished\n%d pass, %d fail, %d skip\n%ldns total duration\n", passed, failed, skipped, total_duration);
     printf("====================\n");
+}
 
-    while ( 1 )
-    {
-        video_display_on_vblank();
-    }
+void main()
+{
+    // Set up a video refresh screen so we can just printf in the main thread.
+    void *counter = global_counter_init(0);
+    uint32_t video_thread = thread_create("video", video, counter);
+    thread_priority(video_thread, 1);
+    thread_start(video_thread);
+
+    // Wait until the video thread has started up before trying to print to the console.
+    while (global_counter_value(counter) == 0) { thread_yield(); }
+    global_counter_free(counter);
+
+    // Run the test suite!
+    run_suite();
+
+    // Park it forever.
+    while ( 1 ) { ; }
 }
 
 void test()

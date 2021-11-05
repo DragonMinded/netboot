@@ -107,7 +107,7 @@ def main() -> int:
                     outputlines.append(f'#include "{os.path.join("..", filename)}"{os.linesep}')
             elif "TEST CASES SECTION" in section:
                 # This is where we spray our test cases.
-                for i, (filename, name, duration) in enumerate(tests):
+                for i, (filename, name, duration) in enumerate(sorted(tests, key=lambda t: t[1])):
                     outputlines.append(f"    {{\"{filename}\", \"{name}\", {name}, {duration}}}{',' if i != (len(tests) - 1) else ''}{os.linesep}")
             section = ""
 
