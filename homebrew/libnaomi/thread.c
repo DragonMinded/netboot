@@ -63,6 +63,9 @@ typedef struct
     int priority;
     int state;
 
+    // State for priority bumping and real-time threads.
+    int priority_bump;
+
     // Thread statistics.
     uint64_t running_time;
     uint32_t running_time_recent;
@@ -79,6 +82,11 @@ typedef struct
     uint8_t *stack;
     void *retval;
 } thread_t;
+
+// Priority for the idle thread. This is chosen to always be lower than the lowest
+// priority possible to request, and never possible to bump past the minimum priority
+// even with inversions.
+#define IDLE_THREAD_PRIORITY -1000000
 
 // Calculate stats every second.
 #define STATS_DENOMINATOR 1000000
@@ -205,7 +213,7 @@ void _thread_register_main(irq_state_t *state)
 void _thread_create_idle()
 {
     // Create an idle thread.
-    thread_t *idle_thread = _thread_create("idle", INT_MIN);
+    thread_t *idle_thread = _thread_create("idle", IDLE_THREAD_PRIORITY);
     idle_thread->stack = malloc(64);
     idle_thread->context = _irq_new_state(_idle_thread, 0, idle_thread->stack + 64);
     idle_thread->state = THREAD_STATE_RUNNING;
@@ -215,17 +223,17 @@ void _thread_create_idle()
 
 void _thread_enable_inversion(thread_t *thread)
 {
-    if (thread->priority >= MIN_PRIORITY && thread->priority <= MAX_PRIORITY)
+    if (thread->priority_bump < INVERSION_AMOUNT)
     {
-        thread->priority += INVERSION_AMOUNT;
+        thread->priority_bump += INVERSION_AMOUNT;
     }
 }
 
 void _thread_disable_inversion(thread_t *thread)
 {
-    if (thread->priority >= (INVERSION_AMOUNT + MIN_PRIORITY) && thread->priority <= (INVERSION_AMOUNT + MAX_PRIORITY))
+    if (thread->priority_bump >= INVERSION_AMOUNT)
     {
-        thread->priority -= INVERSION_AMOUNT;
+        thread->priority_bump -= INVERSION_AMOUNT;
     }
 }
 
@@ -249,7 +257,7 @@ irq_state_t *_thread_schedule(irq_state_t *state, int request)
     {
         // See if the current thread is applicable to run. Never reschedule the
         // idle thread, however, unless there is truly nothing else to reschedule.
-        if (current_thread->state == THREAD_STATE_RUNNING && current_thread->priority != INT_MIN)
+        if (current_thread->state == THREAD_STATE_RUNNING && current_thread->priority != IDLE_THREAD_PRIORITY)
         {
             // It is, just return it.
             _thread_disable_inversion(current_thread);
@@ -259,8 +267,8 @@ irq_state_t *_thread_schedule(irq_state_t *state, int request)
 
     // Set the max priority to the idle thread, so if we don't find any
     // applicable threads then we will choose the idle thread instead.
-    int priority = INT_MIN;
-    int self_priority = INT_MIN;
+    int priority = IDLE_THREAD_PRIORITY;
+    int self_priority = IDLE_THREAD_PRIORITY;
 
     // Go through and find the highest priority that is schedulable.
     for (unsigned int i = 0; i < MAX_THREADS; i++)
@@ -280,15 +288,15 @@ irq_state_t *_thread_schedule(irq_state_t *state, int request)
         if (request == THREAD_SCHEDULE_OTHER && threads[i] == current_thread)
         {
             // Don't include this thread, we specifically requested going to the next thread.
-            self_priority = self_priority > threads[i]->priority ? self_priority : threads[i]->priority;
+            self_priority = self_priority > (threads[i]->priority + threads[i]->priority_bump) ? self_priority : (threads[i]->priority + threads[i]->priority_bump);
             continue;
         }
 
         // Bump the max priority based on this schedulable thread.
-        priority = priority > threads[i]->priority ? priority : threads[i]->priority;
+        priority = priority > (threads[i]->priority + threads[i]->priority_bump) ? priority : (threads[i]->priority + threads[i]->priority_bump);
     }
 
-    if (priority == INT_MIN)
+    if (priority == IDLE_THREAD_PRIORITY)
     {
         // We couldn't schedule any thread. However, if we requested to schedule another
         // thread aside from ourselves but we were the only one available, take that choice.
@@ -311,7 +319,7 @@ irq_state_t *_thread_schedule(irq_state_t *state, int request)
             continue;
         }
 
-        if (threads[i]->priority != priority)
+        if ((threads[i]->priority + threads[i]->priority_bump) != priority)
         {
             // Don't care, not the band we're after.
             continue;
@@ -352,7 +360,7 @@ irq_state_t *_thread_schedule(irq_state_t *state, int request)
             continue;
         }
 
-        if (threads[i]->priority != priority)
+        if ((threads[i]->priority + threads[i]->priority_bump) != priority)
         {
             // Don't care, not the band we're after.
             continue;
@@ -1324,10 +1332,6 @@ thread_info_t thread_info(uint32_t tid)
         // Basic stats
         memcpy(info.name, thread->name, 64);
         info.priority = thread->priority;
-        if (info.priority >= (INVERSION_AMOUNT + MIN_PRIORITY) && info.priority <= (INVERSION_AMOUNT + MAX_PRIORITY))
-        {
-            info.priority -= INVERSION_AMOUNT;
-        }
 
         // Calculate whether it is alive or not.
         if (thread->state == THREAD_STATE_STOPPED || thread->state == THREAD_STATE_RUNNING || thread->state == THREAD_STATE_WAITING)
