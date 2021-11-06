@@ -64,11 +64,10 @@
 
 
 // Static members that don't need to be accessed anywhere else.
-static int buffer_loc = 0;
 static uint32_t global_background_color = 0;
 static uint32_t global_background_fill_start = 0;
 static uint32_t global_background_fill_end = 0;
-static uint32_t global_background_fill_color = 0;
+static uint32_t global_background_fill_color[8] = { 0 };
 static unsigned int global_background_set = 0;
 
 // We only use two of these for rendering. The third is so we can
@@ -84,6 +83,11 @@ unsigned int global_video_depth = 0;
 unsigned int global_video_vertical = 0;
 void *buffer_base = 0;
 
+// Our current framebuffer location, for double buffering.
+static unsigned int buffer_loc = 0;
+#define current_buffer_loc ((buffer_loc) ? 1 : 0)
+#define next_buffer_loc ((buffer_loc) ? 0 : 1)
+
 void video_display_on_vblank()
 {
     volatile unsigned int *videobase = (volatile unsigned int *)POWERVR2_BASE;
@@ -94,8 +98,13 @@ void video_display_on_vblank()
     // Handle filling the background of the other screen while we wait.
     if (global_background_set)
     {
-        global_background_fill_start = ((VRAM_BASE + global_buffer_offset[buffer_loc ? 0 : 1]) | 0xA0000000);
+        global_background_fill_start = ((VRAM_BASE + global_buffer_offset[next_buffer_loc]) | 0xA0000000);
         global_background_fill_end = global_background_fill_start + ((global_video_width * global_video_height * global_video_depth));
+    }
+    else
+    {
+        global_background_fill_start = 0;
+        global_background_fill_end = 0;
     }
 
     // First, figure out if we're running with disabled interrupts. If so, we can't use
@@ -106,41 +115,18 @@ void video_display_on_vblank()
 
     if (irqs_disabled)
     {
-        // Fill the next screen while we wait until we catch up to VBLANK.
+        // Wait for us to enter the VBLANK portion of the frame scan. This is the same
+        // spot that we would get a VBLANK interrupt if we were using threads.
         uint32_t vblank_in_position = videobase[POWERVR2_VBLANK_INTERRUPT] & 0x1FF;
-        while((videobase[POWERVR2_SYNC_STAT] & 0x1FF) != vblank_in_position)
-        {
-            if (global_background_fill_start < global_background_fill_end)
-            {
-                if (hw_memset((void *)global_background_fill_start, global_background_fill_color, 32))
-                {
-                    global_background_fill_start += 32;
-                }
-            }
-        }
+        while((videobase[POWERVR2_SYNC_STAT] & 0x1FF) != vblank_in_position) { ; }
 
         // Swap buffers in HW.
-        videobase[POWERVR2_FB_DISPLAY_ADDR_1] = global_buffer_offset[buffer_loc];
-        videobase[POWERVR2_FB_DISPLAY_ADDR_2] = global_buffer_offset[buffer_loc] + (global_video_width * global_video_depth);
+        videobase[POWERVR2_FB_DISPLAY_ADDR_1] = global_buffer_offset[current_buffer_loc];
+        videobase[POWERVR2_FB_DISPLAY_ADDR_2] = global_buffer_offset[current_buffer_loc] + (global_video_width * global_video_depth);
 
         // Swap buffer pointer in SW.
-        buffer_loc = buffer_loc ? 0 : 1;
-        buffer_base = (void *)((VRAM_BASE + global_buffer_offset[buffer_loc]) | 0xA0000000);
-
-        // Finish filling in the background.
-        if (global_background_fill_start < global_background_fill_end)
-        {
-            // Try the fast way, and if we don't have the HW access (another thread owned it before we disabled irqs),
-            // then we need to do it the slow way.
-            if (hw_memset((void *)global_background_fill_start, global_background_fill_color, global_background_fill_end - global_background_fill_start) == 0)
-            {
-                memset((void *)global_background_fill_start, global_background_fill_color, global_background_fill_end - global_background_fill_start);
-            }
-        }
-
-        // Set these back to empty, since we no longer need to handle them.
-        global_background_fill_start = 0;
-        global_background_fill_end = 0;
+        buffer_loc = next_buffer_loc;
+        buffer_base = (void *)((VRAM_BASE + global_buffer_offset[current_buffer_loc]) | 0xA0000000);
     }
     else
     {
@@ -148,33 +134,37 @@ void video_display_on_vblank()
         thread_wait_vblank_in();
 
         // Swap buffers in HW.
-        videobase[POWERVR2_FB_DISPLAY_ADDR_1] = global_buffer_offset[buffer_loc];
-        videobase[POWERVR2_FB_DISPLAY_ADDR_2] = global_buffer_offset[buffer_loc] + (global_video_width * global_video_depth);
+        videobase[POWERVR2_FB_DISPLAY_ADDR_1] = global_buffer_offset[current_buffer_loc];
+        videobase[POWERVR2_FB_DISPLAY_ADDR_2] = global_buffer_offset[current_buffer_loc] + (global_video_width * global_video_depth);
 
         // Swap buffer pointer in SW.
-        buffer_loc = buffer_loc ? 0 : 1;
-        buffer_base = (void *)((VRAM_BASE + global_buffer_offset[buffer_loc]) | 0xA0000000);
-
-        // TODO: Kill the background fill thread, so we can do the rest ourselves here.
-
-        // Finish filling in the background.
-        if (global_background_fill_start < global_background_fill_end)
-        {
-            // Try the fast way, and if we don't have the HW access (another thread owned it before we disabled irqs),
-            // then we need to do it the slow way.
-            if (hw_memset((void *)global_background_fill_start, global_background_fill_color, global_background_fill_end - global_background_fill_start) == 0)
-            {
-                memset((void *)global_background_fill_start, global_background_fill_color, global_background_fill_end - global_background_fill_start);
-            }
-        }
-
-        // Set these back to empty, since we no longer need to handle them.
-        global_background_fill_start = 0;
-        global_background_fill_end = 0;
+        buffer_loc = next_buffer_loc;
+        buffer_base = (void *)((VRAM_BASE + global_buffer_offset[current_buffer_loc]) | 0xA0000000);
 
         // No longer need our high priority status, yield to other threads.
         thread_yield();
     }
+
+    // Finish filling in the background. Gotta do this now, fast or slow, because
+    // when we exit this function the user is fully expected to start drawing new
+    // graphics.
+    if (global_background_fill_start < global_background_fill_end)
+    {
+        // Try the fast way, and if we don't have the HW access (another thread owned it before we disabled irqs),
+        // then we need to do it the slow way.
+        if (hw_memset((void *)global_background_fill_start, global_background_fill_color[0], global_background_fill_end - global_background_fill_start) == 0)
+        {
+            while (global_background_fill_start < global_background_fill_end)
+            {
+                memcpy((void *)global_background_fill_start, global_background_fill_color, 32);
+                global_background_fill_start += 32;
+            }
+        }
+    }
+
+    // Set these back to empty, since we no longer need to handle them.
+    global_background_fill_start = 0;
+    global_background_fill_end = 0;
 }
 
 unsigned int video_width()
@@ -299,12 +289,12 @@ void video_init_simple()
     );
 
     // Set up even/odd field video base address, shifted by bpp.
-    videobase[POWERVR2_FB_DISPLAY_ADDR_1] = global_buffer_offset[buffer_loc];
-    videobase[POWERVR2_FB_DISPLAY_ADDR_2] = global_buffer_offset[buffer_loc] + (global_video_width * global_video_depth);
+    videobase[POWERVR2_FB_DISPLAY_ADDR_1] = global_buffer_offset[current_buffer_loc];
+    videobase[POWERVR2_FB_DISPLAY_ADDR_2] = global_buffer_offset[current_buffer_loc] + (global_video_width * global_video_depth);
 
     // Swap buffer pointer in SW.
-    buffer_loc = buffer_loc ? 0 : 1;
-    buffer_base = (void *)((VRAM_BASE + global_buffer_offset[buffer_loc]) | 0xA0000000);
+    buffer_loc = next_buffer_loc;
+    buffer_base = (void *)((VRAM_BASE + global_buffer_offset[current_buffer_loc]) | 0xA0000000);
 
     // Set up render modulo, (bpp * width) / 8.
     videobase[POWERVR2_FB_RENDER_MODULO] = (global_video_depth * global_video_width) / 8;
@@ -472,11 +462,17 @@ void video_set_background_color(uint32_t color)
 
     if(global_video_depth == 2)
     {
-        global_background_fill_color = (color & 0xFFFF) | ((color << 16) & 0xFFFF0000);
+        for (int offset = 0; offset < 8; offset++)
+        {
+            global_background_fill_color[offset] = (color & 0xFFFF) | ((color << 16) & 0xFFFF0000);
+        }
     }
     else if(global_video_depth == 4)
     {
-        global_background_fill_color = color;
+        for (int offset = 0; offset < 8; offset++)
+        {
+            global_background_fill_color[offset] = color;
+        }
     }
 }
 

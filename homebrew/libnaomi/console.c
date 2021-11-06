@@ -6,6 +6,7 @@
 #include "naomi/system.h"
 #include "naomi/video.h"
 #include "naomi/interrupt.h"
+#include "irqinternal.h"
 
 static char *render_buffer = 0;
 static unsigned int console_width = 0;
@@ -95,6 +96,10 @@ void console_init(unsigned int overscan)
 
         /* Get memory for that size */
         render_buffer = malloc((console_width * console_height) + 1);
+        if (render_buffer == 0)
+        {
+            _irq_display_invariant("malloc failure", "failed to allocate memory for console!");
+        }
         memset(render_buffer, 0, (console_width * console_height) + 1);
 
         /* Register ourselves with newlib */
@@ -130,8 +135,12 @@ void console_render()
         /* Render now */
         char *console_start = render_buffer;
         char *console_end = render_buffer + strlen(render_buffer);
-        char *line_buf = malloc(console_width + 1);
         unsigned int line = console_overscan;
+        char *line_buf = malloc(console_width + 1);
+        if (line_buf == 0)
+        {
+            _irq_display_invariant("malloc failure", "failed to allocate memory for line display!");
+        }
 
         while (console_start != console_end)
         {

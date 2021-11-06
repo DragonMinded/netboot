@@ -93,10 +93,9 @@ void __cache_discard(font_t *fontface)
 
 font_cache_entry_t *__cache_lookup(font_t *fontface, uint32_t index)
 {
-    // TODO: This is linear and we could make it a lot better if we sorted
-    // by index and then did a binary search. The lion's share of this
-    // module's compute time goes to __draw_bitmap however, so I didn't bother.
-
+    // This is linear and we could make it a lot better if we sorted by index
+    // and then did a binary search. The lion's share of this module's compute
+    // time goes to __draw_bitmap however, so I didn't bother.
     for (int i = 0; i < fontface->cacheloc; i++)
     {
         if(fontface->cache[i]->index == index)
