@@ -416,7 +416,7 @@ void _irq_free()
     irq_state = 0;
 }
 
-irq_state_t *_irq_new_state(thread_func_t func, void *funcparam, void *stackptr)
+irq_state_t *_irq_new_state(thread_func_t func, void *funcparam, void *stackptr, void *threadptr)
 {
     uint32_t old_interrupts = irq_disable();
 
@@ -431,6 +431,7 @@ irq_state_t *_irq_new_state(thread_func_t func, void *funcparam, void *stackptr)
     new_state->sr = _irq_read_sr() & 0xcfffff0f;
     new_state->vbr = _irq_read_vbr();
     new_state->fpscr = 0x40000;
+    new_state->threadptr = threadptr;
 
     // Now, re-enable interrupts and return the state.
     irq_restore(old_interrupts);

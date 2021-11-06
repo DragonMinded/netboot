@@ -17,7 +17,8 @@ void test_threads_basic(test_context_t *context)
 
     ASSERT(thread != thread_id(), "Newly created thread has same ID as us?");
 
-    thread_info_t info = thread_info(thread);
+    thread_info_t info;
+    thread_info(thread, &info);
 
     ASSERT(strcmp(info.name, "test") == 0, "Newly created thread has invalid debug name!");
     ASSERT(info.priority == 0, "Newly created thread has wrong default priority!");

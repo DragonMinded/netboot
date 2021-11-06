@@ -105,7 +105,7 @@ void thread_destroy(uint32_t tid);
 // Various thread manipulation functions. Get information about a thread, start and stop a
 // thread, change priority on a thread, etc. All of these are safe to call from within any
 // thread including the thread in questions.
-thread_info_t thread_info(uint32_t tid);
+void thread_info(uint32_t tid, thread_info_t *info);
 void thread_priority(uint32_t tid, int priority);
 void thread_start(uint32_t tid);
 void thread_stop(uint32_t tid);
@@ -144,6 +144,27 @@ void thread_exit(void *retval);
 
 // Return the current thread's ID.
 uint32_t thread_id();
+
+// Task scheduler statistics, for debugging as well as looking into
+// the thread system.
+typedef struct
+{
+    // The known thread IDs in the system. All locations past num_threads
+    // will be set to 0.
+    uint32_t thread_ids[MAX_THREADS];
+
+    // The actual number of threads running in the system.
+    unsigned int num_threads;
+
+    // The CPU overhead of the scheduler between 0 and 1 inclusive.
+    float cpu_percentage;
+
+    // The number of scheduler interruptions in the last second.
+    uint32_t interruptions;
+} task_scheduler_info_t;
+
+// Retrieve the current task scheduler information.
+void task_scheduler_info(task_scheduler_info_t *info);
 
 #ifdef __cplusplus
 }

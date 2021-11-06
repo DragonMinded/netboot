@@ -104,26 +104,16 @@ typedef struct
 // Calculate stats every second.
 #define STATS_DENOMINATOR 1000000
 
+static uint32_t interruptions = 0;
+static uint32_t last_second_interruptions = 0;
 static uint64_t running_time_denominator = 0;
 static uint64_t current_profile = 0;
+static unsigned int highest_thread = 0;
 static thread_t *threads[MAX_THREADS];
-
-thread_t *_thread_find_by_context(irq_state_t *context)
-{
-    for (unsigned int i = 0; i < MAX_THREADS; i++)
-    {
-        if (threads[i] != 0 && threads[i]->context == context)
-        {
-            return threads[i];
-        }
-    }
-
-    return 0;
-}
 
 thread_t *_thread_find_by_id(uint32_t id)
 {
-    for (unsigned int i = 0; i < MAX_THREADS; i++)
+    for (unsigned int i = 0; i < highest_thread; i++)
     {
         if (threads[i] != 0 && threads[i]->id == id)
         {
@@ -183,6 +173,8 @@ thread_t *_thread_create(char *name, int priority)
             strncpy(thread->name, name, 63);
 
             threads[i] = thread;
+            highest_thread = (i + 1) > highest_thread ? (i + 1) : highest_thread;
+
             break;
         }
     }
@@ -219,6 +211,7 @@ void _thread_register_main(irq_state_t *state)
     main_thread->context = state;
     main_thread->state = THREAD_STATE_RUNNING;
     main_thread->main_thread = 1;
+    state->threadptr = main_thread;
 
     irq_restore(old_interrupts);
 }
@@ -228,7 +221,7 @@ void _thread_create_idle()
     // Create an idle thread.
     thread_t *idle_thread = _thread_create("idle", IDLE_THREAD_PRIORITY);
     idle_thread->stack = malloc(64);
-    idle_thread->context = _irq_new_state(_idle_thread, 0, idle_thread->stack + 64);
+    idle_thread->context = _irq_new_state(_idle_thread, 0, idle_thread->stack + 64, idle_thread);
     idle_thread->state = THREAD_STATE_RUNNING;
 }
 
@@ -322,6 +315,39 @@ int _thread_check_and_disable_timed_bumps(thread_t *thread)
     return retval;
 }
 
+typedef struct
+{
+    int priority;
+    uint32_t last_thread;
+} last_thread_t;
+
+static last_thread_t *round_robin = 0;
+static unsigned int round_robin_count = 0;
+
+last_thread_t *last_thread_for_band(int priority)
+{
+    for (unsigned int i = 0; i < round_robin_count; i++)
+    {
+        if (round_robin[i].priority == priority)
+        {
+            return &round_robin[i];
+        }
+    }
+
+    // We need a new band.
+    round_robin_count++;
+    round_robin = realloc(round_robin, sizeof(last_thread_t *) * round_robin_count);
+    if (round_robin == 0)
+    {
+        _irq_display_invariant("malloc failure", "failed to allocate memory for thread scheduling!");
+    }
+
+    // Set it up for this band.
+    round_robin[round_robin_count - 1].priority = priority;
+    round_robin[round_robin_count - 1].last_thread = 0;
+    return &round_robin[round_robin_count - 1];
+}
+
 // Prefer the current thread, unless it is not runnable.
 #define THREAD_SCHEDULE_CURRENT 0
 
@@ -333,7 +359,7 @@ int _thread_check_and_disable_timed_bumps(thread_t *thread)
 
 irq_state_t *_thread_schedule(irq_state_t *state, int request)
 {
-    thread_t *current_thread = _thread_find_by_context(state);
+    thread_t *current_thread = (thread_t *)state->threadptr;
 
     if (current_thread == 0)
     {
@@ -360,7 +386,7 @@ irq_state_t *_thread_schedule(irq_state_t *state, int request)
     int self_priority = IDLE_THREAD_PRIORITY;
 
     // Go through and find the highest priority that is schedulable.
-    for (unsigned int i = 0; i < MAX_THREADS; i++)
+    for (unsigned int i = 0; i < highest_thread; i++)
     {
         if (threads[i] == 0)
         {
@@ -393,8 +419,19 @@ irq_state_t *_thread_schedule(irq_state_t *state, int request)
     }
 
     // Now, round robin within the priority band.
+    last_thread_t *last_thread = last_thread_for_band(priority);
+    if (last_thread->last_thread == 0 && priority == (current_thread->priority + current_thread->priority_bump))
+    {
+        // Short circuit to getting this set up.
+        last_thread->last_thread = current_thread->id;
+    }
+
+    // Go through the loop the first time, seeing if we can locate the current thread, and
+    // if so, choose the next thread after it. If this fails we will go through the loop
+    // again and choose the very first applicable thread.
     int found = 0;
-    for (unsigned int i = 0; i < MAX_THREADS; i++)
+    thread_t *first_thread = 0;
+    for (unsigned int i = 0; i < highest_thread; i++)
     {
         if (threads[i] == 0)
         {
@@ -414,14 +451,21 @@ irq_state_t *_thread_schedule(irq_state_t *state, int request)
             continue;
         }
 
+        if (first_thread == 0)
+        {
+            // Remember this just in case we don't find a thread.
+            first_thread = threads[i];
+        }
+
         if (found)
         {
             // Okay, we found our current thread last iteration, so this is
             // the next applicable thread in a round-robin scheduler.
+            last_thread->last_thread = threads[i]->id;
             return threads[i]->context;
         }
 
-        if (threads[i] == current_thread)
+        if (threads[i]->id == last_thread->last_thread)
         {
             // We found our thread, return the next thread on the next iteration.
             found = 1;
@@ -429,33 +473,16 @@ irq_state_t *_thread_schedule(irq_state_t *state, int request)
     }
 
     // If we got here, then the next available thread is before our current thread.
-    // Just run again and select the first applicable thread. This has the chance
-    // of selecting ourselves if there is no applicable other thread, even if the
-    // request is THREAD_SCHEDULE_OTHER. That should only happen when it is the idle
-    // thread, however, since at any other moment we would have chosen a different
-    // priority band.
-    for (unsigned int i = 0; i < MAX_THREADS; i++)
+    // We already saved the first applicable thread in the previous loop, so we can
+    // use that here as long as it is not null. This has the chance of selecting
+    // ourselves if there is no applicable other thread, even if the request is
+    // THREAD_SCHEDULE_OTHER. That should only happen when it is the idle thread,
+    // however, since at any other moment we would have chosen a different priority band.
+    if (first_thread)
     {
-        if (threads[i] == 0)
-        {
-            // Not a real thread.
-            continue;
-        }
-
-        if (threads[i]->state != THREAD_STATE_RUNNING)
-        {
-            // This thread isn't runnable.
-            continue;
-        }
-
-        if ((threads[i]->priority + threads[i]->priority_bump) != priority)
-        {
-            // Don't care, not the band we're after.
-            continue;
-        }
-
         // Okay, we found an applicable thread, return it as the scheduled thread.
-        return threads[i]->context;
+        last_thread->last_thread = first_thread->id;
+        return first_thread->context;
     }
 
     // We should never ever get here, so display a failure message.
@@ -465,15 +492,31 @@ irq_state_t *_thread_schedule(irq_state_t *state, int request)
 
 void _thread_init()
 {
+    uint32_t old_interrupts = irq_disable();
+
     thread_counter = 1;
     global_counter_counter = 1;
     semaphore_counter = 1;
     mutex_counter = 1;
     current_profile = 0;
     running_time_denominator = 0;
+    interruptions = 0;
+    last_second_interruptions = 0;
+    highest_thread = 0;
     memset(global_counters, 0, sizeof(uint32_t *) * MAX_GLOBAL_COUNTERS);
     memset(semaphores, 0, sizeof(semaphore_internal_t *) * MAX_SEM_AND_MUTEX);
     memset(threads, 0, sizeof(thread_t *) * MAX_THREADS);
+
+    // Set up per-priority round robin positions by adding the default
+    // priority as well as the idle thread priority.
+    round_robin = malloc(sizeof(last_thread_t) * 2);
+    round_robin_count = 2;
+    round_robin[0].priority = 0;
+    round_robin[0].last_thread = 0;
+    round_robin[1].priority = IDLE_THREAD_PRIORITY;
+    round_robin[1].last_thread = 0;
+
+    irq_restore(old_interrupts);
 }
 
 void _thread_free()
@@ -515,6 +558,41 @@ void _thread_free()
         }
     }
 
+    if (round_robin)
+    {
+        free(round_robin);
+        round_robin = 0;
+    }
+    round_robin_count = 0;
+
+    irq_restore(old_interrupts);
+}
+
+void task_scheduler_info(task_scheduler_info_t *info)
+{
+    uint32_t old_interrupts = irq_disable();
+
+    if (info)
+    {
+        info->cpu_percentage = 1.0;
+        info->num_threads = 0;
+        info->interruptions = last_second_interruptions;
+
+        for (unsigned int i = 0; i < highest_thread; i++)
+        {
+            if (threads[i] != 0)
+            {
+                info->thread_ids[info->num_threads++] = threads[i]->id;
+                info->cpu_percentage -= threads[i]->cpu_percentage;
+            }
+        }
+
+        if (info->num_threads < MAX_THREADS)
+        {
+            memset(&info->thread_ids[info->num_threads], 0, sizeof(uint32_t) * (MAX_THREADS - info->num_threads));
+        }
+    }
+
     irq_restore(old_interrupts);
 }
 
@@ -535,7 +613,7 @@ void _thread_wake_waiting_threadid(thread_t *thread)
         return;
     }
 
-    for (unsigned int i = 0; i < MAX_THREADS; i++)
+    for (unsigned int i = 0; i < highest_thread; i++)
     {
         if (threads[i] == 0)
         {
@@ -573,16 +651,17 @@ void _thread_wake_waiting_threadid(thread_t *thread)
     }
 }
 
-void _thread_wake_waiting_semaphore(semaphore_internal_t *semaphore)
+int _thread_wake_waiting_semaphore(semaphore_internal_t *semaphore)
 {
     if (semaphore == 0)
     {
         // Shouldn't be possible, but lets not crash.
         _irq_display_invariant("wake failure", "target semaphore is NULL");
-        return;
+        return 0;
     }
 
-    for (unsigned int i = 0; i < MAX_THREADS; i++)
+    int scheduled = 0;
+    for (unsigned int i = 0; i < highest_thread; i++)
     {
         if (threads[i] == 0)
         {
@@ -603,6 +682,7 @@ void _thread_wake_waiting_semaphore(semaphore_internal_t *semaphore)
             // and set it as not waiting for this semaphore anymore.
             threads[i]->waiting_semaphore = 0;
             threads[i]->state = THREAD_STATE_RUNNING;
+            scheduled = 1;
 
             // Now, since this was an acquire, we need to bookkeep the current
             // semaphore.
@@ -615,6 +695,8 @@ void _thread_wake_waiting_semaphore(semaphore_internal_t *semaphore)
             }
         }
     }
+
+    return scheduled;
 }
 
 uint32_t _thread_wake_waiting_timer()
@@ -634,7 +716,7 @@ uint32_t _thread_wake_waiting_timer()
         return 0;
     }
 
-    for (unsigned int i = 0; i < MAX_THREADS; i++)
+    for (unsigned int i = 0; i < highest_thread; i++)
     {
         if (threads[i] == 0)
         {
@@ -680,7 +762,7 @@ int _thread_wake_waiting_irq(unsigned int which)
     }
 
     int scheduled = 0;
-    for (unsigned int i = 0; i < MAX_THREADS; i++)
+    for (unsigned int i = 0; i < highest_thread; i++)
     {
         if (threads[i] == 0)
         {
@@ -707,7 +789,7 @@ int _thread_wake_waiting_irq(unsigned int which)
     return scheduled;
 }
 
-void _thread_calc_stats(irq_state_t *current, uint32_t elapsed)
+void _thread_calc_stats(irq_state_t *current, uint32_t elapsed, uint32_t overhead)
 {
     if (elapsed == 0)
     {
@@ -721,7 +803,7 @@ void _thread_calc_stats(irq_state_t *current, uint32_t elapsed)
         _irq_display_invariant("stats failure", "current irq state is NULL");
     }
 
-    thread_t *current_thread = _thread_find_by_context(current);
+    thread_t *current_thread = (thread_t *)current->threadptr;
 
     if (current_thread == 0)
     {
@@ -734,7 +816,7 @@ void _thread_calc_stats(irq_state_t *current, uint32_t elapsed)
 
     // Now, go through and find all running threads and see if its time to calculate
     // percentages.
-    for (unsigned int i = 0; i < MAX_THREADS; i++)
+    for (unsigned int i = 0; i < highest_thread; i++)
     {
         if (threads[i] == 0)
         {
@@ -746,12 +828,12 @@ void _thread_calc_stats(irq_state_t *current, uint32_t elapsed)
         {
             // We spent the last elapsed us on this thread.
             threads[i]->running_time += elapsed;
-            threads[i]->running_time_recent += elapsed;
+            threads[i]->running_time_recent += (elapsed - overhead);
 
             // Also keep track of how long this thread has been at priority.
             if (threads[i]->priority_reason > 0)
             {
-                threads[i]->running_time_inversion += elapsed;
+                threads[i]->running_time_inversion += (elapsed - overhead);
                 _thread_check_and_disable_timed_bumps(threads[i]);
             }
         }
@@ -766,6 +848,9 @@ void _thread_calc_stats(irq_state_t *current, uint32_t elapsed)
 
     if (running_time_denominator >= STATS_DENOMINATOR)
     {
+        last_second_interruptions = interruptions;
+        interruptions = 0;
+
         running_time_denominator = 0;
     }
 }
@@ -775,18 +860,26 @@ irq_state_t *_syscall_timer(irq_state_t *current, int timer)
     if (timer < 0)
     {
         // Periodic preemption timer.
+        uint64_t start = _profile_get_current(0);
         uint32_t elapsed = _thread_wake_waiting_timer();
-        _thread_calc_stats(current, elapsed);
-        return _thread_schedule(current, THREAD_SCHEDULE_ANY);
+        interruptions ++;
+
+        // Calculate stats, less the overhead from the above section of code.
+        uint64_t calc = _profile_get_current(0);
+        _thread_calc_stats(current, elapsed, calc - start);
+        current = _thread_schedule(current, THREAD_SCHEDULE_ANY);
+
+        // Make sure to adjust the denominator by the overhead after calculating stats.
+        uint64_t done = _profile_get_current(0);
+        running_time_denominator += done - calc;
     }
-    else
-    {
-        return current;
-    }
+
+    return current;
 }
 
 irq_state_t *_syscall_holly(irq_state_t *current, uint32_t serviced_holly_interrupts)
 {
+    uint64_t start = _profile_get_current(0);
     int should_schedule = 0;
 
     if (serviced_holly_interrupts & HOLLY_SERVICED_VBLANK_IN)
@@ -807,18 +900,26 @@ irq_state_t *_syscall_holly(irq_state_t *current, uint32_t serviced_holly_interr
 
     if (should_schedule)
     {
+        // Wake any threads, find out how long we've been running the current thread.
         uint32_t elapsed = _thread_wake_waiting_timer();
-        _thread_calc_stats(current, elapsed);
-        return _thread_schedule(current, THREAD_SCHEDULE_ANY);
+        interruptions ++;
+
+        // Calculate stats, less the overhead from the above section of code.
+        uint64_t calc = _profile_get_current(0);
+        _thread_calc_stats(current, elapsed, calc - start);
+        current = _thread_schedule(current, THREAD_SCHEDULE_ANY);
+
+        // Make sure to adjust the denominator by the overhead after calculating stats.
+        uint64_t done = _profile_get_current(0);
+        running_time_denominator += done - calc;
     }
-    else
-    {
-        return current;
-    }
+
+    return current;
 }
 
 irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
 {
+    uint64_t start = _profile_get_current(0);
     int schedule = THREAD_SCHEDULE_CURRENT;
 
     switch (which)
@@ -854,7 +955,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
         case 3:
         {
             // thread_yield
-            thread_t *thread = _thread_find_by_context(current);
+            thread_t *thread = (thread_t *)current->threadptr;
             if (thread)
             {
                 // Give up some of our inversion status because we chose to yield.
@@ -921,7 +1022,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
         case 7:
         {
             // thread_id
-            thread_t *thread = _thread_find_by_context(current);
+            thread_t *thread = (thread_t *)current->threadptr;
             if (thread)
             {
                 current->gp_regs[0] = thread->id;
@@ -935,7 +1036,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
         case 8:
         {
             // thread_join
-            thread_t *myself = _thread_find_by_context(current);
+            thread_t *myself = (thread_t *)current->threadptr;
             thread_t *other = _thread_find_by_id(current->gp_regs[4]);
             if (!myself)
             {
@@ -986,7 +1087,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
         case 9:
         {
             // thread_exit
-            thread_t *thread = _thread_find_by_context(current);
+            thread_t *thread = (thread_t *)current->threadptr;
             if (thread)
             {
                 thread->state = THREAD_STATE_FINISHED;
@@ -1017,7 +1118,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
                 }
                 else
                 {
-                    thread_t *thread = _thread_find_by_context(current);
+                    thread_t *thread = (thread_t *)current->threadptr;
 
                     if (thread)
                     {
@@ -1065,8 +1166,10 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
                 }
 
                 // Wake up any other threads that were waiting on this thread for a join.
-                _thread_wake_waiting_semaphore(semaphore);
-                schedule = THREAD_SCHEDULE_OTHER;
+                if (_thread_wake_waiting_semaphore(semaphore))
+                {
+                    schedule = THREAD_SCHEDULE_OTHER;
+                }
             }
             else
             {
@@ -1083,7 +1186,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
         case 12:
         {
             // thread_sleep.
-            thread_t *thread = _thread_find_by_context(current);
+            thread_t *thread = (thread_t *)current->threadptr;
             if (thread)
             {
                 // Put the thread to sleep, waiting for the number of us requested.
@@ -1104,7 +1207,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
         case 13:
         {
             // thread_wait_vblank_in, thread_wait_vblank_out, thread_wait_hblank.
-            thread_t *thread = _thread_find_by_context(current);
+            thread_t *thread = (thread_t *)current->threadptr;
             if (thread)
             {
                 // Put the thread to sleep, waiting for a specific interrupt.
@@ -1126,9 +1229,19 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
         }
     }
 
+    // Figure out how long the current thread was on the CPU for.
     uint32_t elapsed = _thread_wake_waiting_timer();
-    _thread_calc_stats(current, elapsed);
-    return _thread_schedule(current, schedule);
+    interruptions ++;
+
+    // Add the current running time to the current process to keep track of stats.
+    uint64_t calc = _profile_get_current(0);
+    _thread_calc_stats(current, elapsed, calc - start);
+    current = _thread_schedule(current, schedule);
+
+    // Make sure to adjust the denominator by the overhead after calculating stats.
+    uint64_t done = _profile_get_current(0);
+    running_time_denominator += done - calc;
+    return current;
 }
 
 void *global_counter_init(uint32_t initial_value)
@@ -1456,7 +1569,7 @@ uint32_t thread_create(char *name, thread_func_t function, void *param)
 
     // Set up the thread to be runnable.
     thread->stack = malloc(THREAD_STACK_SIZE);
-    thread->context = _irq_new_state(_thread_run, ctx, thread->stack + THREAD_STACK_SIZE);
+    thread->context = _irq_new_state(_thread_run, ctx, thread->stack + THREAD_STACK_SIZE, thread);
 
     // Return the thread ID.
     return thread->id;
@@ -1466,7 +1579,7 @@ void thread_destroy(uint32_t tid)
 {
     uint32_t old_interrupts = irq_disable();
 
-    for (unsigned int i = 0; i < MAX_THREADS; i++)
+    for (unsigned int i = 0; i < highest_thread; i++)
     {
         if (threads[i] != 0 && threads[i]->id == tid)
         {
@@ -1498,38 +1611,34 @@ void thread_priority(uint32_t tid, int priority)
     asm("trapa #6" : : "r" (syscall_param0), "r" (syscall_param1));
 }
 
-thread_info_t thread_info(uint32_t tid)
+void thread_info(uint32_t tid, thread_info_t *info)
 {
-    thread_info_t info;
-    memset(&info, 0, sizeof(thread_info_t));
-
     uint32_t old_interrupts = irq_disable();
+
     thread_t *thread = _thread_find_by_id(tid);
-    if (thread)
+    if (thread && info)
     {
         // Basic stats
-        memcpy(info.name, thread->name, 64);
-        info.priority = thread->priority;
+        memcpy(info->name, thread->name, 64);
+        info->priority = thread->priority;
 
         // Calculate whether it is alive or not.
         if (thread->state == THREAD_STATE_STOPPED || thread->state == THREAD_STATE_RUNNING || thread->state == THREAD_STATE_WAITING)
         {
-            info.alive = 1;
+            info->alive = 1;
         }
         else
         {
-            info.alive = 0;
+            info->alive = 0;
         }
-        info.running = thread->state == THREAD_STATE_RUNNING ? 1 : 0;
+        info->running = thread->state == THREAD_STATE_RUNNING ? 1 : 0;
 
         // CPU stats.
-        info.running_time = thread->running_time;
-        info.cpu_percentage = thread->cpu_percentage;
+        info->running_time = thread->running_time;
+        info->cpu_percentage = thread->cpu_percentage;
     }
 
     irq_restore(old_interrupts);
-
-    return info;
 }
 
 void thread_yield()

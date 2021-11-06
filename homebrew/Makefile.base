@@ -146,8 +146,10 @@ BASELIBS = -lc -lm -lgcc -lstdc++
 
 ifeq ($(BARE_METAL), 1)
 LIBNAOMI =
+LIBNAOMILOC =
 else
 LIBNAOMI = -lnaomi
+LIBNAOMILOC = $(dir $(abspath $(lastword $(MAKEFILE_LIST))))libnaomi/libnaomi.a
 endif
 
 # A List of source files that should be included.
@@ -184,7 +186,7 @@ build/%.bin: build/%.elf
 	${OBJCOPY} $< $@ -O binary
 
 # A rule for how we go about building the elf file from objects.
-build/%.elf: ${OBJS}
+build/%.elf: ${OBJS} ${LIBNAOMILOC}
 	@mkdir -p $(dir $@)
 	${LD} -defsym START_ADDR=${START_ADDR} -o $@ $^ ${LIBNAOMI} ${LIBS} ${BASELIBS}
 

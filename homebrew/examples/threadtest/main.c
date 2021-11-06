@@ -12,11 +12,12 @@ void *thread1(void *param)
 {
     char *buf = param;
     uint32_t counter = 0;
+    uint32_t id = thread_id();
 
     while ( 1 )
     {
-        uint32_t id = thread_id();
-        thread_info_t info = thread_info(id);
+        thread_info_t info;
+        thread_info(id, &info);
         ATOMIC(sprintf(buf, "Thread ID: %ld, Thread Name: %s, CPU: %.02f percent\nCounter: %ld", id, info.name, info.cpu_percentage * 100.0, counter));
         counter += 1;
     }
@@ -28,11 +29,12 @@ void *thread2(void *param)
 {
     char *buf = param;
     uint32_t counter = 0;
+    uint32_t id = thread_id();
 
     while ( 1 )
     {
-        uint32_t id = thread_id();
-        thread_info_t info = thread_info(id);
+        thread_info_t info;
+        thread_info(id, &info);
         ATOMIC(sprintf(buf, "Thread ID: %ld, Thread Name: %s, CPU: %.02f percent\nCounter: %ld", id, info.name, info.cpu_percentage * 100.0, counter));
         counter += 2;
     }
@@ -44,11 +46,12 @@ void *thread3(void *param)
 {
     char *buf = param;
     uint32_t counter = 0;
+    uint32_t id = thread_id();
 
     while ( 1 )
     {
-        uint32_t id = thread_id();
-        thread_info_t info = thread_info(id);
+        thread_info_t info;
+        thread_info(id, &info);
         ATOMIC(sprintf(buf, "Thread ID: %ld, Thread Name: %s, CPU: %.02f percent\nCounter: %ld", id, info.name, info.cpu_percentage * 100.0, counter));
         counter += 3;
     }
@@ -60,11 +63,12 @@ void *thread4(void *param)
 {
     char *buf = param;
     uint32_t counter = 0;
+    uint32_t id = thread_id();
 
     while ( 1 )
     {
-        uint32_t id = thread_id();
-        thread_info_t info = thread_info(id);
+        thread_info_t info;
+        thread_info(id, &info);
         ATOMIC(sprintf(buf, "Thread ID: %ld, Thread Name: %s, CPU: %.02f percent\nCounter: %ld", id, info.name, info.cpu_percentage * 100.0, counter));
         counter += 4;
     }
@@ -76,11 +80,12 @@ void *thread5(void *param)
 {
     char *buf = param;
     uint32_t counter = 0;
+    uint32_t id = thread_id();
 
     while ( 1 )
     {
-        uint32_t id = thread_id();
-        thread_info_t info = thread_info(id);
+        thread_info_t info;
+        thread_info(id, &info);
         ATOMIC(sprintf(buf, "Thread ID: %ld, Thread Name: %s, CPU: %.02f percent\nCounter: %ld\nRTC: %lu", id, info.name, info.cpu_percentage * 100.0, counter, rtc_get()));
 
         timer_wait(500000);
@@ -94,11 +99,12 @@ void *thread6(void *param)
 {
     char *buf = param;
     uint32_t counter = 0;
+    uint32_t id = thread_id();
 
     while ( 1 )
     {
-        uint32_t id = thread_id();
-        thread_info_t info = thread_info(id);
+        thread_info_t info;
+        thread_info(id, &info);
         ATOMIC(sprintf(buf, "Thread ID: %ld, Thread Name: %s, CPU: %.02f percent\nCounter: %ld\nRTC: %lu", id, info.name, info.cpu_percentage * 100.0, counter, rtc_get()));
 
         thread_sleep(500000);
@@ -143,12 +149,30 @@ void main()
     thread_priority(thread_id(), 1);
 
     uint32_t frame_counter = 0;
+    uint32_t id = thread_id();
     while ( 1 )
     {
         // Display our own threading info.
-        uint32_t id = thread_id();
-        thread_info_t info = thread_info(id);
-        sprintf(tbuf[0], "Thread ID: %ld, Thread Name: %s, CPU: %.02f percent\nFrame Counter: %ld", id, info.name, info.cpu_percentage * 100.0, frame_counter++);
+        thread_info_t info;
+        thread_info(id, &info);
+        int amount = sprintf(tbuf[0], "Thread ID: %ld, Thread Name: %s, CPU: %.02f percent\nFrame Counter: %ld\n", id, info.name, info.cpu_percentage * 100.0, frame_counter++);
+
+        // Display info about the scheduler itself.
+        task_scheduler_info_t sched;
+        task_scheduler_info(&sched);
+        amount += sprintf(tbuf[0] + amount, "Scheduler Overhead CPU: %.02f, Interruptions: %lu\nKnown Threads: ", sched.cpu_percentage * 100.0, sched.interruptions);
+
+        for (unsigned int i = 0; i < sched.num_threads; i++)
+        {
+            if (i == 0)
+            {
+                amount += sprintf(tbuf[0] + amount, "%lu", sched.thread_ids[i]);
+            }
+            else
+            {
+                amount += sprintf(tbuf[0] + amount, ", %lu", sched.thread_ids[i]);
+            }
+        }
 
         // Go through and display all 5 buffers.
         for (unsigned int i = 0; i < (sizeof(tbuf) / sizeof(tbuf[0])); i++)

@@ -38,9 +38,12 @@ typedef struct
     // Saved floating point status and communication registers.
     uint32_t fpscr;
     uint32_t fpul;
+
+    // Pointer to the thread that owns us, potentially.
+    void *threadptr;
 } irq_state_t;
 
-irq_state_t *_irq_new_state(thread_func_t func, void *funcparam, void *stackptr);
+irq_state_t *_irq_new_state(thread_func_t func, void *funcparam, void *stackptr, void *threadptr);
 void _irq_free_state(irq_state_t *state);
 
 // What interrupts we actually serviced in our handler.
