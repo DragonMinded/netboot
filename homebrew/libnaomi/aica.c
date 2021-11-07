@@ -157,7 +157,8 @@ void aica_stop_sound(int channel)
 {
     volatile uint32_t *aicabase = (volatile uint32_t *)AICA_BASE;
    
-    aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] = (aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] & (~0xC000)) | 0x8000;
+    // Don't forget to clear not just the start bit, but also the loop bit as well.
+    aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] = (aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] & 0x3DFF) | 0x8000;
 }
 
 void main()
