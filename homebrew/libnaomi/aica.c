@@ -77,6 +77,12 @@ void aica_reset()
 
 void aica_start_sound_oneshot(int channel, void *data, int format, int num_samples, int freq, int vol, int pan)
 {
+    if (num_samples <= 0)
+    {
+        // Nothing to play?
+        return;
+    }
+
     volatile uint32_t *aicabase = (volatile uint32_t *)AICA_BASE;
 
     /* Set sample format and buffer address */
@@ -106,12 +112,11 @@ void aica_start_sound_oneshot(int channel, void *data, int format, int num_sampl
 
 void aica_start_sound_loop(int channel, void *data, int format, int num_samples, int freq, int vol, int pan, int loop_restart_position)
 {
-    volatile uint32_t *aicabase = (volatile uint32_t *)AICA_BASE;
-
-    /* Set sample format and buffer address */
-    aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] = 0x0200 | ((format & 0x3) << 7) | ((((unsigned long)data) >> 16) & 0x7F);
-    aicabase[CHANNEL(channel, AICA_CFG_ADDR_LOW)] = ((unsigned long)data) & 0xFFFF;
-
+    if (num_samples <= 0)
+    {
+        // Nothing to play?
+        return;
+    }
     if (loop_restart_position < 0)
     {
         loop_restart_position = 0;
@@ -120,6 +125,12 @@ void aica_start_sound_loop(int channel, void *data, int format, int num_samples,
     {
         loop_restart_position = num_samples;
     }
+
+    volatile uint32_t *aicabase = (volatile uint32_t *)AICA_BASE;
+
+    /* Set sample format and buffer address */
+    aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] = 0x0200 | ((format & 0x3) << 7) | ((((unsigned long)data) >> 16) & 0x7F);
+    aicabase[CHANNEL(channel, AICA_CFG_ADDR_LOW)] = ((unsigned long)data) & 0xFFFF;
 
     /* Number of samples */
     aicabase[CHANNEL(channel, AICA_CFG_LOOP_START)] = loop_restart_position;
