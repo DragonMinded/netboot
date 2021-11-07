@@ -20,13 +20,6 @@ void load_aica_binary(void *binary, unsigned int length)
     // Pull the AICA MCU in reset.
     aicabase[AICA_RESET] |= 0x1;
 
-    // Do the BSS-init for the ARM binary.
-    if (!hw_memset((void *)(SOUNDRAM_BASE | UNCACHED_MIRROR), 0, SOUNDRAM_SIZE))
-    {
-        // Failed to use HW to memset, fall back to slow method.
-        memset((void *)(SOUNDRAM_BASE | UNCACHED_MIRROR), 0, SOUNDRAM_SIZE);
-    }
-
     // Copy the binary to the AICA MCU.
     unsigned int hw_copy_amount = length & 0xFFFFFFE0;
     if (hw_memcpy((void *)(SOUNDRAM_BASE | UNCACHED_MIRROR), binary, hw_copy_amount))
