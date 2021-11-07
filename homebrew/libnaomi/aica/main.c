@@ -40,6 +40,9 @@
 // Common registers
 #define AICA_VERSION (0x2800 >> 2)
 
+// Millisecond timer, defined in arm-crt0.s
+extern uint32_t millisecond_timer;
+
 // Generated pitch table function in pitchtable.c
 uint32_t pitch_reg(unsigned int samplerate);
 
@@ -182,20 +185,15 @@ void aica_stop_sound(int channel)
 
 void main()
 {
-    volatile uint32_t *status = (volatile uint32_t *)0xF100;
-    status[0] = 0x12340000;
     aica_reset();
 
     extern uint8_t *success_raw_data;
     extern unsigned int success_raw_len;
 
-    status[0] = 0x56780000;
-
     aica_start_sound_oneshot(0, success_raw_data, FORMAT_8BIT, success_raw_len, 44100, VOL_MAX, PAN_CENTER);
 
-    status[0] = 0x9ABC0000;
     while( 1 )
     {
-        status[0] = (status[0] & 0xFFFF0000) | (((status[0] & 0xFFFF) + 1) & 0xFFFF);
+        *((volatile uint32_t *)0x10000) = millisecond_timer;
     }
 }

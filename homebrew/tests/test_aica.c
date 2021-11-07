@@ -12,7 +12,7 @@ void test_aica_simple(test_context_t *context)
 
     load_aica_binary(aica_test_bin_data, aica_test_bin_len);
 
-    volatile uint32_t * status_location = (volatile uint32_t *)((SOUNDRAM_BASE | UNCACHED_MIRROR) + 0xF100);
+    volatile uint32_t * status_location = (volatile uint32_t *)((SOUNDRAM_BASE | UNCACHED_MIRROR) + 0x10000);
     int got_result = 0;
 
     // Wait at most 1ms before giving up.

@@ -27,9 +27,9 @@ void main()
             20,
             20,
             rgb(200, 200, 20),
-            "Aliveness counter: %d (%08X)",
+            "Aliveness counter: %d (%lu)",
             counter++,
-            *((volatile uint32_t *)((SOUNDRAM_BASE | UNCACHED_MIRROR) + 0xF100))
+            *((volatile uint32_t *)((SOUNDRAM_BASE | UNCACHED_MIRROR) + 0x10000))
         );
         video_display_on_vblank();
     }
