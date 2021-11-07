@@ -32,19 +32,19 @@ build/testsuite.c: generate.py ${TEST_SOURCES}
 # Special-case for a test AICA binary, since it is an ARM executable.
 # We write our own AICA stub here since we want to test the HW, so we
 # dont want default functionality from libnaomi.
-build/arm/arm-crt0.o: ../libnaomi/arm-crt0.s
+build/aica/arm-crt0.o: ../libnaomi/aica/arm-crt0.s
 	@mkdir -p $(dir $@)
 	${ARMAS} -o $@ $<
 
-build/arm/aica.o: aica.c
+build/aica/main.o: aica/main.c
 	@mkdir -p $(dir $@)
 	${ARMCC} -c -o $@ $<
 
-build/arm/aica.elf: build/arm/arm-crt0.o build/arm/aica.o
+build/aica/aica.elf: build/aica/arm-crt0.o build/aica/main.o
 	@mkdir -p $(dir $@)
 	${ARMLD} -o $@ $^ ${ARMLIBS}
 
-build/aica_test.bin: build/arm/aica.elf
+build/aica_test.bin: build/aica/aica.elf
 	@mkdir -p $(dir $@)
 	${ARMOBJCOPY} $< $@ -O binary
 

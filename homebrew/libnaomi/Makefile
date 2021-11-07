@@ -24,26 +24,26 @@ include ../Makefile.base
 # Special-case for AICA binary, since it is an ARM executable. This is
 # stored in the main executable as the default AICA binary which can be
 # loaded by homebrew wishing to use sound.
-build/arm/arm-crt0.o: arm-crt0.s
+build/aica/arm-crt0.o: aica/arm-crt0.s
 	@mkdir -p $(dir $@)
 	${ARMAS} -o $@ $<
 
 # This has a bunch of debugging in it still and would need to be cleaned
 # up before we consider the AICA binary production-ready.
-build/arm/aica.o: aica.c
+build/aica/main.o: aica/main.c
 	@mkdir -p $(dir $@)
 	${ARMCC} -c -o $@ $<
 
-build/arm/pitchtable.o: ${PITCHGEN_FILE}
+build/aica/pitchtable.o: ${PITCHGEN_FILE}
 	@mkdir -p $(dir $@)
-	${PITCHGEN} build/arm/pitchtable.c 128
-	${ARMCC} -c build/arm/pitchtable.c -o $@
+	${PITCHGEN} build/aica/pitchtable.c 128
+	${ARMCC} -c build/aica/pitchtable.c -o $@
 
-build/arm/aica.elf: build/arm/arm-crt0.o build/arm/aica.o build/arm/pitchtable.o build/arm/success.o
+build/aica/aica.elf: build/aica/arm-crt0.o build/aica/main.o build/aica/pitchtable.o build/aica/success.o
 	@mkdir -p $(dir $@)
 	${ARMLD} -o $@ $^ ${ARMLIBS}
 
-build/aica.bin: build/arm/aica.elf
+build/aica.bin: build/aica/aica.elf
 	@mkdir -p $(dir $@)
 	${ARMOBJCOPY} $< $@ -O binary
 
@@ -58,10 +58,10 @@ build/aica.bin.o: build/aica.bin
 # else before I try playing it. Eventually, this should be deleted and
 # the default AICA binary should be usable to request sounds be played from
 # the main executable through some sort of RPC.
-build/arm/success.o: success.raw
+build/aica/success.o: aica/success.raw
 	@mkdir -p $(dir $@)
-	${BIN2C} build/arm/success.c $<
-	${ARMCC} -c build/arm/success.c -o $@
+	${BIN2C} build/aica/success.c $<
+	${ARMCC} -c build/aica/success.c -o $@
 
 # Package up all object files, created from the above sources.
 libnaomi.a: ${OBJS} build/aica.bin.o
