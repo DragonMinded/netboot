@@ -38,10 +38,7 @@
 #define AICA_CFG_UNKNOWN7 (0x44 >> 2)
 
 // Common registers
-#define AICA_UNKNOWN1 (0x2040 >> 2)
-#define AICA_UNKNOWN2 (0x2044 >> 2)
 #define AICA_VERSION (0x2800 >> 2)
-#define AICA_RINGBUF (0x2804 >> 2)
 
 void aica_reset()
 {
@@ -129,7 +126,7 @@ void main()
 
     status[0] = 0x56780000;
 
-    aica_start_sound(0, success_raw_data, FORMAT_8BIT, success_raw_len, 44100, 0x1D, PAN_CENTER);
+    aica_start_sound(0, success_raw_data, FORMAT_8BIT, success_raw_len, 44100, VOL_MAX, PAN_CENTER);
 
     status[0] = 0x9ABC0000;
     while( 1 )
