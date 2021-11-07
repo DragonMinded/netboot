@@ -157,6 +157,22 @@ uint32_t _holly_interrupt()
         uint32_t requested = *HOLLY_INTERNAL_IRQ_STATUS;
         uint32_t handled = 0;
 
+        // First, check for any error status.
+        if (requested & HOLLY_INTERNAL_INTERRUPT_ERROR)
+        {
+            // This cannot be cleared by writing a 1 to it. So we must figure
+            // out what the error was and clear that.
+            *HOLLY_ERROR_STATUS = *HOLLY_ERROR_STATUS;
+            handled |= HOLLY_INTERNAL_INTERRUPT_ERROR;
+        }
+
+        // Now, ignore any external interrupt set bits, since we will be checking
+        // that as well in the next section of code.
+        if (requested & HOLLY_INTERNAL_INTERRUPT_CHECK_EXTERNAL)
+        {
+            handled |= HOLLY_INTERNAL_INTERRUPT_CHECK_EXTERNAL;
+        }
+
         // For some reason, even though we don't ask for it, HOLLY gives us IRQ finished
         // events for anything we tickle in the system, so we just reset those if we
         // encounter any of them.
