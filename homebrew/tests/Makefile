@@ -48,7 +48,7 @@ build/aica_test.bin: build/aica/aica.elf
 	@mkdir -p $(dir $@)
 	${ARMOBJCOPY} $< $@ -O binary
 
-build/aica_test.bin.o: build/aica_test.bin
+build/aica_test.bin.o: build/aica_test.bin ${BIN2C_FILE}
 	@mkdir -p $(dir $@)
 	${BIN2C} $<.c $<
 	${CC} -c $<.c -o $@

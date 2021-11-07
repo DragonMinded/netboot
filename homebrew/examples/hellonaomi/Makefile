@@ -14,7 +14,7 @@ SRCS += main.c build/sonic.o
 include ../../Makefile.base
 
 # Specific buildrule for PNG files for this project.
-build/%.o: %.png
+build/%.o: %.png ${IMG2C_FILE}
 	@mkdir -p $(dir $@)
 	${IMG2C} build/$<.c --depth 2 $<
 	${CC} -c build/$<.c -o $@

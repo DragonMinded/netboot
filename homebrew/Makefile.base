@@ -124,7 +124,8 @@ ARMOBJCOPY = ${NAOMI_ARM_OBJCOPY}
 ARMAR = ${NAOMI_ARM_AR}
 
 # Set up various toolchain utilities.
-BIN2C = python3 $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/bin2c.py
+BIN2C_FILE = $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/bin2c.py
+BIN2C = python3 ${BIN2C_FILE}
 
 # Set up various toolchain utilities.
 ADDR = python3 $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/addr.py
@@ -133,7 +134,8 @@ ADDR = python3 $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/addr.py
 DATE = python3 $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/date.py
 
 # Set up various toolchain utilities.
-IMG2C = python3 $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/sprite.py
+IMG2C_FILE = $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/sprite.py
+IMG2C = python3 ${IMG2C_FILE}
 
 # Set up various toolchain utilities.
 PITCHGEN_FILE = $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/pitchgen.py
@@ -214,7 +216,7 @@ build/%.o: %.cpp
 	${CPP} -c $< -o $@ -DSERIAL=\"${SERIAL}\" -DBUILD_DATE=$(shell ${DATE})
 
 # A rule for how to build font files. Depends on the build dir being created.
-build/%.o: %.ttf
+build/%.o: %.ttf ${BIN2C_FILE}
 	@mkdir -p $(dir $@)
 	${BIN2C} build/$<.c $<
 	${CC} -c build/$<.c -o $@

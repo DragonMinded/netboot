@@ -47,7 +47,7 @@ build/aica.bin: build/aica/aica.elf
 	@mkdir -p $(dir $@)
 	${ARMOBJCOPY} $< $@ -O binary
 
-build/aica.bin.o: build/aica.bin
+build/aica.bin.o: build/aica.bin ${BIN2C_FILE}
 	@mkdir -p $(dir $@)
 	${BIN2C} $<.c $<
 	${CC} -c $<.c -o $@
@@ -58,7 +58,7 @@ build/aica.bin.o: build/aica.bin
 # else before I try playing it. Eventually, this should be deleted and
 # the default AICA binary should be usable to request sounds be played from
 # the main executable through some sort of RPC.
-build/aica/success.o: aica/success.raw
+build/aica/success.o: aica/success.raw ${BIN2C_FILE}
 	@mkdir -p $(dir $@)
 	${BIN2C} build/aica/success.c $<
 	${ARMCC} -c build/aica/success.c -o $@
