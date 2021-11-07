@@ -9,6 +9,7 @@ all: audiotest.bin
 # missing missing `build/naomi.bin' target, so make sure all of
 # these files exist.
 SRCS += main.c
+SRCS += success.raw
 
 # Pick up base makefile rules common to all examples.
 include ../../Makefile.base

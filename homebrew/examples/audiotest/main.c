@@ -4,6 +4,10 @@
 #include "naomi/audio.h"
 #include "naomi/system.h"
 
+// Our sound, as linked by our makefile.
+extern uint8_t *success_raw_data;
+extern unsigned int success_raw_len;
+
 void main()
 {
     video_init_simple();
@@ -13,8 +17,11 @@ void main()
     video_draw_debug_text(20, 20, rgb(255, 255, 255), "Loading AICA binary...");
     video_display_on_vblank();
 
-    // Load the AICA binary itself.
-    load_aica_binary(AICA_DEFAULT_BINARY, AICA_DEFAULT_BINARY_SIZE);
+    // Initialize audio system.
+    audio_init();
+
+    // Request a sound be played immediately.
+    audio_play_sound(AUDIO_FORMAT_8BIT, 44100, SPEAKER_LEFT | SPEAKER_RIGHT, success_raw_data, success_raw_len);
 
     unsigned int counter = 0;
     while ( 1 )
@@ -29,7 +36,7 @@ void main()
             rgb(200, 200, 20),
             "Aliveness counter: %d (%lu)",
             counter++,
-            *((volatile uint32_t *)((SOUNDRAM_BASE | UNCACHED_MIRROR) + 0x10000))
+            audio_aica_uptime()
         );
         video_display_on_vblank();
     }

@@ -28,9 +28,11 @@ build/aica/arm-crt0.o: aica/arm-crt0.s
 	@mkdir -p $(dir $@)
 	${ARMAS} -o $@ $<
 
-# This has a bunch of debugging in it still and would need to be cleaned
-# up before we consider the AICA binary production-ready.
 build/aica/main.o: aica/main.c
+	@mkdir -p $(dir $@)
+	${ARMCC} -c -o $@ $<
+
+build/aica/clib.o: aica/clib.c
 	@mkdir -p $(dir $@)
 	${ARMCC} -c -o $@ $<
 
@@ -39,7 +41,7 @@ build/aica/pitchtable.o: ${PITCHGEN_FILE}
 	${PITCHGEN} build/aica/pitchtable.c 128
 	${ARMCC} -c build/aica/pitchtable.c -o $@
 
-build/aica/aica.elf: build/aica/arm-crt0.o build/aica/main.o build/aica/pitchtable.o build/aica/success.o
+build/aica/aica.elf: build/aica/arm-crt0.o build/aica/main.o build/aica/clib.o build/aica/pitchtable.o
 	@mkdir -p $(dir $@)
 	${ARMLD} -o $@ $^ ${ARMLIBS}
 
@@ -51,17 +53,6 @@ build/aica.bin.o: build/aica.bin ${BIN2C_FILE}
 	@mkdir -p $(dir $@)
 	${BIN2C} $<.c $<
 	${CC} -c $<.c -o $@
-
-# This is a simple test sound that I never did get playing on actual HW.
-# It seems to work in MAME however, so I suspect there's a problem with
-# what memory it is placed into, perhaps it needs to be copied to somewhere
-# else before I try playing it. Eventually, this should be deleted and
-# the default AICA binary should be usable to request sounds be played from
-# the main executable through some sort of RPC.
-build/aica/success.o: aica/success.raw ${BIN2C_FILE}
-	@mkdir -p $(dir $@)
-	${BIN2C} build/aica/success.c $<
-	${ARMCC} -c build/aica/success.c -o $@
 
 # Package up all object files, created from the above sources.
 libnaomi.a: ${OBJS} build/aica.bin.o

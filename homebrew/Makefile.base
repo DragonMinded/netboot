@@ -184,7 +184,7 @@ TEST_ADDR = $(shell ${ADDR} ${START_ADDR} 4)
 
 # Auto-compute objects based on sources we recognize. The rest of the sources will
 # be assumed to be objects that we want to include.
-OBJS = $(patsubst %.ttf, build/%.o, $(patsubst %.cpp, build/%.o, $(patsubst %.s, build/%.o, $(patsubst %.c, build/%.o, $(SRCS)))))
+OBJS = $(patsubst %.raw, build/%.o, $(patsubst %.ttf, build/%.o, $(patsubst %.cpp, build/%.o, $(patsubst %.s, build/%.o, $(patsubst %.c, build/%.o, $(SRCS))))))
 
 # A rule for how we go from the final built elf file to a raw binary for extracting.
 build/%.bin: build/%.elf
@@ -217,6 +217,12 @@ build/%.o: %.cpp
 
 # A rule for how to build font files. Depends on the build dir being created.
 build/%.o: %.ttf ${BIN2C_FILE}
+	@mkdir -p $(dir $@)
+	${BIN2C} build/$<.c $<
+	${CC} -c build/$<.c -o $@
+
+# A rule for how to build raw binary data. Depends on the build dir being created.
+build/%.o: %.raw ${BIN2C_FILE}
 	@mkdir -p $(dir $@)
 	${BIN2C} build/$<.c $<
 	${CC} -c build/$<.c -o $@

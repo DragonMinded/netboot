@@ -1,4 +1,6 @@
 #include <stdint.h>
+#include "clib.h"
+#include "common.h"
 
 // Some system constants
 #define FORMAT_16BIT 0
@@ -39,6 +41,12 @@
 
 // Common registers
 #define AICA_VERSION (0x2800 >> 2)
+
+// Our command buffer for talking to the SH.
+#define AICA_CMD_BUFFER(x) *((volatile uint32_t *)(0x20000 + x))
+
+// Our sample locations.
+#define FIRST_SAMPLE_LOCATION 0x20100
 
 // Millisecond timer, defined in arm-crt0.s
 extern uint32_t millisecond_timer;
@@ -178,22 +186,257 @@ void aica_start_sound_loop(int channel, void *data, int format, int num_samples,
 void aica_stop_sound(int channel)
 {
     volatile uint32_t *aicabase = (volatile uint32_t *)AICA_BASE;
-   
+
     // Don't forget to clear not just the start bit, but also the loop bit as well.
     aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] = (aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] & 0x3DFF) | 0x8000;
 }
 
+typedef struct
+{
+    // When this channel is guaranteed to be free, as compared to the millisecond timer.
+    uint32_t free_time;
+    // The currently playing sample.
+    uint32_t sample;
+} channel_info_t;
+
+channel_info_t channel_info[64];
+
+typedef struct sample_info_struct
+{
+    // Whether this registered sample is in use or not.
+    unsigned int in_use;
+    // The raw location in memory this sample resides.
+    uint32_t location;
+    // The raw size in memory this sample can be.
+    unsigned int maxsize;
+    // The number of individual sample values this sample contains.
+    unsigned int numsamples;
+    // The format of the sample, either ALLOCATE_AUDIO_FORMAT_8BIT or ALLOCATE_AUDIO_FORMAT_16BIT.
+    unsigned int format;
+    // The sample rate of this sample.
+    unsigned int samplerate;
+    // The speakers used for playing this sample. Bitmas of ALLOCATE_SPEAKER_LEFT and ALLOCATE_SPEAKER_RIGHT.
+    unsigned int speakers;
+    // A pointer to the next sample info structure if it exists.
+    struct sample_info_struct *next;
+} sample_info_t;
+
+sample_info_t *find_sample(sample_info_t *head, uint32_t location)
+{
+    while (head != 0)
+    {
+        if (head->in_use && head->location == location)
+        {
+            return head;
+        }
+
+        head = head->next;
+    }
+
+    return 0;
+}
+
+sample_info_t *new_sample(sample_info_t *head, uint32_t *location, unsigned int numsamples, unsigned int format, unsigned int samplerate, unsigned int speakers)
+{
+    unsigned int size = (format == ALLOCATE_AUDIO_FORMAT_16BIT) ? (numsamples * 2) : numsamples;
+    sample_info_t *orig = head;
+    sample_info_t *last = 0;
+
+    while (head != 0)
+    {
+        if (!head->in_use && head->maxsize >= size)
+        {
+            // We can reuse this!
+            head->in_use = 1;
+            head->numsamples = numsamples;
+            head->format = format;
+            head->samplerate = samplerate;
+            head->speakers = speakers;
+            return orig;
+        }
+
+        last = head;
+        head = head->next;
+    }
+
+    // We couldn't reuse any, so we need a new one!
+    uint32_t spot = FIRST_SAMPLE_LOCATION;
+    if (last)
+    {
+        // Grab the next 32-bit aligned memory location after the last sample.
+        spot = ((last->location + last->maxsize) + 3) & 0xFFFFFFFC;
+    }
+
+    sample_info_t *new = (sample_info_t *)spot;
+    new->in_use = 1;
+    new->location = (spot + sizeof(sample_info_t) + 3) & 0xFFFFFFFC;
+    new->maxsize = (size + 3) & 0xFFFFFFFC;
+    new->numsamples = numsamples;
+    new->format = format;
+    new->samplerate = samplerate;
+    new->speakers = speakers;
+    new->next = 0;
+
+    // Return the handle to this sample as well.
+    if (location)
+    {
+        *location = new->location;
+    }
+
+    // Now, attach this to the end of the list.
+    if (last)
+    {
+        last->next = new;
+        return orig;
+    }
+    else
+    {
+        return new;
+    }
+}
+
 void main()
 {
+    // Set up our sample linked list.
+    sample_info_t *samples = 0;
+
+    // Reset AICA to a known state.
     aica_reset();
 
-    extern uint8_t *success_raw_data;
-    extern unsigned int success_raw_len;
-
-    aica_start_sound_oneshot(0, success_raw_data, FORMAT_8BIT, success_raw_len, 44100, VOL_MAX, PAN_CENTER);
+    // Reset our channel info trackers to a known state.
+    memset(channel_info, 0, sizeof(channel_info_t) * 64);
 
     while( 1 )
     {
-        *((volatile uint32_t *)0x10000) = millisecond_timer;
+        // Update our uptime.
+        AICA_CMD_BUFFER(CMD_BUFFER_UPTIME) = millisecond_timer;
+
+        // See if the SH has requested that we perform some command.
+        if (AICA_CMD_BUFFER(CMD_BUFFER_BUSY) != 0)
+        {
+            // Start by marking the response as a failure just in case we fail
+            // to figure out the command below.
+            AICA_CMD_BUFFER(CMD_BUFFER_RESPONSE) = RESPONSE_FAILURE;
+
+            volatile uint32_t *params = &AICA_CMD_BUFFER(CMD_BUFFER_PARAMS);
+            switch (AICA_CMD_BUFFER(CMD_BUFFER_REQUEST))
+            {
+                case REQUEST_SILENCE:
+                {
+                    // Request to shut up all channels.
+                    aica_reset();
+
+                    // None of the channels are playing anything anymore.
+                    memset(channel_info, 0, sizeof(channel_info_t) * 64);
+
+                    AICA_CMD_BUFFER(CMD_BUFFER_RESPONSE) = RESPONSE_SUCCESS;
+                    break;
+                }
+                case REQUEST_ALLOCATE:
+                {
+                    // Request a spot to put a new sound of X bytes.
+                    uint32_t numsamples = params[0];
+                    uint32_t format = params[1];
+                    uint32_t samplerate = params[2];
+                    uint32_t speakers = params[3];
+
+                    // Add a new sample.
+                    uint32_t location = 0;
+                    samples = new_sample(samples, &location, numsamples, format, samplerate, speakers);
+
+                    // Return the location as a handle.
+                    AICA_CMD_BUFFER(CMD_BUFFER_RESPONSE) = location;
+                    break;
+                }
+                case REQUEST_FREE:
+                {
+                    // Free up a previous location.
+                    uint32_t location = params[0];
+
+                    sample_info_t *mysample = find_sample(samples, location);
+                    if (mysample)
+                    {
+                        // Free it.
+                        mysample->in_use = 0;
+
+                        // Free up any channels playing this sample.
+                        for (unsigned int chan = 0; chan < 64; chan++)
+                        {
+                            if (channel_info[chan].sample == location)
+                            {
+                                aica_stop_sound(chan);
+                                channel_info[chan].sample = 0;
+                                channel_info[chan].free_time = 0;
+                            }
+                        }
+                        AICA_CMD_BUFFER(CMD_BUFFER_RESPONSE) = RESPONSE_SUCCESS;
+                    }
+
+                    break;
+                }
+                case REQUEST_START_PLAY:
+                {
+                    // Find the sample to play by location.
+                    uint32_t location = params[0];
+
+                    sample_info_t *mysample = find_sample(samples, location);
+                    if (mysample)
+                    {
+                        // Cool, found it, now assign it to a channel.
+                        for (unsigned int chan = 0; chan < 64; chan++)
+                        {
+                            if (channel_info[chan].free_time < millisecond_timer)
+                            {
+                                // We can use this channel.
+                                channel_info[chan].sample = location;
+                                channel_info[chan].free_time = millisecond_timer + ((mysample->numsamples * 1000) / mysample->samplerate) + 1;
+
+                                // Calculate panning and format.
+                                int pan = 0;
+                                int format = 0;
+                                int vol = VOL_MIN;
+
+                                if (mysample->format == ALLOCATE_AUDIO_FORMAT_8BIT)
+                                {
+                                    format = FORMAT_8BIT;
+                                }
+                                if (mysample->format == ALLOCATE_AUDIO_FORMAT_16BIT)
+                                {
+                                    format = FORMAT_16BIT;
+                                }
+                                if (mysample->speakers & ALLOCATE_SPEAKER_LEFT)
+                                {
+                                    if (mysample->speakers & ALLOCATE_SPEAKER_RIGHT)
+                                    {
+                                        pan = PAN_CENTER;
+                                        vol = VOL_MAX;
+                                    }
+                                    else
+                                    {
+                                        pan = PAN_LEFT;
+                                        vol = VOL_MAX;
+                                    }
+                                }
+                                else if (mysample->speakers & ALLOCATE_SPEAKER_RIGHT)
+                                {
+                                    pan = PAN_RIGHT;
+                                    vol = VOL_MAX;
+                                }
+
+                                // Actually play it!
+                                aica_start_sound_oneshot(chan, (void *)mysample->location, format, mysample->numsamples, mysample->samplerate, vol, pan);
+
+                                AICA_CMD_BUFFER(CMD_BUFFER_RESPONSE) = RESPONSE_SUCCESS;
+                                break;
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+
+            // Acknowledge command received.
+            AICA_CMD_BUFFER(CMD_BUFFER_BUSY) = 0;
+        }
     }
 }
