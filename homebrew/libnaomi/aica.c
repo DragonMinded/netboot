@@ -75,13 +75,9 @@ void aica_reset()
     aicabase[AICA_VERSION] = (aicabase[AICA_VERSION] & 0xFFFFFFF0) | 0xF;
 }
 
-void aica_start_sound(int channel, void *data, int format, int num_samples, int freq, int vol, int pan)
+void aica_start_sound_oneshot(int channel, void *data, int format, int num_samples, int freq, int vol, int pan)
 {
     volatile uint32_t *aicabase = (volatile uint32_t *)AICA_BASE;
-
-    unsigned long freq_lo = 0;
-    unsigned long freq_base = 5644800;
-    int freq_hi = 7;
 
     /* Set sample format and buffer address */
     aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] = ((format & 0x3) << 7) | ((((unsigned long)data) >> 16) & 0x7F);
@@ -89,6 +85,44 @@ void aica_start_sound(int channel, void *data, int format, int num_samples, int 
 
     /* Number of samples */
     aicabase[CHANNEL(channel, AICA_CFG_LOOP_START)] = 0;
+    aicabase[CHANNEL(channel, AICA_CFG_LOOP_END)] = num_samples;
+
+    /* Need to figure out frequency conversion */
+    aicabase[CHANNEL(channel, AICA_CFG_PITCH)] = 0;
+
+    /* Set volume, pan, and some other stuff */
+    aicabase[CHANNEL(channel, AICA_CFG_PAN_VOLUME)] = (pan & 0x1F) | (0xD << 8);
+    aicabase[CHANNEL(channel, AICA_CFG_VOLUME2)] = 0x20 | ((vol & 0xFF) << 8);
+    aicabase[CHANNEL(channel, AICA_CFG_ADSR1)] = 0x001F;
+    aicabase[CHANNEL(channel, AICA_CFG_ADSR2)] = 0x001F;
+    aicabase[CHANNEL(channel, AICA_CFG_LFO1)] = 0x8000;  // BIOS sets this to 0x8000??
+    aicabase[CHANNEL(channel, AICA_CFG_LFO2)] = 0;  // BIOS only sets bottom 8 bits to 0??
+
+    /* Enable playback */
+    aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] = (aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] & 0x3FFF) | 0x4000;
+    aicabase[CHANNEL(channel, AICA_CFG_LFO1)] = 0x0000;  // BIOS sets this to 0x0000 now??
+    aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] = (aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] & 0x3FFF) | 0xC000;
+}
+
+void aica_start_sound_loop(int channel, void *data, int format, int num_samples, int freq, int vol, int pan, int loop_restart_position)
+{
+    volatile uint32_t *aicabase = (volatile uint32_t *)AICA_BASE;
+
+    /* Set sample format and buffer address */
+    aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] = 0x0200 | ((format & 0x3) << 7) | ((((unsigned long)data) >> 16) & 0x7F);
+    aicabase[CHANNEL(channel, AICA_CFG_ADDR_LOW)] = ((unsigned long)data) & 0xFFFF;
+
+    if (loop_restart_position < 0)
+    {
+        loop_restart_position = 0;
+    }
+    if (loop_restart_position > num_samples)
+    {
+        loop_restart_position = num_samples;
+    }
+
+    /* Number of samples */
+    aicabase[CHANNEL(channel, AICA_CFG_LOOP_START)] = loop_restart_position;
     aicabase[CHANNEL(channel, AICA_CFG_LOOP_END)] = num_samples;
 
     /* Need to figure out frequency conversion */
@@ -126,7 +160,7 @@ void main()
 
     status[0] = 0x56780000;
 
-    aica_start_sound(0, success_raw_data, FORMAT_8BIT, success_raw_len, 44100, VOL_MAX, PAN_CENTER);
+    aica_start_sound_oneshot(0, success_raw_data, FORMAT_8BIT, success_raw_len, 44100, VOL_MAX, PAN_CENTER);
 
     status[0] = 0x9ABC0000;
     while( 1 )
