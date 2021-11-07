@@ -55,23 +55,23 @@ void aica_reset()
     {
         // Initialize important registers
         aicabase[CHANNEL(chan, AICA_CFG_ADDR_HIGH)] = 0x8000;
-        aicabase[CHANNEL(chan, AICA_CFG_VOLUME2)] = 0;
-        aicabase[CHANNEL(chan, AICA_CFG_UNKNOWN1)] = 0;
-        aicabase[CHANNEL(chan, AICA_CFG_UNKNOWN2)] = 0;
-        aicabase[CHANNEL(chan, AICA_CFG_UNKNOWN3)] = 0;
-        aicabase[CHANNEL(chan, AICA_CFG_UNKNOWN4)] = 0;
-        aicabase[CHANNEL(chan, AICA_CFG_UNKNOWN5)] = 0;
         aicabase[CHANNEL(chan, AICA_CFG_ADDR_LOW)] = 0;
         aicabase[CHANNEL(chan, AICA_CFG_LOOP_START)] = 0;
         aicabase[CHANNEL(chan, AICA_CFG_LOOP_END)] = 0;
+        aicabase[CHANNEL(chan, AICA_CFG_ADSR1)] = 0;
+        aicabase[CHANNEL(chan, AICA_CFG_ADSR2)] = 0;
         aicabase[CHANNEL(chan, AICA_CFG_PITCH)] = 0;
         aicabase[CHANNEL(chan, AICA_CFG_LFO1)] = 0;
         aicabase[CHANNEL(chan, AICA_CFG_LFO2)] = 0;
         aicabase[CHANNEL(chan, AICA_CFG_PAN_VOLUME)] = 0;
+        aicabase[CHANNEL(chan, AICA_CFG_VOLUME2)] = 0xFF04;
+        aicabase[CHANNEL(chan, AICA_CFG_UNKNOWN1)] = 0x1F77;
+        aicabase[CHANNEL(chan, AICA_CFG_UNKNOWN2)] = 0x1F77;
+        aicabase[CHANNEL(chan, AICA_CFG_UNKNOWN3)] = 0x1F77;
+        aicabase[CHANNEL(chan, AICA_CFG_UNKNOWN4)] = 0x1F77;
+        aicabase[CHANNEL(chan, AICA_CFG_UNKNOWN5)] = 0x1F77;
         aicabase[CHANNEL(chan, AICA_CFG_UNKNOWN6)] = 0;
         aicabase[CHANNEL(chan, AICA_CFG_UNKNOWN7)] = 0;
-        aicabase[CHANNEL(chan, AICA_CFG_ADSR1)] = 0;
-        aicabase[CHANNEL(chan, AICA_CFG_ADSR2)] = 0x1F;
     }
 
     // Set master DAC volume back to full volume
@@ -87,36 +87,28 @@ void aica_start_sound(int channel, void *data, int format, int num_samples, int 
     int freq_hi = 7;
 
     /* Set sample format and buffer address */
-    aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] = 0x8000 | ((format & 0x3) << 7) | ((((unsigned long)data) >> 16) & 0x7F);
+    aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] = ((format & 0x3) << 7) | ((((unsigned long)data) >> 16) & 0x7F);
     aicabase[CHANNEL(channel, AICA_CFG_ADDR_LOW)] = ((unsigned long)data) & 0xFFFF;
 
     /* Number of samples */
     aicabase[CHANNEL(channel, AICA_CFG_LOOP_START)] = 0;
     aicabase[CHANNEL(channel, AICA_CFG_LOOP_END)] = num_samples;
 
-    /* Need to convert frequency to floating point format
-       (freq_hi is exponent, freq_lo is mantissa).
-       Formula is  freq = 44100*2^freq_hi*(1+freq_lo/1024)  */
-    while(freq < freq_base && freq_hi > -8)
-    {
-        freq_base >>= 1;
-        --freq_hi;
-    }
-    freq_lo = (freq<<10)/freq_base;
-
-    /* Write resulting values */
-    aicabase[CHANNEL(channel, AICA_CFG_PITCH)] = (freq_hi << 11) | (freq_lo & 1023);
+    /* Need to figure out frequency conversion */
+    aicabase[CHANNEL(channel, AICA_CFG_PITCH)] = 0;
 
     /* Set volume, pan, and some other stuff */
     aicabase[CHANNEL(channel, AICA_CFG_PAN_VOLUME)] = (pan & 0x1F) | (0xD << 8);
     aicabase[CHANNEL(channel, AICA_CFG_VOLUME2)] = 0x20 | ((vol & 0xFF) << 8);
-    aicabase[CHANNEL(channel, AICA_CFG_ADSR1)] = 0x1F;
-    aicabase[CHANNEL(channel, AICA_CFG_ADSR2)] = 0x1F;
-    aicabase[CHANNEL(channel, AICA_CFG_LFO1)] = 0;
-    aicabase[CHANNEL(channel, AICA_CFG_LFO2)] = 0;
+    aicabase[CHANNEL(channel, AICA_CFG_ADSR1)] = 0x001F;
+    aicabase[CHANNEL(channel, AICA_CFG_ADSR2)] = 0x001F;
+    aicabase[CHANNEL(channel, AICA_CFG_LFO1)] = 0x8000;  // BIOS sets this to 0x8000??
+    aicabase[CHANNEL(channel, AICA_CFG_LFO2)] = 0;  // BIOS only sets bottom 8 bits to 0??
 
     /* Enable playback */
-    aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] = (aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] & (~0xC000)) | 0x4000;
+    aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] = (aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] & 0x3FFF) | 0x4000;
+    aicabase[CHANNEL(channel, AICA_CFG_LFO1)] = 0x0000;  // BIOS sets this to 0x0000 now??
+    aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] = (aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] & 0x3FFF) | 0xC000;
 }
 
 void aica_stop_sound(int channel)
@@ -137,10 +129,7 @@ void main()
 
     status[0] = 0x56780000;
 
-    for (int i = 0; i < 64; i++)
-    {
-        aica_start_sound(i, success_raw_data, FORMAT_8BIT, success_raw_len, 44100, VOL_MAX, PAN_CENTER);
-    }
+    aica_start_sound(0, success_raw_data, FORMAT_8BIT, success_raw_len, 44100, 0x1D, PAN_CENTER);
 
     status[0] = 0x9ABC0000;
     while( 1 )
