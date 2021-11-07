@@ -34,7 +34,12 @@ build/arm/aica.o: aica.c
 	@mkdir -p $(dir $@)
 	${ARMCC} -c -o $@ $<
 
-build/arm/aica.elf: build/arm/arm-crt0.o build/arm/aica.o build/arm/success.o
+build/arm/pitchtable.o: ${PITCHGEN_FILE}
+	@mkdir -p $(dir $@)
+	${PITCHGEN} build/arm/pitchtable.c 128
+	${ARMCC} -c build/arm/pitchtable.c -o $@
+
+build/arm/aica.elf: build/arm/arm-crt0.o build/arm/aica.o build/arm/pitchtable.o build/arm/success.o
 	@mkdir -p $(dir $@)
 	${ARMLD} -o $@ $^ ${ARMLIBS}
 

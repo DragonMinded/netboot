@@ -40,6 +40,9 @@
 // Common registers
 #define AICA_VERSION (0x2800 >> 2)
 
+// Generated pitch table function in pitchtable.c
+uint32_t pitch_reg(unsigned int samplerate);
+
 void aica_reset()
 {
     volatile uint32_t *aicabase = (volatile uint32_t *)AICA_BASE;
@@ -75,7 +78,7 @@ void aica_reset()
     aicabase[AICA_VERSION] = (aicabase[AICA_VERSION] & 0xFFFFFFF0) | 0xF;
 }
 
-void aica_start_sound_oneshot(int channel, void *data, int format, int num_samples, int freq, int vol, int pan)
+void aica_start_sound_oneshot(int channel, void *data, int format, int num_samples, int sample_rate, int vol, int pan)
 {
     if (num_samples <= 0)
     {
@@ -93,8 +96,8 @@ void aica_start_sound_oneshot(int channel, void *data, int format, int num_sampl
     aicabase[CHANNEL(channel, AICA_CFG_LOOP_START)] = 0;
     aicabase[CHANNEL(channel, AICA_CFG_LOOP_END)] = num_samples;
 
-    /* Need to figure out frequency conversion */
-    aicabase[CHANNEL(channel, AICA_CFG_PITCH)] = 0;
+    /* Convert samplerate to pitch register format */
+    aicabase[CHANNEL(channel, AICA_CFG_PITCH)] = pitch_reg(sample_rate);
 
     /* Set volume, pan, and some other stuff */
     aicabase[CHANNEL(channel, AICA_CFG_PAN_VOLUME)] = (pan & 0x1F) | (0xD << 8);
@@ -110,7 +113,7 @@ void aica_start_sound_oneshot(int channel, void *data, int format, int num_sampl
     aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] = (aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] & 0x3FFF) | 0xC000;
 }
 
-void aica_start_sound_loop(int channel, void *data, int format, int num_samples, int freq, int vol, int pan, int loop_restart_position)
+void aica_start_sound_loop(int channel, void *data, int format, int num_samples, int sample_rate, int vol, int pan, int loop_restart_position)
 {
     if (num_samples <= 0)
     {
@@ -136,8 +139,8 @@ void aica_start_sound_loop(int channel, void *data, int format, int num_samples,
     aicabase[CHANNEL(channel, AICA_CFG_LOOP_START)] = loop_restart_position;
     aicabase[CHANNEL(channel, AICA_CFG_LOOP_END)] = num_samples;
 
-    /* Need to figure out frequency conversion */
-    aicabase[CHANNEL(channel, AICA_CFG_PITCH)] = 0;
+    /* Convert samplerate to pitch register format */
+    aicabase[CHANNEL(channel, AICA_CFG_PITCH)] = pitch_reg(sample_rate);
 
     /* Set volume, pan, and some other stuff */
     aicabase[CHANNEL(channel, AICA_CFG_PAN_VOLUME)] = (pan & 0x1F) | (0xD << 8);
