@@ -85,6 +85,14 @@ void aica_start_sound_oneshot(int channel, void *data, int format, int num_sampl
         // Nothing to play?
         return;
     }
+    if (sample_rate < 1000)
+    {
+        sample_rate = 1000;
+    }
+    if (sample_rate > 96000)
+    {
+        sample_rate = 96000;
+    }
 
     volatile uint32_t *aicabase = (volatile uint32_t *)AICA_BASE;
 
@@ -127,6 +135,14 @@ void aica_start_sound_loop(int channel, void *data, int format, int num_samples,
     if (loop_restart_position > num_samples)
     {
         loop_restart_position = num_samples;
+    }
+    if (sample_rate < 1000)
+    {
+        sample_rate = 1000;
+    }
+    if (sample_rate > 96000)
+    {
+        sample_rate = 96000;
     }
 
     volatile uint32_t *aicabase = (volatile uint32_t *)AICA_BASE;
