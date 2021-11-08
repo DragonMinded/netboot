@@ -10,6 +10,13 @@ all: audiotest.bin
 # these files exist.
 SRCS += main.c
 SRCS += success.raw
+SRCS += one.raw
+SRCS += two.raw
+SRCS += three.raw
+SRCS += four.raw
+SRCS += five.raw
+SRCS += six.raw
+SRCS += doit.raw
 
 # Pick up base makefile rules common to all examples.
 include ../../Makefile.base

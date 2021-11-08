@@ -194,6 +194,12 @@ uint32_t _holly_interrupt()
             *HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_MAPLE_VBLANK_FINISHED;
             handled |= HOLLY_INTERNAL_INTERRUPT_MAPLE_VBLANK_FINISHED;
         }
+        if (requested & HOLLY_INTERNAL_INTERRUPT_AICA_DMA_FINISHED)
+        {
+            // Request to clear the interrupt.
+            *HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_AICA_DMA_FINISHED;
+            handled |= HOLLY_INTERNAL_INTERRUPT_AICA_DMA_FINISHED;
+        }
 
         // Handle vblank in/out by making a request to the scheduler to wake
         // any threads waiting for this.

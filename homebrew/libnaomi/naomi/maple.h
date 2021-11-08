@@ -63,7 +63,7 @@ int maple_request_jvs_buttons(uint8_t addr, jvs_buttons_t *buttons);
 // The following is meant to be a slightly higher-level API for polling
 // for inputs. Run maple_poll_buttons() once per frame (or per polling
 // period that you desire) to load the current buttons. Then you can use
-// maple_buttons_pressed(), maple_buttons_released() and maple_buttons_current()
+// maple_buttons_pressed(), maple_buttons_released() and maple_buttons_held()
 // to read the list of buttons pressed since last poll, released since last
 // poll and the current value of all buttons and analog sticks. Note that
 // analog sticks are never available in maple_buttons_pressed() or
@@ -76,7 +76,7 @@ int maple_request_jvs_buttons(uint8_t addr, jvs_buttons_t *buttons);
 int maple_poll_buttons();
 jvs_buttons_t maple_buttons_pressed();
 jvs_buttons_t maple_buttons_released();
-jvs_buttons_t maple_buttons_current();
+jvs_buttons_t maple_buttons_held();
 
 #ifdef __cplusplus
 }

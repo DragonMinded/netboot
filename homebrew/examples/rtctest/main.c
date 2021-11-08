@@ -4,15 +4,10 @@
 #include "naomi/system.h"
 #include "naomi/video.h"
 #include "naomi/maple.h"
-#include "naomi/eeprom.h"
 #include "naomi/console.h"
 
 void main()
 {
-    // Grab the system configuration
-    eeprom_t settings;
-    eeprom_read(&settings);
-
     // Set up a crude console.
     video_init_simple();
     video_set_background_color(rgb(48, 48, 48));

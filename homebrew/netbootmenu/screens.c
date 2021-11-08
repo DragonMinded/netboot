@@ -2076,7 +2076,7 @@ unsigned int configuration(state_t *state, int reinit)
     if (locked == 3)
     {
         // 1P calibration.
-        jvs_buttons_t held = maple_buttons_current();
+        jvs_buttons_t held = maple_buttons_held();
 
         joy1_vcenter = held.player1.analog1;
         joy1_hcenter = held.player1.analog2;
@@ -2089,7 +2089,7 @@ unsigned int configuration(state_t *state, int reinit)
     else if (locked == 4)
     {
         // 2P calibration.
-        jvs_buttons_t held = maple_buttons_current();
+        jvs_buttons_t held = maple_buttons_held();
 
         joy2_vcenter = held.player2.analog1;
         joy2_hcenter = held.player2.analog2;

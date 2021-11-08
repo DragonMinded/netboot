@@ -48,15 +48,16 @@ int audio_play_sound(int format, unsigned int samplerate, uint32_t speakers, voi
 // the above audio format defines, the samplerate should be an integer between
 // 8000-96000, and the speakers should be a bitmask of the above speaker constants.
 // Returns a negative number if there was no room to register the sound.
-int audio_register_sound(int format, unsigned int samplerate, uint32_t speakers, void *data, unsigned int num_samples);
+int audio_register_sound(int format, unsigned int samplerate, void *data, unsigned int num_samples);
 
 // Unregister a previously registered sound, freeing that spot up for potentially
 // a new sound in the future. Passing it a negative number is the same as a noop.
 void audio_unregister_sound(int sound);
 
 // Play a previously-registered sound. This will be played on any available audio
-// channel. Passing it a negative number is the same as a noop.
-void audio_play_registered_sound(int sound);
+// channel. Passing it a negative number is the same as a noop. Returns zero on
+// success, or a negative value if there were no available channels.
+int audio_play_registered_sound(int sound, uint32_t speakers);
 
 #ifdef __cplusplus
 }

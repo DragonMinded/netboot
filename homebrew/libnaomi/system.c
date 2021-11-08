@@ -11,6 +11,7 @@
 #include "naomi/rtc.h"
 #include "naomi/interrupt.h"
 #include "naomi/thread.h"
+#include "irqinternal.h"
 
 #define CCR (*(uint32_t *)0xFF00001C)
 #define QACR0 (*(uint32_t *)0xFF000038)
@@ -148,14 +149,23 @@ void _enter()
 
 int hw_memset(void *addr, uint32_t value, unsigned int amount)
 {
-    int successful = 0;
+    // Very similar to a standard memset, but the address pointer must be aligned
+    // to a 32 byte boundary, the amount must be a multiple of 32 bytes and the
+    // value must be 32 bits. When used correctly this is about 3x faster than
+    // a software memset.
 
+    if ((((uint32_t)addr) & 0x1F) != 0)
+    {
+        _irq_display_invariant("invalid hw_memset location", "addr %08lx is not aligned to 32-byte boundary", (uint32_t)addr);
+    }
+    if ((amount & 0x1F) != 0)
+    {
+        _irq_display_invariant("invalid hw_memset amount", "amount %lu is not multiple of 32 bytes", amount);
+    }
+
+    int successful = 0;
     if (mutex_try_lock(&queue_mutex))
     {
-        // Very similar to a standard memset, but the address pointer must be aligned
-        // to a 32 byte boundary, the amount must be a multiple of 32 bytes and the
-        // value must be 32 bits. No checking of these constraints is done.
-
         // Set the base queue address pointer to the queue location with address bits
         // 25:5. The bottom bits should be all 0s since hw_memset requires an alignment
         // to a 32 byte boundary. We will use both queue areas since SQ0/SQ1 specification
@@ -217,14 +227,26 @@ int hw_memset(void *addr, uint32_t value, unsigned int amount)
 
 int hw_memcpy(void *dest, void *src, unsigned int amount)
 {
-    int successful = 0;
+    // Very similar to a standard memcpy, but the destination pointer must be aligned
+    // to a 32 byte boundary, the amount must be a multiple of 32 bytes and the source
+    // pointer must be aligned to a 4 byte boundary.
 
+    if ((((uint32_t)dest) & 0x1F) != 0)
+    {
+        _irq_display_invariant("invalid hw_memcpy location", "dest %08lx is not aligned to 32-byte boundary", (uint32_t)dest);
+    }
+    if ((((uint32_t)src) & 0x3) != 0)
+    {
+        _irq_display_invariant("invalid hw_memcpy location", "src %08lx is not aligned to 32-byte boundary", (uint32_t)src);
+    }
+    if ((amount & 0x1F) != 0)
+    {
+        _irq_display_invariant("invalid hw_memcpy amount", "amount %lu is not multiple of 32 bytes", amount);
+    }
+
+    int successful = 0;
     if (mutex_try_lock(&queue_mutex))
     {
-        // Very similar to a standard memcpy, but the destination pointer must be aligned
-        // to a 32 byte boundary, the amount must be a multiple of 32 bytes and the source
-        // pointer must be aligned to a 4 byte boundary. No checking of these constraints
-        // is done.
 
         // Set the base queue address pointer to the queue location with destination bits
         // 25:5. The bottom bits should be all 0s since hw_memset requires an alignment

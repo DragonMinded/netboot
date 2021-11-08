@@ -108,7 +108,7 @@ void aica_start_sound_oneshot(int channel, void *data, int format, int num_sampl
     volatile uint32_t *aicabase = (volatile uint32_t *)AICA_BASE;
 
     /* Set sample format and buffer address */
-    aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] = ((format & 0x3) << 7) | ((((unsigned long)data) >> 16) & 0x7F);
+    aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] = 0x8000 | ((format & 0x3) << 7) | ((((unsigned long)data) >> 16) & 0x7F);
     aicabase[CHANNEL(channel, AICA_CFG_ADDR_LOW)] = ((unsigned long)data) & 0xFFFF;
 
     /* Number of samples */
@@ -123,12 +123,10 @@ void aica_start_sound_oneshot(int channel, void *data, int format, int num_sampl
     aicabase[CHANNEL(channel, AICA_CFG_VOLUME2)] = 0x20 | ((vol & 0xFF) << 8);
     aicabase[CHANNEL(channel, AICA_CFG_ADSR1)] = 0x001F;
     aicabase[CHANNEL(channel, AICA_CFG_ADSR2)] = 0x001F;
-    aicabase[CHANNEL(channel, AICA_CFG_LFO1)] = 0x8000;  // BIOS sets this to 0x8000??
-    aicabase[CHANNEL(channel, AICA_CFG_LFO2)] = 0;  // BIOS only sets bottom 8 bits to 0??
+    aicabase[CHANNEL(channel, AICA_CFG_LFO1)] = 0;
+    aicabase[CHANNEL(channel, AICA_CFG_LFO2)] = 0;
 
     /* Enable playback */
-    aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] = (aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] & 0x3FFF) | 0x4000;
-    aicabase[CHANNEL(channel, AICA_CFG_LFO1)] = 0x0000;  // BIOS sets this to 0x0000 now??
     aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] = (aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] & 0x3FFF) | 0xC000;
 }
 
@@ -159,7 +157,7 @@ void aica_start_sound_loop(int channel, void *data, int format, int num_samples,
     volatile uint32_t *aicabase = (volatile uint32_t *)AICA_BASE;
 
     /* Set sample format and buffer address */
-    aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] = 0x0200 | ((format & 0x3) << 7) | ((((unsigned long)data) >> 16) & 0x7F);
+    aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] = 0x8200 | ((format & 0x3) << 7) | ((((unsigned long)data) >> 16) & 0x7F);
     aicabase[CHANNEL(channel, AICA_CFG_ADDR_LOW)] = ((unsigned long)data) & 0xFFFF;
 
     /* Number of samples */
@@ -174,12 +172,10 @@ void aica_start_sound_loop(int channel, void *data, int format, int num_samples,
     aicabase[CHANNEL(channel, AICA_CFG_VOLUME2)] = 0x20 | ((vol & 0xFF) << 8);
     aicabase[CHANNEL(channel, AICA_CFG_ADSR1)] = 0x001F;
     aicabase[CHANNEL(channel, AICA_CFG_ADSR2)] = 0x001F;
-    aicabase[CHANNEL(channel, AICA_CFG_LFO1)] = 0x8000;  // BIOS sets this to 0x8000??
-    aicabase[CHANNEL(channel, AICA_CFG_LFO2)] = 0;  // BIOS only sets bottom 8 bits to 0??
+    aicabase[CHANNEL(channel, AICA_CFG_LFO1)] = 0;
+    aicabase[CHANNEL(channel, AICA_CFG_LFO2)] = 0;
 
     /* Enable playback */
-    aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] = (aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] & 0x3FFF) | 0x4000;
-    aicabase[CHANNEL(channel, AICA_CFG_LFO1)] = 0x0000;  // BIOS sets this to 0x0000 now??
     aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] = (aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] & 0x3FFF) | 0xC000;
 }
 
@@ -191,20 +187,12 @@ void aica_stop_sound(int channel)
     aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] = (aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] & 0x3DFF) | 0x8000;
 }
 
-typedef struct
-{
-    // When this channel is guaranteed to be free, as compared to the millisecond timer.
-    uint32_t free_time;
-    // The currently playing sample.
-    uint32_t sample;
-} channel_info_t;
-
-channel_info_t channel_info[64];
-
 typedef struct sample_info_struct
 {
     // Whether this registered sample is in use or not.
     unsigned int in_use;
+    // Whether to discard this sample once it is not playing.
+    unsigned int discard_after_use;
     // The raw location in memory this sample resides.
     uint32_t location;
     // The raw size in memory this sample can be.
@@ -215,8 +203,6 @@ typedef struct sample_info_struct
     unsigned int format;
     // The sample rate of this sample.
     unsigned int samplerate;
-    // The speakers used for playing this sample. Bitmas of ALLOCATE_SPEAKER_LEFT and ALLOCATE_SPEAKER_RIGHT.
-    unsigned int speakers;
     // A pointer to the next sample info structure if it exists.
     struct sample_info_struct *next;
 } sample_info_t;
@@ -236,7 +222,7 @@ sample_info_t *find_sample(sample_info_t *head, uint32_t location)
     return 0;
 }
 
-sample_info_t *new_sample(sample_info_t *head, uint32_t *location, unsigned int numsamples, unsigned int format, unsigned int samplerate, unsigned int speakers)
+sample_info_t *new_sample(sample_info_t *head, uint32_t *location, unsigned int numsamples, unsigned int format, unsigned int samplerate)
 {
     unsigned int size = (format == ALLOCATE_AUDIO_FORMAT_16BIT) ? (numsamples * 2) : numsamples;
     sample_info_t *orig = head;
@@ -248,10 +234,16 @@ sample_info_t *new_sample(sample_info_t *head, uint32_t *location, unsigned int 
         {
             // We can reuse this!
             head->in_use = 1;
+            head->discard_after_use = 0;
             head->numsamples = numsamples;
             head->format = format;
             head->samplerate = samplerate;
-            head->speakers = speakers;
+
+            // Return the handle to this sample as well.
+            if (location)
+            {
+                *location = head->location;
+            }
             return orig;
         }
 
@@ -264,17 +256,19 @@ sample_info_t *new_sample(sample_info_t *head, uint32_t *location, unsigned int 
     if (last)
     {
         // Grab the next 32-bit aligned memory location after the last sample.
-        spot = ((last->location + last->maxsize) + 3) & 0xFFFFFFFC;
+        spot = ((last->location + last->maxsize) + 31) & 0xFFFFFFE0;
     }
 
+    // DMA to us must be 32-byte aligned and in chunks of 32 bytes, so allocate
+    // based on that knowledge.
     sample_info_t *new = (sample_info_t *)spot;
     new->in_use = 1;
-    new->location = (spot + sizeof(sample_info_t) + 3) & 0xFFFFFFFC;
-    new->maxsize = (size + 3) & 0xFFFFFFFC;
+    new->discard_after_use = 0;
+    new->location = (spot + sizeof(sample_info_t) + 31) & 0xFFFFFFE0;
+    new->maxsize = (size + 31) & 0xFFFFFFE0;
     new->numsamples = numsamples;
     new->format = format;
     new->samplerate = samplerate;
-    new->speakers = speakers;
     new->next = 0;
 
     // Return the handle to this sample as well.
@@ -295,15 +289,25 @@ sample_info_t *new_sample(sample_info_t *head, uint32_t *location, unsigned int 
     }
 }
 
+typedef struct
+{
+    // When this channel is guaranteed to be free, as compared to the millisecond timer.
+    uint32_t free_time;
+    // The currently playing sample, so we can free samples if need be.
+    sample_info_t * sample;
+} channel_info_t;
+
 void main()
 {
     // Set up our sample linked list.
     sample_info_t *samples = 0;
+    uint32_t bookkeeping_timer = 0;
 
     // Reset AICA to a known state.
     aica_reset();
 
     // Reset our channel info trackers to a known state.
+    channel_info_t channel_info[64];
     memset(channel_info, 0, sizeof(channel_info_t) * 64);
 
     while( 1 )
@@ -338,11 +342,10 @@ void main()
                     uint32_t numsamples = params[0];
                     uint32_t format = params[1];
                     uint32_t samplerate = params[2];
-                    uint32_t speakers = params[3];
 
                     // Add a new sample.
                     uint32_t location = 0;
-                    samples = new_sample(samples, &location, numsamples, format, samplerate, speakers);
+                    samples = new_sample(samples, &location, numsamples, format, samplerate);
 
                     // Return the location as a handle.
                     AICA_CMD_BUFFER(CMD_BUFFER_RESPONSE) = location;
@@ -358,11 +361,12 @@ void main()
                     {
                         // Free it.
                         mysample->in_use = 0;
+                        mysample->discard_after_use = 0;
 
                         // Free up any channels playing this sample.
                         for (unsigned int chan = 0; chan < 64; chan++)
                         {
-                            if (channel_info[chan].sample == location)
+                            if (channel_info[chan].sample == mysample)
                             {
                                 aica_stop_sound(chan);
                                 channel_info[chan].sample = 0;
@@ -378,6 +382,7 @@ void main()
                 {
                     // Find the sample to play by location.
                     uint32_t location = params[0];
+                    uint32_t speakers = params[1];
 
                     sample_info_t *mysample = find_sample(samples, location);
                     if (mysample)
@@ -385,11 +390,15 @@ void main()
                         // Cool, found it, now assign it to a channel.
                         for (unsigned int chan = 0; chan < 64; chan++)
                         {
-                            if (channel_info[chan].free_time < millisecond_timer)
+                            if (channel_info[chan].free_time <= millisecond_timer)
                             {
-                                // We can use this channel.
-                                channel_info[chan].sample = location;
-                                channel_info[chan].free_time = millisecond_timer + ((mysample->numsamples * 1000) / mysample->samplerate) + 1;
+                                if (channel_info[chan].sample != 0 && channel_info[chan].sample->discard_after_use)
+                                {
+                                    // Free old sample.
+                                    channel_info[chan].sample->in_use = 0;
+                                    channel_info[chan].sample->discard_after_use = 0;
+                                    channel_info[chan].sample = 0;
+                                }
 
                                 // Calculate panning and format.
                                 int pan = 0;
@@ -400,13 +409,23 @@ void main()
                                 {
                                     format = FORMAT_8BIT;
                                 }
-                                if (mysample->format == ALLOCATE_AUDIO_FORMAT_16BIT)
+                                else if (mysample->format == ALLOCATE_AUDIO_FORMAT_16BIT)
                                 {
                                     format = FORMAT_16BIT;
                                 }
-                                if (mysample->speakers & ALLOCATE_SPEAKER_LEFT)
+                                else
                                 {
-                                    if (mysample->speakers & ALLOCATE_SPEAKER_RIGHT)
+                                    // Can't play this?
+                                    break;
+                                }
+
+                                // We can use this channel.
+                                channel_info[chan].sample = mysample;
+                                channel_info[chan].free_time = millisecond_timer + ((mysample->numsamples * 1000) / mysample->samplerate) + 1;
+
+                                if (speakers & ALLOCATE_SPEAKER_LEFT)
+                                {
+                                    if (speakers & ALLOCATE_SPEAKER_RIGHT)
                                     {
                                         pan = PAN_CENTER;
                                         vol = VOL_MAX;
@@ -417,7 +436,7 @@ void main()
                                         vol = VOL_MAX;
                                     }
                                 }
-                                else if (mysample->speakers & ALLOCATE_SPEAKER_RIGHT)
+                                else if (speakers & ALLOCATE_SPEAKER_RIGHT)
                                 {
                                     pan = PAN_RIGHT;
                                     vol = VOL_MAX;
@@ -425,7 +444,6 @@ void main()
 
                                 // Actually play it!
                                 aica_start_sound_oneshot(chan, (void *)mysample->location, format, mysample->numsamples, mysample->samplerate, vol, pan);
-
                                 AICA_CMD_BUFFER(CMD_BUFFER_RESPONSE) = RESPONSE_SUCCESS;
                                 break;
                             }
@@ -433,10 +451,45 @@ void main()
                     }
                     break;
                 }
+                case REQUEST_DISCARD_AFTER_USE:
+                {
+                    // Find the sample to discard after playing.
+                    uint32_t location = params[0];
+
+                    sample_info_t *mysample = find_sample(samples, location);
+                    if (mysample)
+                    {
+                        mysample->discard_after_use = 1;
+                        AICA_CMD_BUFFER(CMD_BUFFER_RESPONSE) = RESPONSE_SUCCESS;
+                    }
+                    break;
+                }
             }
 
             // Acknowledge command received.
             AICA_CMD_BUFFER(CMD_BUFFER_BUSY) = 0;
+        }
+
+        // Bookkeeping.
+        if (bookkeeping_timer != millisecond_timer)
+        {
+            bookkeeping_timer = millisecond_timer;
+            for (unsigned int chan = 0; chan < 64; chan++)
+            {
+                if (channel_info[chan].free_time <= millisecond_timer && channel_info[chan].sample != 0)
+                {
+                    // See if this sample needs freeing.
+                    if (channel_info[chan].sample->discard_after_use)
+                    {
+                        // It does!
+                        channel_info[chan].sample->in_use = 0;
+                        channel_info[chan].sample->discard_after_use = 0;
+                    }
+
+                    // This channel doesn't need a reference to the sample anymore.
+                    channel_info[chan].sample = 0;
+                }
+            }
         }
     }
 }

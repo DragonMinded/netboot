@@ -956,7 +956,7 @@ int maple_poll_buttons()
     return -1;
 }
 
-jvs_buttons_t maple_buttons_current()
+jvs_buttons_t maple_buttons_held()
 {
     // Just return the state of all buttons currently.
     return cur_buttons;

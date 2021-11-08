@@ -174,7 +174,7 @@ fiq_busreq_loop:
     .align 4
 
 stack_pointer:
-    .long 0x10000
+    .long 0x20000
 
 bss_start_addr:
     # Location of .bss section we must zero

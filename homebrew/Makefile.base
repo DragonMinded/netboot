@@ -98,8 +98,10 @@ ARMCC += -mcpu=arm7
 ARMCC += -ffreestanding -fomit-frame-pointer -nostdlib -nostartfiles -fno-stack-protector
 # Add libnaomi to include path.
 ARMCC += -I$(dir $(abspath $(lastword $(MAKEFILE_LIST))))libnaomi/
-# # Make sure we compile optimized
+# Make sure we compile optimized
 ARMCC += -O3
+# Include debugging information for addr2line.
+ARMCC += -g
 
 # Set up assembler default options for AICA .s files.
 ARMAS  = ${NAOMI_ARM_AS}

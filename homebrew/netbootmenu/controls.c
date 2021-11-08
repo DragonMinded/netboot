@@ -92,7 +92,7 @@ controls_t get_controls(state_t *state, int reinit)
     // First, poll the buttons and act accordingly.
     maple_poll_buttons();
     jvs_buttons_t pressed = maple_buttons_pressed();
-    jvs_buttons_t held = maple_buttons_current();
+    jvs_buttons_t held = maple_buttons_held();
     jvs_buttons_t released = maple_buttons_released();
 
     // Calculate calibrations.

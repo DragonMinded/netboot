@@ -2,33 +2,44 @@
 #include "naomi/audio.h"
 #include "naomi/system.h"
 #include "aica/common.h"
+#include "irqinternal.h"
 
+// Base registers for controlling the AICA.
 #define AICA_BASE 0xA0700000
 
+// Register offset definitions.
 #define AICA_VERSION (0x2800 >> 2)
 #define AICA_RESET (0x2C00 >> 2)
 
 // Our command buffer for talking to the AICA.
 #define AICA_CMD_BUFFER(x) *((volatile uint32_t *)((SOUNDRAM_BASE | UNCACHED_MIRROR) + 0x20000 + x))
 
+// Whether we've initialized this module or not.
 static int initialized = 0;
 
-void try_fast_memcpy(void *dst, void *src, unsigned int length)
+void __aica_memcpy(void *dst, void *src, unsigned int length)
 {
-    unsigned int hw_copy_amount = length & 0xFFFFFFE0;
-    if (hw_memcpy(dst, src, length))
+    if ((((uint32_t)dst) & 0x3) != 0)
     {
-        for(unsigned int memloc = hw_copy_amount; memloc < length; memloc+= 4)
-        {
-            *((uint32_t *)(((uint32_t)dst) + memloc)) = *((uint32_t *)(((uint32_t)src) + memloc));
-        }
+        _irq_display_invariant("invalid memcpy location", "dst %08lx is not aligned to 4-byte boundary", (uint32_t)dst);
     }
-    else
+    if ((((uint32_t)src) & 0x3) != 0)
     {
-        // Failed to use HW memcpy, fall back to slow method.
-        memcpy(dst, src, length);
+        _irq_display_invariant("invalid memcpy location", "src %08lx is not aligned to 4-byte boundary", (uint32_t)src);
     }
 
+    // Round up to next 4-byte boundary.
+    length = (length + 3) & 0xFFFFFFFC;
+
+    uint32_t *dstptr = (uint32_t *)dst;
+    uint32_t *srcptr = (uint32_t *)src;
+    while (length > 0)
+    {
+        *dstptr = *srcptr;
+        dstptr++;
+        srcptr++;
+        length-=4;
+    }
 }
 
 void load_aica_binary(void *binary, unsigned int length)
@@ -44,8 +55,9 @@ void load_aica_binary(void *binary, unsigned int length)
     // Pull the AICA MCU in reset.
     aicabase[AICA_RESET] |= 0x1;
 
-    // Copy the binary to the AICA MCU.
-    try_fast_memcpy((void *)(SOUNDRAM_BASE | UNCACHED_MIRROR), binary, length);
+    // Copy the binary to the AICA MCU. Its safe to do this here since the AICA
+    // is in reset, so there will be no G1 FIFO contention.
+    __aica_memcpy((void *)(SOUNDRAM_BASE | UNCACHED_MIRROR), binary, length);
 
     // Pull the AICA MCU back out of reset.
     aicabase[AICA_RESET] &= ~0x1;
@@ -66,7 +78,10 @@ uint32_t __audio_exchange_command(uint32_t command, uint32_t *params)
 
     if (params)
     {
-        memcpy((void *)&AICA_CMD_BUFFER(CMD_BUFFER_PARAMS), params, sizeof(uint32_t) * 5);
+        for (int param = 0; param < 4; param ++)
+        {
+            AICA_CMD_BUFFER(CMD_BUFFER_PARAMS + (param * 4)) = params[param];
+        }
     }
 
     // Trigger the AICA to react to the command.
@@ -99,20 +114,24 @@ void audio_free()
     }
 }
 
-uint32_t __audio_get_location(int format, unsigned int samplerate, uint32_t speakers, unsigned int num_samples)
+uint32_t __audio_get_location(int format, unsigned int samplerate, unsigned int num_samples)
 {
-    uint32_t params[4] = {num_samples, format, samplerate, speakers};
+    uint32_t params[4] = {
+        num_samples,
+        format == AUDIO_FORMAT_16BIT ? ALLOCATE_AUDIO_FORMAT_16BIT : ALLOCATE_AUDIO_FORMAT_8BIT,
+        samplerate,
+    };
     return __audio_exchange_command(REQUEST_ALLOCATE, params);
 }
 
-uint32_t __audio_load_location(int format, unsigned int samplerate, uint32_t speakers, void *data, unsigned int num_samples)
+uint32_t __audio_load_location(int format, unsigned int samplerate, void *data, unsigned int num_samples)
 {
-    uint32_t location = __audio_get_location(format, samplerate, speakers, num_samples);
-    uint32_t size = (format == ALLOCATE_AUDIO_FORMAT_16BIT) ? (num_samples * 2) : num_samples;
+    uint32_t location = __audio_get_location(format, samplerate, num_samples);
+    uint32_t size = (format == AUDIO_FORMAT_16BIT) ? (num_samples * 2) : num_samples;
 
     if (location != 0)
     {
-        try_fast_memcpy((void *)((SOUNDRAM_BASE | UNCACHED_MIRROR) + location), data, size);
+        __aica_memcpy((void *)((SOUNDRAM_BASE | UNCACHED_MIRROR) + location), data, size);
     }
 
     return location;
@@ -120,16 +139,75 @@ uint32_t __audio_load_location(int format, unsigned int samplerate, uint32_t spe
 
 int audio_play_sound(int format, unsigned int samplerate, uint32_t speakers, void *data, unsigned int num_samples)
 {
-    uint32_t location = __audio_load_location(format, samplerate, speakers, data, num_samples);
-    if (location)
+    uint32_t location = __audio_load_location(format, samplerate, data, num_samples);
+    if (location != 0)
     {
-        uint32_t params[1] = {location};
+        uint32_t params[4] = {location, 0};
+        if (speakers & SPEAKER_LEFT)
+        {
+            params[1] |= ALLOCATE_SPEAKER_LEFT;
+        }
+        if (speakers & SPEAKER_RIGHT)
+        {
+            params[1] |= ALLOCATE_SPEAKER_RIGHT;
+        }
+
+        // Technically this only takes one parameter, but whatever.
+        if (__audio_exchange_command(REQUEST_DISCARD_AFTER_USE, params) != RESPONSE_SUCCESS)
+        {
+            return -1;
+        }
+
+        // Now, play the track.
         return __audio_exchange_command(REQUEST_START_PLAY, params) == RESPONSE_SUCCESS ? 0 : -1;
     }
     else
     {
         return -1;
     }
+}
 
-    // TODO: Need to free this sound once its done.
+int audio_register_sound(int format, unsigned int samplerate, void *data, unsigned int num_samples)
+{
+    uint32_t location = __audio_load_location(format, samplerate, data, num_samples);
+
+    if (location)
+    {
+        return location;
+    }
+    else
+    {
+        return -1;
+    }
+}
+
+void audio_unregister_sound(int sound)
+{
+    if (sound > 0)
+    {
+        uint32_t params[4] = {sound};
+        __audio_exchange_command(REQUEST_FREE, params);
+    }
+}
+
+int audio_play_registered_sound(int sound, uint32_t speakers)
+{
+    if (sound > 0)
+    {
+        uint32_t params[4] = {sound, 0};
+        if (speakers & SPEAKER_LEFT)
+        {
+            params[1] |= ALLOCATE_SPEAKER_LEFT;
+        }
+        if (speakers & SPEAKER_RIGHT)
+        {
+            params[1] |= ALLOCATE_SPEAKER_RIGHT;
+        }
+
+        return __audio_exchange_command(REQUEST_START_PLAY, params) == RESPONSE_SUCCESS ? 0 : -1;
+    }
+    else
+    {
+        return -1;
+    }
 }
