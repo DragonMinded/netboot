@@ -14,8 +14,16 @@
 // Our command buffer for talking to the AICA.
 #define AICA_CMD_BUFFER(x) *((volatile uint32_t *)((SOUNDRAM_BASE | UNCACHED_MIRROR) + 0x20000 + x))
 
+// FIFO wait register, so we don't overrun SH-4/AICA FIFO
+#define AICA_FIFO_STATUS (*((volatile uint32_t *)0xA05F688C))
+
 // Whether we've initialized this module or not.
 static int initialized = 0;
+
+void __aica_fifo_wait()
+{
+    while ((AICA_FIFO_STATUS & 0x11) != 0) { ; }
+}
 
 void __aica_memcpy(void *dst, void *src, unsigned int length)
 {
@@ -33,13 +41,24 @@ void __aica_memcpy(void *dst, void *src, unsigned int length)
 
     uint32_t *dstptr = (uint32_t *)dst;
     uint32_t *srcptr = (uint32_t *)src;
+    uint32_t copyamount = 0;
     while (length > 0)
     {
+        // Don't overrun the FIFO or we could get flaky transfers.
+        if ((copyamount & 0x1F) == 0)
+        {
+            __aica_fifo_wait();
+        }
+
         *dstptr = *srcptr;
         dstptr++;
         srcptr++;
         length-=4;
+        copyamount+=4;
     }
+
+    // Make sure we exit only when the FIFO is done.
+    __aica_fifo_wait();
 }
 
 void load_aica_binary(void *binary, unsigned int length)
@@ -65,13 +84,23 @@ void load_aica_binary(void *binary, unsigned int length)
 
 uint32_t audio_aica_uptime()
 {
+    // Make sure we have room in the FIFO to read the uptime.
+    __aica_fifo_wait();
+
+    // Return the uptime in milliseconds as written by the AICA binary.
     return AICA_CMD_BUFFER(CMD_BUFFER_UPTIME);
 }
 
 uint32_t __audio_exchange_command(uint32_t command, uint32_t *params)
 {
+    // Make sure we have room in the FIFO to read busy register.
+    __aica_fifo_wait();
+
     // Wait for the AICA to be ready for a command.
     while (AICA_CMD_BUFFER(CMD_BUFFER_BUSY) != 0) { ; }
+
+    // Make sure we have room in the FIFO to write the command.
+    __aica_fifo_wait();
 
     // Set up the command and registers.
     AICA_CMD_BUFFER(CMD_BUFFER_REQUEST) = command;
@@ -87,8 +116,14 @@ uint32_t __audio_exchange_command(uint32_t command, uint32_t *params)
     // Trigger the AICA to react to the command.
     AICA_CMD_BUFFER(CMD_BUFFER_BUSY) = 1;
 
+    // Make sure we have room in the FIFO to wait for done.
+    __aica_fifo_wait();
+
     // Wait for the AICA to finish the command.
     while (AICA_CMD_BUFFER(CMD_BUFFER_BUSY) != 0) { ; }
+
+    // Make sure we have room in the FIFO to read the response.
+    __aica_fifo_wait();
 
     // Return the response.
     return AICA_CMD_BUFFER(CMD_BUFFER_RESPONSE);
