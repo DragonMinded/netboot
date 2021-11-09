@@ -400,6 +400,16 @@ void _irq_init()
 
 void _irq_free()
 {
+    // Restore SR and VBR to their pre-init state.
+    __asm__(
+        "mov.l  %0,r0\n"
+        "ldc    r0,sr" : : "m"(saved_sr)
+    );
+    __asm__(
+        "mov.l  %0,r0\n"
+        "ldc    r0,vbr" : : "m"(saved_vbr)
+    );
+
     // Tear down hardware that needed interrupts from HOLLY.
     _dimm_comms_free();
     _vblank_free();
@@ -417,16 +427,6 @@ void _irq_free()
     INTC_IPRB = 0x0000;
     INTC_IPRC = 0x0000;
     INTC_IPRD = 0x0000;
-
-    // Restore SR and VBR to their pre-init state.
-    __asm__(
-        "mov.l  %0,r0\n"
-        "ldc    r0,sr" : : "m"(saved_sr)
-    );
-    __asm__(
-        "mov.l  %0,r0\n"
-        "ldc    r0,vbr" : : "m"(saved_vbr)
-    );
 
     // Now, get rid of our interrupt stack.
     irq_stack -= IRQ_STACK_SIZE;
@@ -462,14 +462,10 @@ irq_state_t *_irq_new_state(thread_func_t func, void *funcparam, void *stackptr,
 
 void _irq_free_state(irq_state_t *state)
 {
-    if (state == irq_state)
+    if (state != irq_state)
     {
-        // We tried to free our current state. That can't happen since
-        // we don't have anything else to go back to.
-        _irq_display_invariant("irq failure", "tried to free our own state");
+        free(state);
     }
-
-    free(state);
 }
 
 irq_stats_t irq_stats()

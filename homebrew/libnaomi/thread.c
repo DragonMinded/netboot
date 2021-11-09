@@ -81,7 +81,6 @@ typedef struct
     unsigned int waiting_interrupt;
 
     // The actual context of the thread, including all of the registers and such.
-    int main_thread;
     irq_state_t *context;
     uint8_t *stack;
     void *retval;
@@ -122,6 +121,31 @@ thread_t *_thread_find_by_id(uint32_t id)
     }
 
     return 0;
+}
+
+void _thread_check_waiting(thread_t *thread)
+{
+    // All conditions that should not be true if we want to put a thread into waiting.
+    if (thread->state == THREAD_STATE_WAITING)
+    {
+        _irq_display_invariant("resource wait failure", "thread %lu is already waiting for another resource!", thread->id);
+    }
+    if (thread->waiting_semaphore != 0)
+    {
+        _irq_display_invariant("resource wait failure", "thread %lu is already waiting for a semaphore!", thread->id);
+    }
+    if (thread->waiting_thread != 0)
+    {
+        _irq_display_invariant("resource wait failure", "thread %lu is already waiting for another thread!", thread->id);
+    }
+    if (thread->waiting_timer != 0)
+    {
+        _irq_display_invariant("resource wait failure", "thread %lu is already waiting for a timer!", thread->id);
+    }
+    if (thread->waiting_interrupt != 0)
+    {
+        _irq_display_invariant("resource wait failure", "thread %lu is already waiting for a hardware interrupt!", thread->id);
+    }
 }
 
 typedef struct
@@ -165,6 +189,10 @@ thread_t *_thread_create(char *name, int priority)
         if (threads[i] == 0)
         {
             thread = malloc(sizeof(thread_t));
+            if (thread == 0)
+            {
+                _irq_display_invariant("memory failure", "could not get memory for new thread!");
+            }
             memset(thread, 0, sizeof(thread_t));
 
             thread->id = thread_counter++;
@@ -186,18 +214,15 @@ thread_t *_thread_create(char *name, int priority)
 
 void _thread_destroy(thread_t *thread)
 {
-    if (thread->main_thread == 0)
+    if (thread->context)
     {
-        if (thread->context)
-        {
-            _irq_free_state(thread->context);
-            thread->context = 0;
-        }
-        if (thread->stack)
-        {
-            free(thread->stack);
-            thread->stack = 0;
-        }
+        _irq_free_state(thread->context);
+        thread->context = 0;
+    }
+    if (thread->stack)
+    {
+        free(thread->stack);
+        thread->stack = 0;
     }
     free(thread);
 }
@@ -207,10 +232,8 @@ void _thread_register_main(irq_state_t *state)
     uint32_t old_interrupts = irq_disable();
 
     thread_t *main_thread = _thread_create("main", 0);
-    main_thread->stack = (uint8_t *)0x0E000000;
     main_thread->context = state;
     main_thread->state = THREAD_STATE_RUNNING;
-    main_thread->main_thread = 1;
     state->threadptr = main_thread;
 
     irq_restore(old_interrupts);
@@ -221,6 +244,10 @@ void _thread_create_idle()
     // Create an idle thread.
     thread_t *idle_thread = _thread_create("idle", IDLE_THREAD_PRIORITY);
     idle_thread->stack = malloc(64);
+    if (idle_thread->stack == 0)
+    {
+        _irq_display_invariant("memory failure", "could not get memory for idle thread!");
+    }
     idle_thread->context = _irq_new_state(_idle_thread, 0, idle_thread->stack + 64, idle_thread);
     idle_thread->state = THREAD_STATE_RUNNING;
 }
@@ -317,7 +344,6 @@ int _thread_check_and_disable_timed_bumps(thread_t *thread)
 
 typedef struct
 {
-    int priority;
     uint32_t last_thread;
 } last_thread_t;
 
@@ -326,26 +352,19 @@ static unsigned int round_robin_count = 0;
 
 last_thread_t *last_thread_for_band(int priority)
 {
-    for (unsigned int i = 0; i < round_robin_count; i++)
+    if (priority < MIN_PRIORITY)
     {
-        if (round_robin[i].priority == priority)
-        {
-            return &round_robin[i];
-        }
+        // Idle thread priority band.
+        return &round_robin[0];
+    }
+    if (priority > MAX_PRIORITY)
+    {
+        // Bumped priority band.
+        return &round_robin[1];
     }
 
-    // We need a new band.
-    round_robin_count++;
-    round_robin = realloc(round_robin, sizeof(last_thread_t *) * round_robin_count);
-    if (round_robin == 0)
-    {
-        _irq_display_invariant("malloc failure", "failed to allocate memory for thread scheduling!");
-    }
-
-    // Set it up for this band.
-    round_robin[round_robin_count - 1].priority = priority;
-    round_robin[round_robin_count - 1].last_thread = 0;
-    return &round_robin[round_robin_count - 1];
+    // Normal band.
+    return &round_robin[(priority - MIN_PRIORITY) + 2];
 }
 
 // Prefer the current thread, unless it is not runnable.
@@ -507,14 +526,17 @@ void _thread_init()
     memset(semaphores, 0, sizeof(semaphore_internal_t *) * MAX_SEM_AND_MUTEX);
     memset(threads, 0, sizeof(thread_t *) * MAX_THREADS);
 
-    // Set up per-priority round robin positions by adding the default
-    // priority as well as the idle thread priority.
-    round_robin = malloc(sizeof(last_thread_t) * 2);
-    round_robin_count = 2;
-    round_robin[0].priority = 0;
-    round_robin[0].last_thread = 0;
-    round_robin[1].priority = IDLE_THREAD_PRIORITY;
-    round_robin[1].last_thread = 0;
+    // Set up per-priority round robin positions by adding the bumped
+    // priority as well as the idle thread priority, and making sure
+    // that there's enough for MIN_PRIORITY all the way up to MAX_PRIORITY
+    // inclusive.
+    round_robin = malloc(sizeof(last_thread_t) * ((MAX_PRIORITY - MIN_PRIORITY) + 3));
+    if (round_robin == 0)
+    {
+        _irq_display_invariant("memory failure", "could not get memory for round robin scheduling!");
+    }
+    round_robin_count = (MAX_PRIORITY - MIN_PRIORITY) + 3;
+    memset(round_robin, 0, sizeof(last_thread_t) * round_robin_count);
 
     irq_restore(old_interrupts);
 }
@@ -1056,6 +1078,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
                         {
                             // Need to stick this thread into waiting until
                             // the other thread is finished.
+                            _thread_check_waiting(myself);
                             myself->state = THREAD_STATE_WAITING;
                             myself->waiting_thread = other->id;
                             schedule = THREAD_SCHEDULE_OTHER;
@@ -1123,6 +1146,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
                     if (thread)
                     {
                         // Semaphore is used up, park ourselves until its ready.
+                        _thread_check_waiting(thread);
                         thread->state = THREAD_STATE_WAITING;
                         thread->waiting_semaphore = semaphore;
                         schedule = THREAD_SCHEDULE_OTHER;
@@ -1193,6 +1217,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
                 // Adjust that number based on how close to the periodic interrupt
                 // we are, since when it fires it will not necessarily have lasted
                 // the right amount of time for this particular timer.
+                _thread_check_waiting(thread);
                 thread->state = THREAD_STATE_WAITING;
                 thread->waiting_timer = current->gp_regs[4] + _thread_time_elapsed();
                 schedule = THREAD_SCHEDULE_OTHER;
@@ -1211,6 +1236,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
             if (thread)
             {
                 // Put the thread to sleep, waiting for a specific interrupt.
+                _thread_check_waiting(thread);
                 thread->state = THREAD_STATE_WAITING;
                 thread->waiting_interrupt = current->gp_regs[4];
                 schedule = THREAD_SCHEDULE_OTHER;
@@ -1255,6 +1281,10 @@ void *global_counter_init(uint32_t initial_value)
         {
             // Create counter.
             global_counter_t *counter = malloc(sizeof(global_counter_t));
+            if (counter == 0)
+            {
+                _irq_display_invariant("memory failure", "could not get memory for new counter!");
+            }
 
             // Set up the ID and initial value.
             counter->id = global_counter_counter++;
@@ -1341,6 +1371,10 @@ void semaphore_init(semaphore_t *semaphore, uint32_t initial_value)
 
                 // Create semaphore.
                 semaphore_internal_t *internal = malloc(sizeof(semaphore_internal_t));
+                if (internal == 0)
+                {
+                    _irq_display_invariant("memory failure", "could not get memory for new semaphore!");
+                }
 
                 // Set up the pointer and initial value.
                 internal->public = semaphore;
@@ -1424,6 +1458,10 @@ void mutex_init(mutex_t *mutex)
 
                 // Create semaphore.
                 semaphore_internal_t *internal = malloc(sizeof(semaphore_internal_t));
+                if (internal == 0)
+                {
+                    _irq_display_invariant("memory failure", "could not get memory for new mutex!");
+                }
 
                 // Set up the pointer and initial value.
                 internal->public = mutex;
@@ -1564,11 +1602,19 @@ uint32_t thread_create(char *name, thread_func_t function, void *param)
 
     // Create a thread run context so we can return from the thread.
     thread_run_ctx_t *ctx = malloc(sizeof(thread_run_ctx_t));
+    if (ctx == 0)
+    {
+        _irq_display_invariant("memory failure", "could not get memory for new thread context!");
+    }
     ctx->function = function;
     ctx->param = param;
 
     // Set up the thread to be runnable.
     thread->stack = malloc(THREAD_STACK_SIZE);
+    if (thread->stack == 0)
+    {
+        _irq_display_invariant("memory failure", "could not get memory for new thread stack!");
+    }
     thread->context = _irq_new_state(_thread_run, ctx, thread->stack + THREAD_STACK_SIZE, thread);
 
     // Return the thread ID.

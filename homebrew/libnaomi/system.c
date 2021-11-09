@@ -140,9 +140,6 @@ void _enter()
     audio_free();
     video_free();
 
-    // Free our mutex to be good citizens (this will be freed anyway by _thread_free()).
-    mutex_free(&queue_mutex);
-
     // Free those things now that we're done. We should usually never get here
     // because it would be unusual to exit from main/test by returning.
     _irq_free();
@@ -321,9 +318,6 @@ void call_unmanaged(void (*call)())
     // Free anything that was possibly initialized by the user.
     audio_free();
     video_free();
-
-    // Free our queue mutex to be safe (it will be freed by _thread_free() below anyway).
-    mutex_free(&queue_mutex);
 
     // Shut down everything since we're leaving our executable.
     _irq_free();
@@ -627,6 +621,59 @@ int _gettimeofday_r(struct _reent *reent, struct timeval *tv, void *tz)
     tv->tv_sec = rtc_get() - TWENTY_YEARS;
     tv->tv_usec = 0;
     return 0;
+}
+
+typedef struct
+{
+    void *owner;
+    int depth;
+    uint32_t old_irq;
+} recursive_newlib_lock_t;
+
+recursive_newlib_lock_t newlib_lock = { 0, 0 };
+
+void __malloc_lock (struct _reent *reent)
+{
+    uint32_t old_irq = irq_disable();
+
+    if (newlib_lock.owner == reent)
+    {
+        // Increase our depth.
+        newlib_lock.depth++;
+
+        // No need to unlock interrupts here, we've already disabled them in the
+        // first lock.
+        return;
+    }
+    if (newlib_lock.owner != 0)
+    {
+        _irq_display_invariant("malloc locking failure", "malloc lock owned by another malloc call during lock!");
+    }
+
+    // Lock ourselves, remembering our old IRQ.
+    newlib_lock.owner = reent;
+    newlib_lock.depth = 1;
+    newlib_lock.old_irq = old_irq;
+}
+
+void __malloc_unlock (struct _reent *reent)
+{
+    // Just in case, but we shouldn't have to worry about IRQs being enabled
+    // if newlib is coded correctly.
+    irq_disable();
+
+    if (newlib_lock.owner != reent)
+    {
+        _irq_display_invariant("malloc locking failure", "malloc lock owned by another malloc call during unlock!");
+    }
+
+    newlib_lock.depth --;
+    if (newlib_lock.depth == 0)
+    {
+        // Time to unlock here!
+        newlib_lock.owner = 0;
+        irq_restore(newlib_lock.old_irq);
+    }
 }
 
 unsigned int utf8_strlen(const char * const str)
