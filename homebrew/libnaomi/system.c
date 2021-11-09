@@ -11,6 +11,8 @@
 #include "naomi/rtc.h"
 #include "naomi/interrupt.h"
 #include "naomi/thread.h"
+#include "naomi/audio.h"
+#include "naomi/video.h"
 #include "irqinternal.h"
 
 #define CCR (*(uint32_t *)0xFF00001C)
@@ -134,6 +136,11 @@ void _enter()
         status = test();
     }
 
+    // Free anything that was possibly initialized by the user.
+    audio_free();
+    video_free();
+
+    // Free our mutex to be good citizens (this will be freed anyway by _thread_free()).
     mutex_free(&queue_mutex);
 
     // Free those things now that we're done. We should usually never get here
@@ -311,6 +318,11 @@ int hw_memcpy(void *dest, void *src, unsigned int amount)
 
 void call_unmanaged(void (*call)())
 {
+    // Free anything that was possibly initialized by the user.
+    audio_free();
+    video_free();
+
+    // Free our queue mutex to be safe (it will be freed by _thread_free() below anyway).
     mutex_free(&queue_mutex);
 
     // Shut down everything since we're leaving our executable.

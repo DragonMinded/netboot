@@ -154,7 +154,7 @@ uint32_t _holly_interrupt()
 
     // Internal interrupt handler.
     {
-        uint32_t requested = *HOLLY_INTERNAL_IRQ_STATUS;
+        uint32_t requested = HOLLY_INTERNAL_IRQ_STATUS;
         uint32_t handled = 0;
 
         // First, check for any error status.
@@ -162,7 +162,7 @@ uint32_t _holly_interrupt()
         {
             // This cannot be cleared by writing a 1 to it. So we must figure
             // out what the error was and clear that.
-            *HOLLY_ERROR_STATUS = *HOLLY_ERROR_STATUS;
+            HOLLY_ERROR_STATUS = HOLLY_ERROR_STATUS;
             handled |= HOLLY_INTERNAL_INTERRUPT_ERROR;
         }
 
@@ -179,25 +179,25 @@ uint32_t _holly_interrupt()
         if (requested & HOLLY_INTERNAL_INTERRUPT_MAPLE_DMA_FINISHED)
         {
             // Request to clear the interrupt.
-            *HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_MAPLE_DMA_FINISHED;
+            HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_MAPLE_DMA_FINISHED;
             handled |= HOLLY_INTERNAL_INTERRUPT_MAPLE_DMA_FINISHED;
         }
         if (requested & HOLLY_INTERNAL_INTERRUPT_RENDER_FINISHED)
         {
             // Request to clear the interrupt.
-            *HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_RENDER_FINISHED;
+            HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_RENDER_FINISHED;
             handled |= HOLLY_INTERNAL_INTERRUPT_RENDER_FINISHED;
         }
         if (requested & HOLLY_INTERNAL_INTERRUPT_MAPLE_VBLANK_FINISHED)
         {
             // Request to clear the interrupt.
-            *HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_MAPLE_VBLANK_FINISHED;
+            HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_MAPLE_VBLANK_FINISHED;
             handled |= HOLLY_INTERNAL_INTERRUPT_MAPLE_VBLANK_FINISHED;
         }
         if (requested & HOLLY_INTERNAL_INTERRUPT_AICA_DMA_FINISHED)
         {
             // Request to clear the interrupt.
-            *HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_AICA_DMA_FINISHED;
+            HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_AICA_DMA_FINISHED;
             handled |= HOLLY_INTERNAL_INTERRUPT_AICA_DMA_FINISHED;
         }
 
@@ -206,7 +206,7 @@ uint32_t _holly_interrupt()
         if (requested & HOLLY_INTERNAL_INTERRUPT_VBLANK_IN)
         {
             // Request to clear the interrupt.
-            *HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_VBLANK_IN;
+            HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_VBLANK_IN;
             handled |= HOLLY_INTERNAL_INTERRUPT_VBLANK_IN;
 
             // Signal to thread scheduler to wake any waiting threads.
@@ -215,7 +215,7 @@ uint32_t _holly_interrupt()
         if (requested & HOLLY_INTERNAL_INTERRUPT_VBLANK_OUT)
         {
             // Request to clear the interrupt.
-            *HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_VBLANK_OUT;
+            HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_VBLANK_OUT;
             handled |= HOLLY_INTERNAL_INTERRUPT_VBLANK_OUT;
 
             // Signal to thread scheduler to wake any waiting threads.
@@ -224,7 +224,7 @@ uint32_t _holly_interrupt()
         if (requested & HOLLY_INTERNAL_INTERRUPT_HBLANK)
         {
             // Request to clear the interrupt.
-            *HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_HBLANK;
+            HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_HBLANK;
             handled |= HOLLY_INTERNAL_INTERRUPT_HBLANK;
 
             // Signal to thread scheduler to wake any waiting threads.
@@ -240,7 +240,7 @@ uint32_t _holly_interrupt()
 
     // External interrupt handler.
     {
-        uint32_t requested = *HOLLY_EXTERNAL_IRQ_STATUS;
+        uint32_t requested = HOLLY_EXTERNAL_IRQ_STATUS;
         uint32_t handled = 0;
 
         if ((requested & HOLLY_EXTERNAL_INTERRUPT_DIMM_COMMS) != 0)
@@ -358,17 +358,20 @@ void _irq_init()
 
     // Disable all HOLLY internal interrupts unless explicitly enabled.
     // Also cancel any pending interrupts.
-    *HOLLY_INTERNAL_IRQ_2_MASK = 0;
-    *HOLLY_INTERNAL_IRQ_4_MASK = 0;
-    *HOLLY_INTERNAL_IRQ_6_MASK = 0;
-    *HOLLY_INTERNAL_IRQ_STATUS = *HOLLY_INTERNAL_IRQ_STATUS;
+    HOLLY_INTERNAL_IRQ_2_MASK = 0;
+    HOLLY_INTERNAL_IRQ_4_MASK = 0;
+    HOLLY_INTERNAL_IRQ_6_MASK = 0;
+    HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_IRQ_STATUS;
 
     // Disable all HOLLY external interrupts unless explicitly enabled.
     // We can't cancel any pending interrupts because that's done by
     // interacting with the external hardware generating the interurpt.
-    *HOLLY_EXTERNAL_IRQ_2_MASK = 0;
-    *HOLLY_EXTERNAL_IRQ_4_MASK = 0;
-    *HOLLY_EXTERNAL_IRQ_6_MASK = 0;
+    HOLLY_EXTERNAL_IRQ_2_MASK = 0;
+    HOLLY_EXTERNAL_IRQ_4_MASK = 0;
+    HOLLY_EXTERNAL_IRQ_6_MASK = 0;
+
+    // Kill any pending HOLLY errors.
+    HOLLY_ERROR_STATUS = HOLLY_ERROR_STATUS;
 
     // Allow timer interrupts, ignore RTC interrupts.
     INTC_IPRA = 0xFFF0;
@@ -397,22 +400,19 @@ void _irq_init()
 
 void _irq_free()
 {
-    // TODO: This should only ever be called from the main thread. We should
-    // verify that the current irq_state is the main thread with the threads
-    // module, and if not display an error message to the screen.
-
     // Tear down hardware that needed interrupts from HOLLY.
     _dimm_comms_free();
     _vblank_free();
 
     // Disable any masks that we previously had set, acknowledge all IRQs.
-    *HOLLY_INTERNAL_IRQ_2_MASK = 0;
-    *HOLLY_INTERNAL_IRQ_4_MASK = 0;
-    *HOLLY_INTERNAL_IRQ_6_MASK = 0;
-    *HOLLY_INTERNAL_IRQ_STATUS = *HOLLY_INTERNAL_IRQ_STATUS;
-    *HOLLY_EXTERNAL_IRQ_2_MASK = 0;
-    *HOLLY_EXTERNAL_IRQ_4_MASK = 0;
-    *HOLLY_EXTERNAL_IRQ_6_MASK = 0;
+    HOLLY_INTERNAL_IRQ_2_MASK = 0;
+    HOLLY_INTERNAL_IRQ_4_MASK = 0;
+    HOLLY_INTERNAL_IRQ_6_MASK = 0;
+    HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_IRQ_STATUS;
+    HOLLY_EXTERNAL_IRQ_2_MASK = 0;
+    HOLLY_EXTERNAL_IRQ_4_MASK = 0;
+    HOLLY_EXTERNAL_IRQ_6_MASK = 0;
+    HOLLY_ERROR_STATUS = HOLLY_ERROR_STATUS;
     INTC_IPRA = 0x0000;
     INTC_IPRB = 0x0000;
     INTC_IPRC = 0x0000;

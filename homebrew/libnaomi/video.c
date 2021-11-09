@@ -74,6 +74,10 @@ static unsigned int global_background_set = 0;
 // give a pointer out to scratch VRAM for other code to use.
 static uint32_t global_buffer_offset[3] = { 0, 0, 0 };
 
+// Remember HBLANK/VBLANK set up by BIOS in case we need to return there.
+static uint32_t saved_hvint = 0;
+static uint32_t initialized = 0;
+
 // Nonstatic so that other video modules can use it as well.
 unsigned int global_video_width = 0;
 unsigned int global_video_height = 0;
@@ -190,17 +194,17 @@ unsigned int video_is_vertical()
 void _vblank_init()
 {
     uint32_t old_interrupts = irq_disable();
-    if ((*HOLLY_INTERNAL_IRQ_2_MASK & HOLLY_INTERNAL_INTERRUPT_VBLANK_IN) == 0)
+    if ((HOLLY_INTERNAL_IRQ_2_MASK & HOLLY_INTERNAL_INTERRUPT_VBLANK_IN) == 0)
     {
-        *HOLLY_INTERNAL_IRQ_2_MASK = *HOLLY_INTERNAL_IRQ_2_MASK | HOLLY_INTERNAL_INTERRUPT_VBLANK_IN;
+        HOLLY_INTERNAL_IRQ_2_MASK = HOLLY_INTERNAL_IRQ_2_MASK | HOLLY_INTERNAL_INTERRUPT_VBLANK_IN;
     }
-    if ((*HOLLY_INTERNAL_IRQ_2_MASK & HOLLY_INTERNAL_INTERRUPT_VBLANK_OUT) == 0)
+    if ((HOLLY_INTERNAL_IRQ_2_MASK & HOLLY_INTERNAL_INTERRUPT_VBLANK_OUT) == 0)
     {
-        *HOLLY_INTERNAL_IRQ_2_MASK = *HOLLY_INTERNAL_IRQ_2_MASK | HOLLY_INTERNAL_INTERRUPT_VBLANK_OUT;
+        HOLLY_INTERNAL_IRQ_2_MASK = HOLLY_INTERNAL_IRQ_2_MASK | HOLLY_INTERNAL_INTERRUPT_VBLANK_OUT;
     }
-    if ((*HOLLY_INTERNAL_IRQ_2_MASK & HOLLY_INTERNAL_INTERRUPT_HBLANK) == 0)
+    if ((HOLLY_INTERNAL_IRQ_2_MASK & HOLLY_INTERNAL_INTERRUPT_HBLANK) == 0)
     {
-        *HOLLY_INTERNAL_IRQ_2_MASK = *HOLLY_INTERNAL_IRQ_2_MASK | HOLLY_INTERNAL_INTERRUPT_HBLANK;
+        HOLLY_INTERNAL_IRQ_2_MASK = HOLLY_INTERNAL_IRQ_2_MASK | HOLLY_INTERNAL_INTERRUPT_HBLANK;
     }
     irq_restore(old_interrupts);
 }
@@ -208,17 +212,17 @@ void _vblank_init()
 void _vblank_free()
 {
     uint32_t old_interrupts = irq_disable();
-    if ((*HOLLY_INTERNAL_IRQ_2_MASK & HOLLY_INTERNAL_INTERRUPT_VBLANK_IN) != 0)
+    if ((HOLLY_INTERNAL_IRQ_2_MASK & HOLLY_INTERNAL_INTERRUPT_VBLANK_IN) != 0)
     {
-        *HOLLY_INTERNAL_IRQ_2_MASK = *HOLLY_INTERNAL_IRQ_2_MASK & (~HOLLY_INTERNAL_INTERRUPT_VBLANK_IN);
+        HOLLY_INTERNAL_IRQ_2_MASK = HOLLY_INTERNAL_IRQ_2_MASK & (~HOLLY_INTERNAL_INTERRUPT_VBLANK_IN);
     }
-    if ((*HOLLY_INTERNAL_IRQ_2_MASK & HOLLY_INTERNAL_INTERRUPT_VBLANK_OUT) != 0)
+    if ((HOLLY_INTERNAL_IRQ_2_MASK & HOLLY_INTERNAL_INTERRUPT_VBLANK_OUT) != 0)
     {
-        *HOLLY_INTERNAL_IRQ_2_MASK = *HOLLY_INTERNAL_IRQ_2_MASK & (~HOLLY_INTERNAL_INTERRUPT_VBLANK_OUT);
+        HOLLY_INTERNAL_IRQ_2_MASK = HOLLY_INTERNAL_IRQ_2_MASK & (~HOLLY_INTERNAL_INTERRUPT_VBLANK_OUT);
     }
-    if ((*HOLLY_INTERNAL_IRQ_2_MASK & HOLLY_INTERNAL_INTERRUPT_HBLANK) != 0)
+    if ((HOLLY_INTERNAL_IRQ_2_MASK & HOLLY_INTERNAL_INTERRUPT_HBLANK) != 0)
     {
-        *HOLLY_INTERNAL_IRQ_2_MASK = *HOLLY_INTERNAL_IRQ_2_MASK & (~HOLLY_INTERNAL_INTERRUPT_HBLANK);
+        HOLLY_INTERNAL_IRQ_2_MASK = HOLLY_INTERNAL_IRQ_2_MASK & (~HOLLY_INTERNAL_INTERRUPT_HBLANK);
     }
     irq_restore(old_interrupts);
 }
@@ -308,6 +312,11 @@ void video_init_simple()
         40 << 16 |                       // Start.
         (global_video_height + 40) << 0  // End.
     );
+    if (!initialized)
+    {
+        saved_hvint = videobase[POWERVR2_VBLANK_INTERRUPT];
+        initialized = 1;
+    }
     videobase[POWERVR2_VBLANK_INTERRUPT] = (
         40 << 16 |                       // Out of vblank.
         (global_video_height + 40) << 0  // In vblank.
@@ -358,6 +367,15 @@ void video_free()
     // Reset video.
     videobase[POWERVR2_RESET] = 0;
 
+    if (initialized)
+    {
+        initialized = 0;
+        videobase[POWERVR2_VBLANK_INTERRUPT] = saved_hvint;
+    }
+
+    // Kill our vblank interrupt.
+    _vblank_free();
+
     // De-init our globals.
     global_video_width = 0;
     global_video_height = 0;
@@ -367,6 +385,8 @@ void video_free()
     global_buffer_offset[0] = 0;
     global_buffer_offset[1] = 0;
     global_buffer_offset[2] = 0;
+
+    // We're done, safe for interrupts to come back.
     irq_restore(old_interrupts);
 }
 

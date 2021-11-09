@@ -2,10 +2,10 @@
 #define __HOLLY_H
 
 // Internal to the HOLLY itself.
-#define HOLLY_INTERNAL_IRQ_STATUS ((volatile uint32_t *)0xA05F6900)
-#define HOLLY_INTERNAL_IRQ_2_MASK ((volatile uint32_t *)0xA05F6910)
-#define HOLLY_INTERNAL_IRQ_4_MASK ((volatile uint32_t *)0xA05F6920)
-#define HOLLY_INTERNAL_IRQ_6_MASK ((volatile uint32_t *)0xA05F6930)
+#define HOLLY_INTERNAL_IRQ_STATUS *((volatile uint32_t *)0xA05F6900)
+#define HOLLY_INTERNAL_IRQ_2_MASK *((volatile uint32_t *)0xA05F6910)
+#define HOLLY_INTERNAL_IRQ_4_MASK *((volatile uint32_t *)0xA05F6920)
+#define HOLLY_INTERNAL_IRQ_6_MASK *((volatile uint32_t *)0xA05F6930)
 
 #define HOLLY_INTERNAL_INTERRUPT_RENDER_FINISHED 0x00000007
 #define HOLLY_INTERNAL_INTERRUPT_VBLANK_IN 0x00000008
@@ -18,14 +18,14 @@
 #define HOLLY_INTERNAL_INTERRUPT_ERROR 0x80000000
 
 // Caused by external sources that HOLLY manages.
-#define HOLLY_EXTERNAL_IRQ_STATUS ((volatile uint32_t *)0xA05F6904)
-#define HOLLY_EXTERNAL_IRQ_2_MASK ((volatile uint32_t *)0xA05F6914)
-#define HOLLY_EXTERNAL_IRQ_4_MASK ((volatile uint32_t *)0xA05F6924)
-#define HOLLY_EXTERNAL_IRQ_6_MASK ((volatile uint32_t *)0xA05F6934)
+#define HOLLY_EXTERNAL_IRQ_STATUS *((volatile uint32_t *)0xA05F6904)
+#define HOLLY_EXTERNAL_IRQ_2_MASK *((volatile uint32_t *)0xA05F6914)
+#define HOLLY_EXTERNAL_IRQ_4_MASK *((volatile uint32_t *)0xA05F6924)
+#define HOLLY_EXTERNAL_IRQ_6_MASK *((volatile uint32_t *)0xA05F6934)
 
 #define HOLLY_EXTERNAL_INTERRUPT_DIMM_COMMS 0x00000008
 
 // Errors that have happened.
-#define HOLLY_ERROR_STATUS ((volatile uint32_t *)0xA05F6908)
+#define HOLLY_ERROR_STATUS *((volatile uint32_t *)0xA05F6908)
 
 #endif
