@@ -688,7 +688,7 @@ unsigned int main_menu(state_t *state, int reinit)
                     // Moved cursor up.
                     if (cursor > 0)
                     {
-                        audio_play_registered_sound(state->sounds.scroll, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
+                        if (!state->config->disable_sound) audio_play_registered_sound(state->sounds.scroll, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                         cursor --;
                     }
                     if (cursor < top)
@@ -701,7 +701,7 @@ unsigned int main_menu(state_t *state, int reinit)
                     // Moved cursor down.
                     if (cursor < (count - 1))
                     {
-                        audio_play_registered_sound(state->sounds.scroll, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
+                        if (!state->config->disable_sound) audio_play_registered_sound(state->sounds.scroll, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                         cursor ++;
                     }
                     if (cursor >= (top + maxgames))
@@ -1099,7 +1099,7 @@ unsigned int game_settings(state_t *state, int reinit)
         {
             if (cursor != new_cursor)
             {
-                audio_play_registered_sound(state->sounds.scroll, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
+                if (!state->config->disable_sound) audio_play_registered_sound(state->sounds.scroll, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
             }
             cursor = new_cursor;
         }
@@ -1108,7 +1108,7 @@ unsigned int game_settings(state_t *state, int reinit)
             // Hack so that when we scroll up we can see the patch label.
             if (top != 0)
             {
-                audio_play_registered_sound(state->sounds.scroll, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
+                if (!state->config->disable_sound) audio_play_registered_sound(state->sounds.scroll, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
             }
             top = 0;
         }
@@ -1126,7 +1126,7 @@ unsigned int game_settings(state_t *state, int reinit)
         {
             if (cursor != new_cursor)
             {
-                audio_play_registered_sound(state->sounds.scroll, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
+                if (!state->config->disable_sound) audio_play_registered_sound(state->sounds.scroll, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
             }
             cursor = new_cursor;
         }
@@ -1171,7 +1171,7 @@ unsigned int game_settings(state_t *state, int reinit)
                 {
                     valno --;
                     game_options->system_settings[actualoption].current = game_options->system_settings[actualoption].values[valno].value;
-                    audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
+                    if (!state->config->disable_sound) audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                 }
             }
         }
@@ -1205,7 +1205,7 @@ unsigned int game_settings(state_t *state, int reinit)
                 {
                     valno --;
                     game_options->game_settings[actualoption].current = game_options->game_settings[actualoption].values[valno].value;
-                    audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
+                    if (!state->config->disable_sound) audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                 }
             }
         }
@@ -1250,7 +1250,7 @@ unsigned int game_settings(state_t *state, int reinit)
                 {
                     valno ++;
                     game_options->system_settings[actualoption].current = game_options->system_settings[actualoption].values[valno].value;
-                    audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
+                    if (!state->config->disable_sound) audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                 }
             }
         }
@@ -1284,7 +1284,7 @@ unsigned int game_settings(state_t *state, int reinit)
                 {
                     valno ++;
                     game_options->game_settings[actualoption].current = game_options->game_settings[actualoption].values[valno].value;
-                    audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
+                    if (!state->config->disable_sound) audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                 }
             }
         }
@@ -1303,12 +1303,12 @@ unsigned int game_settings(state_t *state, int reinit)
             if (patchcursor >= 0 && patchcursor < game_options->patch_count)
             {
                 game_options->patches[patchcursor].enabled = game_options->patches[patchcursor].enabled ? 0 : 1;
-                audio_play_registered_sound(state->sounds.check, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
+                if (!state->config->disable_sound) audio_play_registered_sound(state->sounds.check, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
             }
             else if ((patchcursor == -1 && game_options->patch_count == 0 && force_option != 0) || (force_option != 0 && patchcursor == (game_options->patch_count + 1)))
             {
                 game_options->force_settings = game_options->force_settings ? 0 : 1;
-                audio_play_registered_sound(state->sounds.check, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
+                if (!state->config->disable_sound) audio_play_registered_sound(state->sounds.check, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
             }
         }
         else if (cursor < (patch_count + system_settings_count))
@@ -1803,10 +1803,10 @@ unsigned int comm_error(state_t *state, int reinit)
 
 unsigned int configuration(state_t *state, int reinit)
 {
-    static uint32_t options[9];
-    static uint32_t maximums[9];
-    static uint32_t lockable[9];
-    static uint32_t disabled[9];
+    static uint32_t options[10];
+    static uint32_t maximums[10];
+    static uint32_t lockable[10];
+    static uint32_t disabled[10];
     static unsigned int cursor = 0;
     static unsigned int top = 0;
     static unsigned int maxoptions = 0;
@@ -1827,26 +1827,30 @@ unsigned int configuration(state_t *state, int reinit)
 
     if (reinit)
     {
-        options[0] = state->config->enable_analog;
+        options[0] = state->config->use_filenames;
         options[1] = state->config->system_region;
-        options[2] = state->config->use_filenames;
+        options[2] = state->config->enable_analog;
         options[3] = 0;
         options[4] = 0;
+        options[5] = state->config->disable_sound;
         maximums[0] = 1;
         maximums[1] = 3;
         maximums[2] = 1;
         maximums[3] = 0;
         maximums[4] = 0;
+        maximums[5] = 1;
         lockable[0] = 0;
         lockable[1] = 0;
         lockable[2] = 0;
         lockable[3] = 1;
         lockable[4] = 1;
+        lockable[5] = 0;
         disabled[0] = 0;
         disabled[1] = 0;
         disabled[2] = 0;
         disabled[3] = 0;
-        disabled[4] = state->settings->system.players == 1;
+        disabled[4] = 0;
+        disabled[5] = 0;
 
         // Dummy options for save and exit.
         options[((sizeof(options) / sizeof(options[0])) - 1)] = 0;
@@ -1892,6 +1896,14 @@ unsigned int configuration(state_t *state, int reinit)
     // Calculate disabled controls.
     if (options[0])
     {
+        disabled[1] = 1;
+    }
+    else
+    {
+        disabled[1] = 0;
+    }
+    if (options[2])
+    {
         disabled[3] = 0;
         disabled[4] = state->settings->system.players == 1;
     }
@@ -1912,9 +1924,10 @@ unsigned int configuration(state_t *state, int reinit)
             // Exit with save.
             new_screen = SCREEN_MAIN_MENU;
 
-            state->config->enable_analog = options[0];
+            state->config->use_filenames = options[0];
             state->config->system_region = options[1];
-            state->config->use_filenames = options[2];
+            state->config->enable_analog = options[2];
+            state->config->disable_sound = options[5];
 
             // Calibration special case.
             state->config->joy1_hcenter = joy1_hcenter;
@@ -1956,19 +1969,19 @@ unsigned int configuration(state_t *state, int reinit)
                 {
                     // Unlock control.
                     locked = -1;
-                    audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
+                    if (!state->config->disable_sound) audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                 }
                 else
                 {
                     // Lock to this control.
                     locked = cursor;
-                    audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
+                    if (!state->config->disable_sound) audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                 }
             }
             else if (locked == -1)
             {
                 // Only edit controls if locking is diabled.
-                audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
+                if (!state->config->disable_sound) audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                 if (options[cursor] < maximums[cursor])
                 {
                     options[cursor]++;
@@ -1987,9 +2000,10 @@ unsigned int configuration(state_t *state, int reinit)
             // Exit with save.
             new_screen = SCREEN_MAIN_MENU;
 
-            state->config->enable_analog = options[0];
+            state->config->use_filenames = options[0];
             state->config->system_region = options[1];
-            state->config->use_filenames = options[2];
+            state->config->enable_analog = options[2];
+            state->config->disable_sound = options[5];
 
             // Calibration special case.
             state->config->joy1_hcenter = joy1_hcenter;
@@ -2031,13 +2045,13 @@ unsigned int configuration(state_t *state, int reinit)
                 {
                     // Unlock control.
                     locked = -1;
-                    audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
+                    if (!state->config->disable_sound) audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                 }
                 else
                 {
                     // Lock to this control.
                     locked = cursor;
-                    audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
+                    if (!state->config->disable_sound) audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                 }
             }
         }
@@ -2053,7 +2067,7 @@ unsigned int configuration(state_t *state, int reinit)
             {
                 if (cursor != new_cursor)
                 {
-                    audio_play_registered_sound(state->sounds.scroll, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
+                    if (!state->config->disable_sound) audio_play_registered_sound(state->sounds.scroll, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                 }
                 cursor = new_cursor;
             }
@@ -2067,7 +2081,7 @@ unsigned int configuration(state_t *state, int reinit)
             {
                 if (cursor != new_cursor)
                 {
-                    audio_play_registered_sound(state->sounds.scroll, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
+                    if (!state->config->disable_sound) audio_play_registered_sound(state->sounds.scroll, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                 }
                 cursor = new_cursor;
             }
@@ -2078,7 +2092,7 @@ unsigned int configuration(state_t *state, int reinit)
             int new_cursor = cursor + 1;
             while (new_cursor < (sizeof(options) / sizeof(options[0])) && disabled[new_cursor]) { new_cursor++; }
 
-            audio_play_registered_sound(state->sounds.scroll, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
+            if (!state->config->disable_sound) audio_play_registered_sound(state->sounds.scroll, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
             if (new_cursor < (sizeof(options) / sizeof(options[0])))
             {
                 cursor = new_cursor;
@@ -2094,7 +2108,7 @@ unsigned int configuration(state_t *state, int reinit)
             {
                 if (options[cursor] > 0)
                 {
-                    audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
+                    if (!state->config->disable_sound) audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                     options[cursor]--;
                 }
             }
@@ -2102,7 +2116,7 @@ unsigned int configuration(state_t *state, int reinit)
             {
                 if (options[cursor] < maximums[cursor])
                 {
-                    audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
+                    if (!state->config->disable_sound) audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                     options[cursor]++;
                 }
             }
@@ -2185,8 +2199,8 @@ unsigned int configuration(state_t *state, int reinit)
             {
                 case 0:
                 {
-                    // Enable analog
-                    sprintf(buffer, "analog controls: %s", options[option] ? "enabled" : "disabled");
+                    // Filename display
+                    sprintf(buffer, "game name display: %s*", options[option] ? "from filename" : "from ROM");
                     break;
                 }
                 case 1:
@@ -2198,8 +2212,8 @@ unsigned int configuration(state_t *state, int reinit)
                 }
                 case 2:
                 {
-                    // Filename display
-                    sprintf(buffer, "game name display: %s*", options[option] ? "from filename" : "from ROM");
+                    // Enable analog
+                    sprintf(buffer, "analog controls: %s", options[option] ? "enabled" : "disabled");
                     break;
                 }
                 case 3:
@@ -2244,6 +2258,12 @@ unsigned int configuration(state_t *state, int reinit)
                     {
                         strcpy(buffer, "player 2 analog calibration");
                     }
+                    break;
+                }
+                case 5:
+                {
+                    // Enable analog
+                    sprintf(buffer, "menu sounds: %s", options[option] ? "disabled" : "enabled");
                     break;
                 }
                 case ((sizeof(options) / sizeof(options[0])) - 4):

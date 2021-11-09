@@ -47,6 +47,7 @@ class Settings:
         enable_analog: bool,
         system_region: NaomiRomRegionEnum,
         use_filenames: bool,
+        disable_sound: bool,
         joy1_calibration: List[int],
         joy2_calibration: List[int],
         game_settings: Dict[str, GameSettings],
@@ -55,6 +56,7 @@ class Settings:
         self.enable_analog = enable_analog
         self.system_region = system_region
         self.use_filenames = use_filenames
+        self.disable_sound = disable_sound
         self.joy1_calibration = joy1_calibration
         self.joy2_calibration = joy2_calibration
         self.game_settings = game_settings
@@ -72,6 +74,7 @@ def settings_load(settings_file: str, ip: str) -> Settings:
         enable_analog=False,
         system_region=NaomiRomRegionEnum.REGION_JAPAN,
         use_filenames=False,
+        disable_sound=False,
         joy1_calibration=[0x80, 0x80, 0x50, 0xB0, 0x50, 0xB0],
         joy2_calibration=[0x80, 0x80, 0x50, 0xB0, 0x50, 0xB0],
         game_settings={},
@@ -84,6 +87,8 @@ def settings_load(settings_file: str, ip: str) -> Settings:
             if isinstance(data, dict):
                 if 'enable_analog' in data:
                     settings.enable_analog = bool(data['enable_analog'])
+                if 'disable_sound' in data:
+                    settings.disable_sound = bool(data['disable_sound'])
                 if 'last_game_file' in data:
                     settings.last_game_file = str(data['last_game_file']) if data['last_game_file'] is not None else None
                 if 'use_filenames' in data:
@@ -133,6 +138,7 @@ def settings_save(settings_file: str, ip: str, settings: Settings) -> None:
         'last_game_file': settings.last_game_file,
         'use_filenames': settings.use_filenames,
         'system_region': settings.system_region.value,
+        'disable_sound': settings.disable_sound,
         'joy1_calibration': settings.joy1_calibration,
         'joy2_calibration': settings.joy2_calibration,
         'game_settings': {},
@@ -336,7 +342,7 @@ def main() -> int:
                 fallback_data = fp.read()
 
         config = struct.pack(
-            "<IIIIIIIBBBBBBBBBBBBIII",
+            "<IIIIIIIIBBBBBBBBBBBBIII",
             SETTINGS_SIZE,
             len(games),
             1 if settings.enable_analog else 0,
@@ -344,6 +350,7 @@ def main() -> int:
             last_game_id,
             settings.system_region.value,
             1 if settings.use_filenames else 0,
+            1 if settings.disable_sound else 0,
             settings.joy1_calibration[0],
             settings.joy1_calibration[1],
             settings.joy2_calibration[0],
@@ -634,8 +641,9 @@ def main() -> int:
                                         _,
                                         regionsetting,
                                         filenamesetting,
+                                        soundsetting,
                                         *rest,
-                                    ) = struct.unpack("<IIIIIIIBBBBBBBBBBBB", msg.data[:40])
+                                    ) = struct.unpack("<IIIIIIIIBBBBBBBBBBBB", msg.data[:44])
                                     print("Requested configuration save...")
 
                                     joy1 = [rest[0], rest[1], rest[4], rest[5], rest[6], rest[7]]
@@ -644,6 +652,7 @@ def main() -> int:
                                     settings.enable_analog = analogsetting != 0
                                     settings.use_filenames = filenamesetting != 0
                                     settings.system_region = NaomiRomRegionEnum(regionsetting)
+                                    settings.disable_sound = soundsetting != 0
                                     settings.joy1_calibration = joy1
                                     settings.joy2_calibration = joy2
                                     settings_save(args.menu_settings_file, args.ip, settings)

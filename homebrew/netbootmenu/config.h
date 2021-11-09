@@ -25,6 +25,7 @@ typedef struct __attribute__((__packed__))
     uint32_t boot_selection;
     uint32_t system_region;
     uint32_t use_filenames;
+    uint32_t disable_sound;
     uint8_t joy1_hcenter;
     uint8_t joy1_vcenter;
     uint8_t joy2_hcenter;
