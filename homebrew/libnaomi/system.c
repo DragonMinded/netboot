@@ -720,6 +720,10 @@ uint32_t *utf8_convert(const char * const str)
     // First make some room for the output.
     unsigned int length = utf8_strlen(str);
     uint32_t *chars = malloc(sizeof(uint32_t) * (length + 1));
+    if (chars == 0)
+    {
+        return 0;
+    }
     memset(chars, 0, sizeof(uint32_t) * (length + 1));
 
     // Now, convert characters one at a time.

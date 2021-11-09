@@ -343,6 +343,10 @@ void _irq_init()
 
     // Allocate space for our interrupt state.
     irq_state = malloc(sizeof(irq_state_t));
+    if (irq_state == 0)
+    {
+        _irq_display_invariant("memory failure", "could not get memory for base task IRQ state!");
+    }
     memset(irq_state, 0, sizeof(irq_state_t));
 
     // Register the default state with threads since the current
@@ -351,6 +355,10 @@ void _irq_init()
 
     // Allocate space for our interrupt handler stack.
     irq_stack = malloc(IRQ_STACK_SIZE);
+    if (irq_stack == 0)
+    {
+        _irq_display_invariant("memory failure", "could not get memory for IRQ handler stack!");
+    }
     irq_stack += IRQ_STACK_SIZE;
 
     // Finally, set the VBR to our vector table.
@@ -444,6 +452,10 @@ irq_state_t *_irq_new_state(thread_func_t func, void *funcparam, void *stackptr,
 
     // Allocate space for our interrupt state.
     irq_state_t *new_state = malloc(sizeof(irq_state_t));
+    if (new_state == 0)
+    {
+        _irq_display_invariant("memory failure", "could not get memory for new task IRQ state!");
+    }
     memset(new_state, 0, sizeof(irq_state_t));
 
     // Now, set up the starting state.
