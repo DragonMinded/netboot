@@ -58,7 +58,7 @@ void main()
     sounds[6] = audio_register_sound(AUDIO_FORMAT_16BIT, 44100, six_raw_data, six_raw_len / 2);
 
     // Request a sound be played immediately.
-    audio_play_sound(AUDIO_FORMAT_8BIT, 44100, SPEAKER_LEFT | SPEAKER_RIGHT, success_raw_data, success_raw_len);
+    audio_play_sound(AUDIO_FORMAT_8BIT, 44100, SPEAKER_LEFT | SPEAKER_RIGHT, 1.00, success_raw_data, success_raw_len);
 
     unsigned int counter = 0;
     while ( 1 )
@@ -73,6 +73,7 @@ void main()
 
         // Figure out panning based on L/R pressed on joysticks.
         unsigned int panning = SPEAKER_LEFT | SPEAKER_RIGHT;
+        float volume = 0.90;
         if (held.player1.left || (settings.system.players >= 2 && held.player2.left))
         {
             panning = SPEAKER_LEFT;
@@ -81,34 +82,42 @@ void main()
         {
             panning = SPEAKER_RIGHT;
         }
+        if (held.player1.up || (settings.system.players >= 2 && held.player2.up))
+        {
+            volume = 1.00;
+        }
+        else if (held.player1.down || (settings.system.players >= 2 && held.player2.down))
+        {
+            volume = 0.80;
+        }
 
         if (pressed.player1.start || (settings.system.players >= 2 && pressed.player2.start))
         {
-            audio_play_registered_sound(sounds[0], panning);
+            audio_play_registered_sound(sounds[0], panning, volume);
         }
         if (pressed.player1.button1 || (settings.system.players >= 2 && pressed.player2.button1))
         {
-            audio_play_registered_sound(sounds[1], panning);
+            audio_play_registered_sound(sounds[1], panning, volume);
         }
         if (pressed.player1.button2 || (settings.system.players >= 2 && pressed.player2.button2))
         {
-            audio_play_registered_sound(sounds[2], panning);
+            audio_play_registered_sound(sounds[2], panning, volume);
         }
         if (pressed.player1.button3 || (settings.system.players >= 2 && pressed.player2.button3))
         {
-            audio_play_registered_sound(sounds[3], panning);
+            audio_play_registered_sound(sounds[3], panning, volume);
         }
         if (pressed.player1.button4 || (settings.system.players >= 2 && pressed.player2.button4))
         {
-            audio_play_registered_sound(sounds[4], panning);
+            audio_play_registered_sound(sounds[4], panning, volume);
         }
         if (pressed.player1.button5 || (settings.system.players >= 2 && pressed.player2.button5))
         {
-            audio_play_registered_sound(sounds[5], panning);
+            audio_play_registered_sound(sounds[5], panning, volume);
         }
         if (pressed.player1.button6 || (settings.system.players >= 2 && pressed.player2.button6))
         {
-            audio_play_registered_sound(sounds[6], panning);
+            audio_play_registered_sound(sounds[6], panning, volume);
         }
 
         // Display a liveness counter that goes up 60 times a second.

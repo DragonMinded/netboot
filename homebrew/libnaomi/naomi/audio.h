@@ -37,9 +37,11 @@ uint32_t audio_aica_uptime();
 // to see it and then request it to be played on any available audio channel.
 // The format should be one of the above audio format defines, the samplerate
 // should be an integer between 8000-96000, and the speakers should be a bitmask
-// of the above speaker constants. Returns 0 on success, and a negative number
-// to indicate that there were no available channels to play on.
-int audio_play_sound(int format, unsigned int samplerate, uint32_t speakers, void *data, unsigned int num_samples);
+// of the above speaker constants. The volume should be a floating point number
+// between 0.0 and 1.0 inclusive for how loud to play the sample (completely silent
+// to full volume). Returns 0 on success, and a negative number to indicate that
+// there were no available channels to play on.
+int audio_play_sound(int format, unsigned int samplerate, uint32_t speakers, float volume, void *data, unsigned int num_samples);
 
 // Register a sound to be played later. This will move the soudn to the correct
 // location for the AICA to see it and then return a handle for later playback
@@ -57,7 +59,7 @@ void audio_unregister_sound(int sound);
 // Play a previously-registered sound. This will be played on any available audio
 // channel. Passing it a negative number is the same as a noop. Returns zero on
 // success, or a negative value if there were no available channels.
-int audio_play_registered_sound(int sound, uint32_t speakers);
+int audio_play_registered_sound(int sound, uint32_t speakers, float volume);
 
 #ifdef __cplusplus
 }

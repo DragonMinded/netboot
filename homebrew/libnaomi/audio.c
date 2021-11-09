@@ -1,4 +1,5 @@
 #include <memory.h>
+#include <math.h>
 #include "naomi/audio.h"
 #include "naomi/system.h"
 #include "aica/common.h"
@@ -145,6 +146,16 @@ void audio_free()
     }
 }
 
+unsigned int __audio_volume_to_loudness(float volume)
+{
+    if (volume >= 1.0) { return 255; }
+    if (volume <= 0.0) { return 0; }
+
+    unsigned int loudness = (int)(pow(10.0, log10(volume) / 2.0) * 255.0);
+    if (loudness > 255) { loudness = 255; }
+    return loudness;
+}
+
 uint32_t __audio_get_location(int format, unsigned int samplerate, unsigned int num_samples)
 {
     return __audio_exchange_command(
@@ -169,7 +180,7 @@ uint32_t __audio_load_location(int format, unsigned int samplerate, void *data, 
     return location;
 }
 
-int audio_play_sound(int format, unsigned int samplerate, uint32_t speakers, void *data, unsigned int num_samples)
+int audio_play_sound(int format, unsigned int samplerate, uint32_t speakers, float volume, void *data, unsigned int num_samples)
 {
     uint32_t location = __audio_load_location(format, samplerate, data, num_samples);
     if (location != 0)
@@ -183,6 +194,7 @@ int audio_play_sound(int format, unsigned int samplerate, uint32_t speakers, voi
         {
             panning |= ALLOCATE_SPEAKER_RIGHT;
         }
+        uint32_t loudness = __audio_volume_to_loudness(volume);
 
         if (__audio_exchange_command(REQUEST_DISCARD_AFTER_USE, location, 0, 0, 0) != RESPONSE_SUCCESS)
         {
@@ -190,7 +202,7 @@ int audio_play_sound(int format, unsigned int samplerate, uint32_t speakers, voi
         }
 
         // Now, play the track.
-        return __audio_exchange_command(REQUEST_START_PLAY, location, panning, 0, 0) == RESPONSE_SUCCESS ? 0 : -1;
+        return __audio_exchange_command(REQUEST_START_PLAY, location, panning, loudness, 0) == RESPONSE_SUCCESS ? 0 : -1;
     }
     else
     {
@@ -220,7 +232,7 @@ void audio_unregister_sound(int sound)
     }
 }
 
-int audio_play_registered_sound(int sound, uint32_t speakers)
+int audio_play_registered_sound(int sound, uint32_t speakers, float volume)
 {
     if (sound > 0)
     {
@@ -233,8 +245,9 @@ int audio_play_registered_sound(int sound, uint32_t speakers)
         {
             panning |= ALLOCATE_SPEAKER_RIGHT;
         }
+        uint32_t loudness = __audio_volume_to_loudness(volume);
 
-        return __audio_exchange_command(REQUEST_START_PLAY, sound, panning, 0, 0) == RESPONSE_SUCCESS ? 0 : -1;
+        return __audio_exchange_command(REQUEST_START_PLAY, sound, panning, loudness, 0) == RESPONSE_SUCCESS ? 0 : -1;
     }
     else
     {

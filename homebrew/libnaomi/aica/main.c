@@ -383,6 +383,7 @@ void main()
                     // Find the sample to play by location.
                     uint32_t location = params[0];
                     uint32_t speakers = params[1];
+                    uint32_t loudness = params[2];
 
                     sample_info_t *mysample = find_sample(samples, location);
                     if (mysample)
@@ -403,6 +404,9 @@ void main()
                                 // Calculate panning and format.
                                 int pan = 0;
                                 int format = 0;
+
+                                // Start silent, and if they add some speakers to the bitmask then
+                                // we update this to be the actual loudness from the above param.
                                 int vol = VOL_MIN;
 
                                 if (mysample->format == ALLOCATE_AUDIO_FORMAT_8BIT)
@@ -428,18 +432,18 @@ void main()
                                     if (speakers & ALLOCATE_SPEAKER_RIGHT)
                                     {
                                         pan = PAN_CENTER;
-                                        vol = VOL_MAX;
+                                        vol = 255 - loudness;
                                     }
                                     else
                                     {
                                         pan = PAN_LEFT;
-                                        vol = VOL_MAX;
+                                        vol = 255 - loudness;
                                     }
                                 }
                                 else if (speakers & ALLOCATE_SPEAKER_RIGHT)
                                 {
                                     pan = PAN_RIGHT;
-                                    vol = VOL_MAX;
+                                    vol = 255 - loudness;
                                 }
 
                                 // Actually play it!
