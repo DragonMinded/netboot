@@ -4,9 +4,18 @@
 #include "naomi/system.h"
 #include "naomi/eeprom.h"
 #include "naomi/timer.h"
+#include "naomi/audio.h"
 #include "naomi/message/message.h"
 #include "config.h"
 #include "screens.h"
+
+// Sounds compiled in from Makefile.
+extern uint8_t *scroll_raw_data;
+extern uint8_t *check_raw_data;
+extern uint8_t *change_raw_data;
+extern unsigned int scroll_raw_len;
+extern unsigned int check_raw_len;
+extern unsigned int change_raw_len;
 
 void main()
 {
@@ -28,11 +37,19 @@ void main()
     video_init_simple();
     video_set_background_color(rgb(0, 0, 0));
 
+    // Init audio system for displaying sound effects.
+    audio_init();
+
     // Create global state for the menu.
     state_t state;
     state.settings = &settings;
     state.config = get_config();
     state.test_error_counter = 0.0;
+
+    // Initialize some system sounds.
+    state.sounds.scroll = audio_register_sound(AUDIO_FORMAT_16BIT, 44100, scroll_raw_data, scroll_raw_len / 2);
+    state.sounds.check = audio_register_sound(AUDIO_FORMAT_16BIT, 44100, check_raw_data, check_raw_len / 2);
+    state.sounds.change = audio_register_sound(AUDIO_FORMAT_16BIT, 44100, change_raw_data, change_raw_len / 2);
 
     // Allow a force override of number of players on the cabinet.
     if (state.config->force_players != 0)

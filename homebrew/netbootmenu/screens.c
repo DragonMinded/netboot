@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "naomi/video.h"
-#include "naomi/maple.h"
+#include "naomi/audio.h"
 #include "naomi/system.h"
 #include "naomi/message/packet.h"
 #include "naomi/message/message.h"
@@ -688,6 +688,7 @@ unsigned int main_menu(state_t *state, int reinit)
                     // Moved cursor up.
                     if (cursor > 0)
                     {
+                        audio_play_registered_sound(state->sounds.scroll, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                         cursor --;
                     }
                     if (cursor < top)
@@ -700,6 +701,7 @@ unsigned int main_menu(state_t *state, int reinit)
                     // Moved cursor down.
                     if (cursor < (count - 1))
                     {
+                        audio_play_registered_sound(state->sounds.scroll, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                         cursor ++;
                     }
                     if (cursor >= (top + maxgames))
@@ -1095,11 +1097,19 @@ unsigned int game_settings(state_t *state, int reinit)
 
         if (new_cursor >= 0)
         {
+            if (cursor != new_cursor)
+            {
+                audio_play_registered_sound(state->sounds.scroll, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
+            }
             cursor = new_cursor;
         }
         if (new_cursor < 0)
         {
             // Hack so that when we scroll up we can see the patch label.
+            if (top != 0)
+            {
+                audio_play_registered_sound(state->sounds.scroll, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
+            }
             top = 0;
         }
         if (cursor < top)
@@ -1114,6 +1124,10 @@ unsigned int game_settings(state_t *state, int reinit)
 
         if (new_cursor < total)
         {
+            if (cursor != new_cursor)
+            {
+                audio_play_registered_sound(state->sounds.scroll, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
+            }
             cursor = new_cursor;
         }
         if (cursor >= (top + maxoptions))
@@ -1157,6 +1171,7 @@ unsigned int game_settings(state_t *state, int reinit)
                 {
                     valno --;
                     game_options->system_settings[actualoption].current = game_options->system_settings[actualoption].values[valno].value;
+                    audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                 }
             }
         }
@@ -1190,6 +1205,7 @@ unsigned int game_settings(state_t *state, int reinit)
                 {
                     valno --;
                     game_options->game_settings[actualoption].current = game_options->game_settings[actualoption].values[valno].value;
+                    audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                 }
             }
         }
@@ -1234,6 +1250,7 @@ unsigned int game_settings(state_t *state, int reinit)
                 {
                     valno ++;
                     game_options->system_settings[actualoption].current = game_options->system_settings[actualoption].values[valno].value;
+                    audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                 }
             }
         }
@@ -1267,6 +1284,7 @@ unsigned int game_settings(state_t *state, int reinit)
                 {
                     valno ++;
                     game_options->game_settings[actualoption].current = game_options->game_settings[actualoption].values[valno].value;
+                    audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                 }
             }
         }
@@ -1285,10 +1303,12 @@ unsigned int game_settings(state_t *state, int reinit)
             if (patchcursor >= 0 && patchcursor < game_options->patch_count)
             {
                 game_options->patches[patchcursor].enabled = game_options->patches[patchcursor].enabled ? 0 : 1;
+                audio_play_registered_sound(state->sounds.check, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
             }
             else if ((patchcursor == -1 && game_options->patch_count == 0 && force_option != 0) || (force_option != 0 && patchcursor == (game_options->patch_count + 1)))
             {
                 game_options->force_settings = game_options->force_settings ? 0 : 1;
+                audio_play_registered_sound(state->sounds.check, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
             }
         }
         else if (cursor < (patch_count + system_settings_count))
@@ -1936,16 +1956,19 @@ unsigned int configuration(state_t *state, int reinit)
                 {
                     // Unlock control.
                     locked = -1;
+                    audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                 }
                 else
                 {
                     // Lock to this control.
                     locked = cursor;
+                    audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                 }
             }
             else if (locked == -1)
             {
                 // Only edit controls if locking is diabled.
+                audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                 if (options[cursor] < maximums[cursor])
                 {
                     options[cursor]++;
@@ -2008,11 +2031,13 @@ unsigned int configuration(state_t *state, int reinit)
                 {
                     // Unlock control.
                     locked = -1;
+                    audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                 }
                 else
                 {
                     // Lock to this control.
                     locked = cursor;
+                    audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                 }
             }
         }
@@ -2026,6 +2051,10 @@ unsigned int configuration(state_t *state, int reinit)
 
             if (new_cursor >= 0)
             {
+                if (cursor != new_cursor)
+                {
+                    audio_play_registered_sound(state->sounds.scroll, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
+                }
                 cursor = new_cursor;
             }
         }
@@ -2036,6 +2065,10 @@ unsigned int configuration(state_t *state, int reinit)
 
             if (new_cursor < (sizeof(options) / sizeof(options[0])))
             {
+                if (cursor != new_cursor)
+                {
+                    audio_play_registered_sound(state->sounds.scroll, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
+                }
                 cursor = new_cursor;
             }
         }
@@ -2045,6 +2078,7 @@ unsigned int configuration(state_t *state, int reinit)
             int new_cursor = cursor + 1;
             while (new_cursor < (sizeof(options) / sizeof(options[0])) && disabled[new_cursor]) { new_cursor++; }
 
+            audio_play_registered_sound(state->sounds.scroll, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
             if (new_cursor < (sizeof(options) / sizeof(options[0])))
             {
                 cursor = new_cursor;
@@ -2060,6 +2094,7 @@ unsigned int configuration(state_t *state, int reinit)
             {
                 if (options[cursor] > 0)
                 {
+                    audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                     options[cursor]--;
                 }
             }
@@ -2067,6 +2102,7 @@ unsigned int configuration(state_t *state, int reinit)
             {
                 if (options[cursor] < maximums[cursor])
                 {
+                    audio_play_registered_sound(state->sounds.change, SPEAKER_LEFT | SPEAKER_RIGHT, 1.0);
                     options[cursor]++;
                 }
             }
@@ -2076,10 +2112,8 @@ unsigned int configuration(state_t *state, int reinit)
     if (locked == 3)
     {
         // 1P calibration.
-        jvs_buttons_t held = maple_buttons_held();
-
-        joy1_vcenter = held.player1.analog1;
-        joy1_hcenter = held.player1.analog2;
+        joy1_vcenter = controls.joy1_v;
+        joy1_hcenter = controls.joy1_h;
 
         joy1_hmin = min(joy1_hmin, joy1_hcenter);
         joy1_hmax = max(joy1_hmax, joy1_hcenter);
@@ -2089,10 +2123,8 @@ unsigned int configuration(state_t *state, int reinit)
     else if (locked == 4)
     {
         // 2P calibration.
-        jvs_buttons_t held = maple_buttons_held();
-
-        joy2_vcenter = held.player2.analog1;
-        joy2_hcenter = held.player2.analog2;
+        joy2_vcenter = controls.joy2_v;
+        joy2_hcenter = controls.joy2_h;
 
         joy2_hmin = min(joy2_hmin, joy2_hcenter);
         joy2_hmax = max(joy2_hmax, joy2_hcenter);

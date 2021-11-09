@@ -20,6 +20,12 @@ typedef struct
     // The following controls need pressed and released events to detect holds.
     uint8_t start_pressed;
     uint8_t start_released;
+
+    // The following controlls need raw analog values for calibration.
+    uint8_t joy1_h;
+    uint8_t joy1_v;
+    uint8_t joy2_h;
+    uint8_t joy2_v;
 } controls_t;
 
 controls_t get_controls(state_t *state, int reinit);

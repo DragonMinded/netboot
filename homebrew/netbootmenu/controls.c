@@ -253,8 +253,22 @@ controls_t get_controls(state_t *state, int reinit)
         memcpy(oldaright, aright, sizeof(aright));
     }
 
-    // Process buttons and repeats.
+    // Copy over joystick config.
     controls_t controls;
+    controls.joy1_v = held.player1.analog1;
+    controls.joy1_h = held.player1.analog2;
+    if (state->settings->system.players >= 2)
+    {
+        controls.joy2_v = held.player2.analog1;
+        controls.joy2_h = held.player2.analog2;
+    }
+    else
+    {
+        controls.joy2_v = 80;
+        controls.joy2_h = 80;
+    }
+
+    // Process buttons and repeats.
     controls.up_pressed = 0;
     controls.down_pressed = 0;
     controls.left_pressed = 0;

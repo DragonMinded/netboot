@@ -44,6 +44,13 @@ typedef struct __attribute__((__packed__))
 
 typedef struct
 {
+    int scroll;
+    int check;
+    int change;
+} sounds_t;
+
+typedef struct
+{
     eeprom_t *settings;
     config_t *config;
     double fps;
@@ -51,6 +58,7 @@ typedef struct
     double test_error_counter;
     font_t *font_18pt;
     font_t *font_12pt;
+    sounds_t sounds;
 } state_t;
 
 config_t *get_config();
