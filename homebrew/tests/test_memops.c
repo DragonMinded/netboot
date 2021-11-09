@@ -2,7 +2,7 @@
 #include "naomi/video.h"
 #include "naomi/system.h"
 
-#define test_hw_memset_duration 100
+#define test_hw_memset_duration 200
 void test_hw_memset(test_context_t *context)
 {
     uint32_t *scratch = video_scratch_area();
@@ -29,7 +29,7 @@ void test_hw_memset(test_context_t *context)
     }
 }
 
-#define test_hw_memcpy_duration 150
+#define test_hw_memcpy_duration 300
 void test_hw_memcpy(test_context_t *context)
 {
     uint32_t *scratch = video_scratch_area();
