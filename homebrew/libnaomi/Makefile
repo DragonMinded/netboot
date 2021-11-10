@@ -18,6 +18,7 @@ SRCS += audio.c
 SRCS += console.c
 SRCS += rtc.c
 SRCS += cart.c
+SRCS += romfs.c
 
 # Pick up base makefile rules common to all examples.
 include ../Makefile.base

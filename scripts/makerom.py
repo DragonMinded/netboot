@@ -136,6 +136,12 @@ def main() -> int:
         help='Pad the ROM to this size in hex before appending any arbitrary data.',
     )
     parser.add_argument(
+        '--align-before-data',
+        type=str,
+        default=None,
+        help='Pad the ROM to this alignment in bytes before appending any arbitrary data.',
+    )
+    parser.add_argument(
         '-a',
         '--pad-after-data',
         type=str,
@@ -149,6 +155,12 @@ def main() -> int:
         type=str,
         action='append',
         help='Append this arbitrary file data to the end of the ROM.',
+    )
+    parser.add_argument(
+        '--align-after-data',
+        type=str,
+        default=None,
+        help='Pad the ROM to this alignment in bytes after appending any arbitrary data.',
     )
 
     # Grab what we're doing
@@ -275,12 +287,26 @@ def main() -> int:
         romdata += b'\0' * amount
         romoffset += amount
 
+    # Now, pad the ROM to this alignment.
+    if args.align_before_data:
+        alignment = int(args.align_before_data, 10)
+        while romoffset % alignment != 0:
+            romdata += b'\0'
+            romoffset += 1
+
     # Now, append any requested data chunks.
     for filename in args.filedata or []:
         with open(filename, "rb") as fpb:
             filedata = fpb.read()
         romoffset += len(filedata)
         romdata += filedata
+
+    # Now, pad the ROM to this alignment.
+    if args.align_after_data:
+        alignment = int(args.align_after_data, 10)
+        while romoffset % alignment != 0:
+            romdata += b'\0'
+            romoffset += 1
 
     # Now, pad the ROM out to any requested padding.
     if args.pad_after_data and romoffset < int(args.pad_after_data, 16):

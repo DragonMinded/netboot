@@ -1,4 +1,4 @@
-A minimal Naomi homebrew environment, very loosely based off of KallistiOS toolchain work but bare metal. This assumes that you have a Linux computer with standard prerequisites for compiling gcc/newlib/binutils already installed. The Naomi system library is minimal, but will continue to get fleshed out. There is currently no support for pthreads, filesystems or accelerated video though I hope to fix that as I continue to improve libnaomi.
+A minimal Naomi homebrew environment, very loosely based off of KallistiOS toolchain work but bare metal. This assumes that you have a Linux computer with standard prerequisites for compiling gcc/newlib/binutils already installed. The Naomi system library is minimal, but will continue to get fleshed out. There is currently no support for pthreads or accelerated video though I hope to fix that as I continue to improve libnaomi.
 
 To get started, create a directory named "/opt/toolchains/naomi" and copy the contents of the `setup/` directory to it. This directory and the copied contents should be user-owned and user-writeable. Then, cd to "/opt/toolchains/naomi" and in order run `./download.sh` (downloads toolchain sources), `./unpack.sh` (unpacks the toolchain to be built), `make` (builds the toolchain and installs it in the correct directories) and finally `./cleanup.sh`. If everything is successful, you should have a working environment.
 
@@ -14,6 +14,5 @@ If you are looking for a great resource for programming, the first thing I would
 
 TODOs
 =====
- - Fill out more of the TODOs in system.c to add functionality such as a ROMFS.
  - Implement a stereo ring-buffer style audio system for code that wishes to render its own audio.
  - Use PowerVR accelerated texture commands instead of raw framebuffer.

@@ -143,6 +143,10 @@ IMG2C = python3 ${IMG2C_FILE}
 PITCHGEN_FILE = $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/pitchgen.py
 PITCHGEN = python3 ${PITCHGEN_FILE}
 
+# Set up various toolchain utilities.
+ROMFSGEN_FILE = $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/romfsgen.py
+ROMFSGEN = python3 ${ROMFSGEN_FILE}
+
 # Set up library detection utility.
 libmissing = $(shell ${LD} -l$(1) 2>&1 | grep "cannot find" | wc -l)
 

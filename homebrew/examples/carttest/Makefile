@@ -13,9 +13,13 @@ SRCS += main.c
 # Pick up base makefile rules common to all examples.
 include ../../Makefile.base
 
+# Provide a rule to build our ROM FS.
+build/romfs.bin: romfs/ ${ROMFSGEN_FILE}
+	${ROMFSGEN} $@ $<
+
 # Provide the top-level ROM creation target for this binary.
 # See scripts.makerom for details about what is customizable.
-carttest.bin: build/naomi.bin
+carttest.bin: build/naomi.bin build/romfs.bin
 	PYTHONPATH=../../../ python3 -m scripts.makerom $@ \
 		--title "Cartridge Reading Example" \
 		--publisher "DragonMinded" \
@@ -23,7 +27,9 @@ carttest.bin: build/naomi.bin
 		--section $<,${START_ADDR} \
 		--entrypoint ${MAIN_ADDR} \
 		--main-binary-includes-test-binary \
-		--test-entrypoint ${TEST_ADDR}
+		--test-entrypoint ${TEST_ADDR} \
+		--align-before-data 4 \
+		--filedata build/romfs.bin
 
 # Include a simple clean target which wipes the build directory
 # and kills any binary built.

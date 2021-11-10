@@ -78,6 +78,10 @@ void _timer_init();
 void _timer_free();
 void _thread_init();
 void _thread_free();
+void _fs_init();
+void _fs_free();
+void _romfs_init();
+void _romfs_free();
 
 void _enter()
 {
@@ -120,6 +124,8 @@ void _enter()
     _thread_init();
     _maple_init();
     _irq_init();
+    _fs_init();
+    _romfs_init();
 
     // Initialize mutexes for hardware that needs exclusive access.
     mutex_init(&queue_mutex);
@@ -142,6 +148,8 @@ void _enter()
 
     // Free those things now that we're done. We should usually never get here
     // because it would be unusual to exit from main/test by returning.
+    _romfs_free();
+    _fs_free();
     _irq_free();
     _maple_free();
     _thread_free();
@@ -320,6 +328,8 @@ void call_unmanaged(void (*call)())
     video_free();
 
     // Shut down everything since we're leaving our executable.
+    _romfs_free();
+    _fs_free();
     _irq_free();
     _maple_free();
     _thread_free();
@@ -390,6 +400,197 @@ int unhook_stdio_calls( stdio_t *stdio_calls )
     return 0;
 }
 
+#define FS_PREFIX_LEN 28
+
+typedef struct
+{
+    /* Pointer to the filesystem callbacks for this filesystem. */
+    filesystem_t *fs;
+    /* Opaque pointer of data that is passed to us from attach_filesystem and
+     * we pass back to the filesystem hooks on every call. */
+    void *fshandle;
+    /* Filesystem prefix, such as 'rom:/' or 'mem:/' that this filesystem is
+     * found under when using standard library file routines. */
+    char prefix[FS_PREFIX_LEN];
+} fs_mapping_t;
+
+typedef struct
+{
+    /* Index into the filesystem master mapping to get a fs_mapping_t. */
+    int fs_mapping;
+    /* The handle returned from the filesystem code's open() function which will
+     * be passed to all other function calls. */
+    void *handle;
+    /* The handle as returned to newlib which will be given to all userspace
+     * code calling standard file routines. */
+    int fileno;
+} fs_handle_t;
+
+static fs_mapping_t filesystems[MAX_FILESYSTEMS];
+static fs_handle_t handles[MAX_OPEN_HANDLES];
+
+void _fs_init()
+{
+    uint32_t old_irq = irq_disable();
+    memset(filesystems, 0, sizeof(fs_mapping_t) * MAX_FILESYSTEMS);
+    memset(handles, 0, sizeof(fs_handle_t) * MAX_OPEN_HANDLES);
+    irq_restore(old_irq);
+}
+
+void _fs_free()
+{
+    uint32_t old_irq = irq_disable();
+
+    // Go through and close all open file handles for all filesystems.
+    for (int j = 0; j < MAX_OPEN_HANDLES; j++)
+    {
+        if (handles[j].fileno > 0 && handles[j].handle != 0)
+        {
+            filesystems[handles[j].fs_mapping].fs->close(filesystems[handles[j].fs_mapping].fshandle, handles[j].handle);
+        }
+    }
+
+    memset(filesystems, 0, sizeof(fs_mapping_t) * MAX_FILESYSTEMS);
+    memset(handles, 0, sizeof(fs_handle_t) * MAX_OPEN_HANDLES);
+    irq_restore(old_irq);
+}
+
+int attach_filesystem(const char * const prefix, filesystem_t *filesystem, void *fshandle)
+{
+    /* Sanity checking */
+    if (!prefix || !filesystem)
+    {
+        return -1;
+    }
+
+    /* Make sure prefix is valid */
+    int len = strlen(prefix);
+    if (len < 3 || len >= FS_PREFIX_LEN || prefix[len - 1] != '/' || prefix[len - 2] != ':')
+    {
+        return -1;
+    }
+
+    /* Make sure the prefix doesn't match one thats already inserted */
+    for (int i = 0; i < MAX_FILESYSTEMS; i++)
+    {
+        if (filesystems[i].prefix[0] != 0 && strcmp(filesystems[i].prefix, prefix) == 0)
+        {
+            /* Filesystem has already been inserted */
+            return -2;
+        }
+    }
+
+    /* Find an open filesystem entry */
+    for (int i = 0; i < MAX_FILESYSTEMS; i++ )
+    {
+        if (filesystems[i].prefix[0] == 0)
+        {
+            /* Attach the prefix, remember the pointers to the fs functions. */
+            strcpy(filesystems[i].prefix, prefix);
+            filesystems[i].fs = filesystem;
+            filesystems[i].fshandle = fshandle;
+            return 0;
+        }
+    }
+
+    /* No more filesystem handles available */
+    return -3;
+}
+
+int detach_filesystem( const char * const prefix )
+{
+    /* Sanity checking */
+    if (prefix == 0)
+    {
+        return -1;
+    }
+
+    for (int i = 0; i < MAX_FILESYSTEMS; i++)
+    {
+        if (filesystems[i].prefix[0] != 0 && strcmp(filesystems[i].prefix, prefix) == 0)
+        {
+            if (filesystems[i].fs->close != 0)
+            {
+                /* We found the filesystem, now go through and close every open file handle */
+                for (int j = 0; j < MAX_OPEN_HANDLES; j++)
+                {
+                    if (handles[j].fileno > 0 && handles[j].fs_mapping == i && handles[j].handle != 0)
+                    {
+                        filesystems[i].fs->close(filesystems[i].fshandle, handles[j].handle);
+                    }
+                }
+            }
+
+            /* Now zero out the filesystem entry so it can't be found. */
+            memset(&filesystems[i], 0, sizeof(fs_mapping_t));
+
+            /* All went well */
+            return 0;
+        }
+    }
+
+    /* Couldn't find the filesystem to free */
+    return -2;
+}
+
+int _fs_next_handle()
+{
+    /* Start past STDIN, STDOUT, STDERR file handles */
+    static int handle = 3;
+    int newhandle;
+
+    /* Make sure we don't screw up and give the same file handle to multiple threads. */
+    uint32_t old_irq = irq_disable();
+    newhandle = handle++;
+    irq_restore(old_irq);
+
+    return newhandle;
+}
+
+int _fs_get_hooks(int fileno, filesystem_t **fs, void **fshandle, void **handle)
+{
+    if( fileno < 3 )
+    {
+        return 0;
+    }
+
+    for (int i = 0; i < MAX_OPEN_HANDLES; i++)
+    {
+        if (handles[i].fileno == fileno)
+        {
+            // Found it!
+            *fs = filesystems[handles[i].fs_mapping].fs;
+            *fshandle = filesystems[handles[i].fs_mapping].fshandle;
+            *handle = handles[i].handle;
+            return 1;
+        }
+    }
+
+    // Couldn't find it.
+    return 0;
+}
+
+int _fs_get_fs_by_name(const char * const name)
+{
+    /* Invalid */
+    if (name == 0)
+    {
+        return -1;
+    }
+
+    for(int i = 0; i < MAX_FILESYSTEMS; i++)
+    {
+        if (filesystems[i].prefix[0] != 0 && strncmp(filesystems[i].prefix, name, strlen(filesystems[i].prefix)) == 0)
+        {
+            /* Found it! */
+            return i;
+        }
+    }
+
+    /* Couldn't find it */
+    return -1;
+
+}
 
 _ssize_t _read_r(struct _reent *reent, int file, void *ptr, size_t len)
 {
@@ -414,7 +615,32 @@ _ssize_t _read_r(struct _reent *reent, int file, void *ptr, size_t len)
     }
     else
     {
-        // TODO: Implement read once we have FS support.
+        /* Attempt to use filesystem hooks to perform read */
+        filesystem_t *fs = 0;
+        void *fshandle = 0;
+        void *handle = 0;
+        if (_fs_get_hooks(file, &fs, &fshandle, &handle))
+        {
+            if (fs->read == 0)
+            {
+                /* Filesystem doesn't support read */
+                reent->_errno = ENOTSUP;
+                return -1;
+            }
+
+            int retval = fs->read(fshandle, handle, ptr, len);
+            if (retval < 0)
+            {
+                reent->_errno = -retval;
+                return -1;
+            }
+            else
+            {
+                return retval;
+            }
+        }
+
+        /* There is no filesystem backing this file. */
         reent->_errno = ENOTSUP;
         return -1;
     }
@@ -422,7 +648,32 @@ _ssize_t _read_r(struct _reent *reent, int file, void *ptr, size_t len)
 
 _off_t _lseek_r(struct _reent *reent, int file, _off_t amount, int dir)
 {
-    // TODO: Implement seek once we have FS support.
+    /* Attempt to use filesystem hooks to perform lseek */
+    filesystem_t *fs = 0;
+    void *fshandle = 0;
+    void *handle = 0;
+    if (_fs_get_hooks(file, &fs, &fshandle, &handle))
+    {
+        if (fs->lseek == 0)
+        {
+            /* Filesystem doesn't support lseek */
+            reent->_errno = ENOTSUP;
+            return -1;
+        }
+
+        int retval = fs->lseek(fshandle, handle, amount, dir);
+        if (retval < 0)
+        {
+            reent->_errno = -retval;
+            return -1;
+        }
+        else
+        {
+            return retval;
+        }
+    }
+
+    /* There is no filesystem backing this file. */
     reent->_errno = ENOTSUP;
     return -1;
 }
@@ -461,7 +712,32 @@ _ssize_t _write_r(struct _reent *reent, int file, const void * ptr, size_t len)
     }
     else
     {
-        // TODO: Implement write once we have FS support.
+        /* Attempt to use filesystem hooks to perform write */
+        filesystem_t *fs = 0;
+        void *fshandle = 0;
+        void *handle = 0;
+        if (_fs_get_hooks(file, &fs, &fshandle, &handle))
+        {
+            if (fs->write == 0)
+            {
+                /* Filesystem doesn't support write */
+                reent->_errno = ENOTSUP;
+                return -1;
+            }
+
+            int retval = fs->write(fshandle, handle, ptr, len);
+            if (retval < 0)
+            {
+                reent->_errno = -retval;
+                return -1;
+            }
+            else
+            {
+                return retval;
+            }
+        }
+
+        /* There is no filesystem backing this file. */
         reent->_errno = ENOTSUP;
         return -1;
     }
@@ -469,28 +745,135 @@ _ssize_t _write_r(struct _reent *reent, int file, const void * ptr, size_t len)
 
 int _close_r(struct _reent *reent, int file)
 {
-    // TODO: Implement close once we have FS support.
+    /* Attempt to use filesystem hooks to perform close */
+    filesystem_t *fs = 0;
+    void *fshandle = 0;
+    void *handle = 0;
+    if (_fs_get_hooks(file, &fs, &fshandle, &handle))
+    {
+        int retval;
+        if (fs->close == 0)
+        {
+            /* Filesystem doesn't support close */
+            reent->_errno = ENOTSUP;
+            retval = -1;
+        }
+        else
+        {
+            /* Perform the close action. */
+            retval = fs->close(fshandle, handle);
+        }
+
+        /* Finally, before we return, unregister this handle. */
+        for( int i = 0; i < MAX_OPEN_HANDLES; i++)
+        {
+            if (handles[i].fileno == file)
+            {
+                memset(&handles[i], 0, sizeof(fs_handle_t));
+            }
+        }
+
+        if (retval < 0)
+        {
+            reent->_errno = -retval;
+            return -1;
+        }
+        else
+        {
+            return retval;
+        }
+    }
+
+    /* There is no filesystem backing this file. */
     reent->_errno = ENOTSUP;
     return -1;
 }
 
 int _link_r(struct _reent *reent, const char *old, const char *new)
 {
-    // TODO: Implement link once we have FS support.
+    /* Attempt to use filesystem hooks to perform link */
+    int oldfs = _fs_get_fs_by_name(old);
+    int newfs = _fs_get_fs_by_name(old);
+
+    if (oldfs >= 0 && newfs >= 0)
+    {
+        /* Make sure both of them are of the same filesystem. */
+        if (oldfs != newfs)
+        {
+            /* We can't link across multiple filesytems. What are we, linux? */
+            reent->_errno = ENOTSUP;
+            return -1;
+        }
+
+        filesystem_t *fs = filesystems[oldfs].fs;
+        if (fs->link == 0)
+        {
+            /* Filesystem doesn't support link */
+            reent->_errno = ENOTSUP;
+            return -1;
+        }
+
+        int retval = fs->link(filesystems[oldfs].fshandle, old + strlen(filesystems[oldfs].prefix), new + strlen(filesystems[newfs].prefix));
+        if (retval < 0)
+        {
+            reent->_errno = -retval;
+            return -1;
+        }
+        else
+        {
+            return retval;
+        }
+    }
+
+    /* There is no filesystem backing this file. */
     reent->_errno = ENOTSUP;
     return -1;
 }
 
 int _rename_r (struct _reent *reent, const char *old, const char *new)
 {
-    // TODO: Implement rename once we have FS support.
+    /* Attempt to use filesystem hooks to perform rename */
+    int oldfs = _fs_get_fs_by_name(old);
+    int newfs = _fs_get_fs_by_name(old);
+
+    if (oldfs >= 0 && newfs >= 0)
+    {
+        /* Make sure both of them are of the same filesystem. */
+        if (oldfs != newfs)
+        {
+            /* We can't rename across multiple filesytems. What are we, linux? */
+            reent->_errno = ENOTSUP;
+            return -1;
+        }
+
+        filesystem_t *fs = filesystems[oldfs].fs;
+        if (fs->rename == 0)
+        {
+            /* Filesystem doesn't support rename */
+            reent->_errno = ENOTSUP;
+            return -1;
+        }
+
+        int retval = fs->rename(filesystems[oldfs].fshandle, old + strlen(filesystems[oldfs].prefix), new + strlen(filesystems[newfs].prefix));
+        if (retval < 0)
+        {
+            reent->_errno = -retval;
+            return -1;
+        }
+        else
+        {
+            return retval;
+        }
+    }
+
+    /* There is no filesystem backing this file. */
     reent->_errno = ENOTSUP;
     return -1;
 }
 
 void *_sbrk_impl(struct _reent *reent, ptrdiff_t incr)
 {
-    extern char end;      /* Defined by the linker in naomi.ld */
+    extern char end;  /* Defined by the linker in naomi.ld */
     static char *heap_end;
     char *prev_heap_end;
 
@@ -523,28 +906,157 @@ void *_sbrk_r(struct _reent *reent, ptrdiff_t incr)
 
 int _fstat_r(struct _reent *reent, int file, struct stat *st)
 {
-    // TODO: Implement fstat once we have FS support.
+    /* Attempt to use filesystem hooks to perform fstat */
+    filesystem_t *fs = 0;
+    void *fshandle = 0;
+    void *handle = 0;
+    if (_fs_get_hooks(file, &fs, &fshandle, &handle))
+    {
+        if (fs->fstat == 0)
+        {
+            /* Filesystem doesn't support fstat */
+            reent->_errno = ENOTSUP;
+            return -1;
+        }
+
+        int retval = fs->fstat(fshandle, handle, st);
+        if (retval < 0)
+        {
+            reent->_errno = -retval;
+            return -1;
+        }
+        else
+        {
+            return retval;
+        }
+    }
+
+    /* There is no filesystem backing this file. */
     reent->_errno = ENOTSUP;
     return -1;
 }
 
 int _mkdir_r(struct _reent *reent, const char *path, int flags)
 {
-    // TODO: Implement mkdir once we have FS support.
+    /* Attempt to use filesystem hooks to perform mkdir */
+    int mapping = _fs_get_fs_by_name(path);
+    if (mapping >= 0)
+    {
+        filesystem_t *fs = filesystems[mapping].fs;
+        if (fs->mkdir == 0)
+        {
+            /* Filesystem doesn't support mkdir */
+            reent->_errno = ENOTSUP;
+            return -1;
+        }
+
+        int retval = fs->mkdir(filesystems[mapping].fshandle, path + strlen(filesystems[mapping].prefix), flags);
+        if (retval < 0)
+        {
+            reent->_errno = -retval;
+            return -1;
+        }
+        else
+        {
+            return retval;
+        }
+    }
+
+    /* There is no filesystem backing this file. */
     reent->_errno = ENOTSUP;
     return -1;
 }
 
-int _open_r(struct _reent *reent, const char *path, int flags, int unk)
+int _open_r(struct _reent *reent, const char *path, int flags, int mode)
 {
-    // TODO: Implement open once we have FS support.
-    reent->_errno = ENOTSUP;
+    int mapping = _fs_get_fs_by_name(path);
+    filesystem_t *fs = 0;
+
+    if (mapping >= 0)
+    {
+        fs = filesystems[mapping].fs;
+    }
+    else
+    {
+        /* There is no fileystem backing this path. */
+        reent->_errno = ENOTSUP;
+        return -1;
+    }
+
+    if (fs->open == 0)
+    {
+        /* Filesystem doesn't support open */
+        reent->_errno = ENOTSUP;
+        return -1;
+    }
+
+    /* Do we have room for a new file? */
+    for (int i = 0; i < MAX_OPEN_HANDLES; i++)
+    {
+        if (handles[i].fileno == 0)
+        {
+            /* Yes, we have room, try the open */
+            void *ptr = fs->open(filesystems[mapping].fshandle, path + strlen(filesystems[mapping].prefix), flags, mode);
+            int errnoptr = (int)ptr;
+
+            if (errnoptr > 0)
+            {
+                /* Create new internal handle */
+                handles[i].fileno = _fs_next_handle();
+                handles[i].handle = ptr;
+                handles[i].fs_mapping = mapping;
+
+                /* Return our own handle */
+                return handles[i].fileno;
+            }
+            else
+            {
+                /* Couldn't open for some reason */
+                if (errnoptr == 0)
+                {
+                    reent->_errno = ENOENT;
+                }
+                else
+                {
+                    reent->_errno = -errnoptr;
+                }
+                return -1;
+            }
+        }
+    }
+
+    /* No file handles available */
+    reent->_errno = ENFILE;
     return -1;
 }
 
 int _unlink_r(struct _reent *reent, const char *path)
 {
-    // TODO: Implement unlink once we have FS support.
+    /* Attempt to use filesystem hooks to perform unlink */
+    int mapping = _fs_get_fs_by_name(path);
+    if (mapping >= 0)
+    {
+        filesystem_t *fs = filesystems[mapping].fs;
+        if (fs->unlink == 0)
+        {
+            /* Filesystem doesn't support unlink */
+            reent->_errno = ENOTSUP;
+            return -1;
+        }
+
+        int retval = fs->unlink(filesystems[mapping].fshandle, path + strlen(filesystems[mapping].prefix));
+        if (retval < 0)
+        {
+            reent->_errno = -retval;
+            return -1;
+        }
+        else
+        {
+            return retval;
+        }
+    }
+
+    /* There is no filesystem backing this file. */
     reent->_errno = ENOTSUP;
     return -1;
 }
@@ -578,7 +1090,46 @@ int _getpid_r(struct _reent *reent)
 
 int _stat_r(struct _reent *reent, const char *path, struct stat *st)
 {
-    // TODO: Implement stat once we have FS support.
+    /* Attempt to use filesystem hooks to perform stat */
+    int mapping = _fs_get_fs_by_name(path);
+    if (mapping >= 0)
+    {
+        filesystem_t *fs = filesystems[mapping].fs;
+        if (fs->open == 0 || fs->close == 0 || fs->fstat == 0)
+        {
+            /* Filesystem doesn't support stat by way of missing utility functions */
+            reent->_errno = ENOTSUP;
+            return -1;
+        }
+
+        /* Open the file, grab the stat, close it */
+        void *handle = fs->open(filesystems[mapping].fshandle, path + strlen(filesystems[mapping].prefix), 0, 0666);
+        int handleint = (int)handle;
+
+        if (handleint > 0)
+        {
+            int retval = fs->fstat(filesystems[mapping].fshandle, handle, st);
+            fs->close(filesystems[mapping].fshandle, handle);
+
+            /* Return what stat gave us */
+            if (retval < 0)
+            {
+                reent->_errno = -retval;
+                return -1;
+            }
+            else
+            {
+                return retval;
+            }
+        }
+        else
+        {
+            reent->_errno = -handleint;
+            return -1;
+        }
+    }
+
+    /* There is no filesystem backing this file. */
     reent->_errno = ENOTSUP;
     return -1;
 }
