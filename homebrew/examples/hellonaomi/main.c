@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
-#include "naomi/video.h"
-#include "naomi/timer.h"
+#include <naomi/video.h>
+#include <naomi/timer.h>
 
 extern unsigned int sonic_png_width;
 extern unsigned int sonic_png_height;

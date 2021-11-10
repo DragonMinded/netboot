@@ -1,10 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include "naomi/system.h"
-#include "naomi/video.h"
-#include "naomi/maple.h"
-#include "naomi/console.h"
+#include <naomi/system.h>
+#include <naomi/video.h>
+#include <naomi/maple.h>
+#include <naomi/console.h>
 
 void main()
 {

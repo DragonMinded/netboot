@@ -1,12 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include "naomi/video.h"
-#include "naomi/eeprom.h"
-#include "naomi/thread.h"
-#include "naomi/interrupt.h"
-#include "naomi/timer.h"
-#include "naomi/rtc.h"
+#include <naomi/video.h>
+#include <naomi/eeprom.h>
+#include <naomi/thread.h>
+#include <naomi/interrupt.h>
+#include <naomi/timer.h>
+#include <naomi/rtc.h>
 
 void *thread1(void *param)
 {

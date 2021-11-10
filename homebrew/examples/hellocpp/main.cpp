@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdint.h>
-#include "naomi/video.h"
+#include <naomi/video.h>
 
 class Counter
 {

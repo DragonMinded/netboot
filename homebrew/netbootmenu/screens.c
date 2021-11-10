@@ -2,11 +2,11 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include "naomi/video.h"
-#include "naomi/audio.h"
-#include "naomi/system.h"
-#include "naomi/message/packet.h"
-#include "naomi/message/message.h"
+#include <naomi/video.h>
+#include <naomi/audio.h>
+#include <naomi/system.h>
+#include <naomi/message/packet.h>
+#include <naomi/message/message.h>
 #include "common.h"
 #include "config.h"
 #include "screens.h"

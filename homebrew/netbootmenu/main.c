@@ -1,11 +1,11 @@
 #include <stdint.h>
-#include "naomi/video.h"
-#include "naomi/maple.h"
-#include "naomi/system.h"
-#include "naomi/eeprom.h"
-#include "naomi/timer.h"
-#include "naomi/audio.h"
-#include "naomi/message/message.h"
+#include <naomi/video.h>
+#include <naomi/maple.h>
+#include <naomi/system.h>
+#include <naomi/eeprom.h>
+#include <naomi/timer.h>
+#include <naomi/audio.h>
+#include <naomi/message/message.h>
 #include "config.h"
 #include "screens.h"
 

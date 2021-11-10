@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
-#include "naomi/video.h"
-#include "naomi/maple.h"
-#include "naomi/message/message.h"
+#include <naomi/video.h>
+#include <naomi/maple.h>
+#include <naomi/message/message.h>
 
 void main()
 {

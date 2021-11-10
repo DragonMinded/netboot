@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <stdint.h>
-#include "naomi/video.h"
-#include "naomi/audio.h"
-#include "naomi/maple.h"
-#include "naomi/eeprom.h"
+#include <naomi/video.h>
+#include <naomi/audio.h>
+#include <naomi/maple.h>
+#include <naomi/eeprom.h>
 
 // Our sound, as linked by our makefile.
 extern uint8_t *success_raw_data;

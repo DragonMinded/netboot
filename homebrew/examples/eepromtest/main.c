@@ -2,9 +2,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include "naomi/video.h"
-#include "naomi/maple.h"
-#include "naomi/timer.h"
+#include <naomi/video.h>
+#include <naomi/maple.h>
+#include <naomi/timer.h>
 
 void main()
 {

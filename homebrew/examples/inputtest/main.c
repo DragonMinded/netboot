@@ -2,10 +2,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include "naomi/video.h"
-#include "naomi/maple.h"
-#include "naomi/eeprom.h"
-#include "naomi/console.h"
+#include <naomi/video.h>
+#include <naomi/maple.h>
+#include <naomi/eeprom.h>
+#include <naomi/console.h>
 
 void main()
 {

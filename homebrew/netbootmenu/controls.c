@@ -1,6 +1,6 @@
 #include <string.h>
-#include "naomi/timer.h"
-#include "naomi/maple.h"
+#include <naomi/timer.h>
+#include <naomi/maple.h>
 #include "common.h"
 #include "config.h"
 #include "controls.h"

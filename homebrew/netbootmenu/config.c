@@ -1,6 +1,6 @@
 #include <stdint.h>
-#include "naomi/eeprom.h"
-#include "naomi/video.h"
+#include <naomi/eeprom.h>
+#include <naomi/video.h>
 #include "common.h"
 #include "config.h"
 

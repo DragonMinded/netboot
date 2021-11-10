@@ -6,8 +6,8 @@ extern "C" {
 #endif
 
 #include <stdint.h>
-#include "naomi/eeprom.h"
-#include "naomi/video.h"
+#include <naomi/eeprom.h>
+#include <naomi/video.h>
 
 typedef struct __attribute__((__packed__))
 {
