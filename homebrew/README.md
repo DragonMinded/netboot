@@ -14,7 +14,6 @@ If you are looking for a great resource for programming, the first thing I would
 
 TODOs
 =====
- - Verify G1 functionality, add functionality for DMA from cartridge space.
  - Fill out more of the TODOs in system.c to add functionality such as a ROMFS.
  - Implement a stereo ring-buffer style audio system for code that wishes to render its own audio.
  - Use PowerVR accelerated texture commands instead of raw framebuffer.
