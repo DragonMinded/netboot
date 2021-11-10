@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <math.h>
 
-#define test_malloc_duration 10
+#define test_malloc_duration 20
 void test_malloc(test_context_t *context)
 {
     uint32_t firstmalloc = (uint32_t)malloc(1024);
