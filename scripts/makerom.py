@@ -319,6 +319,7 @@ def main() -> int:
         fpb.write(header.data)
         fpb.write(romdata)
 
+    print(f"Successfully built {args.bin}!")
     return 0
 
 
