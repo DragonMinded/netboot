@@ -21,3 +21,4 @@ TODOs
 =====
  - Implement a stereo ring-buffer style audio system for code that wishes to render its own audio.
  - Use PowerVR accelerated texture commands instead of raw framebuffer.
+ - Address various TODOs in libnaomi.
