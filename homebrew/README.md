@@ -1,3 +1,6 @@
+Naomi Toolchain & Libraries
+===========================
+
 A minimal Naomi homebrew environment, very loosely based off of KallistiOS toolchain work but bare metal. This assumes that you have a Linux computer with standard prerequisites for compiling gcc/newlib/binutils already installed. The Naomi system library is minimal, but will continue to get fleshed out. There is currently no support for pthreads or accelerated video though I hope to fix that as I continue to improve libnaomi.
 
 To get started, create a directory named "/opt/toolchains/naomi" and copy the contents of the `setup/` directory to it. This directory and the copied contents should be user-owned and user-writeable. Then, cd to "/opt/toolchains/naomi" and in order run `./download.sh` (downloads toolchain sources), `./unpack.sh` (unpacks the toolchain to be built), `make` (builds the toolchain and installs it in the correct directories) and finally `./cleanup.sh`. If everything is successful, you should have a working environment.
@@ -11,6 +14,8 @@ For convenience, libnaomi and the examples will all be built if you run `make` i
 For ease of tracking down program bugs, an exception handler is present which prints out the system registers, stack address and PC at the point of exception. For further convenience, debugging information is left in an elf file that resides in the build/ directory of an example you might be building. To locate the offending line of code when an exception is displayed, you can run `sh4-linux-gnu-addr2line --exe=build/naomi.elf <displayed PC address>` and the function and line of code where the exception occurred will be displayed for you.
 
 If you are looking for a great resource for programming, the first thing I would recommend is https://github.com/Kochise/dreamcast-docs which is mostly relevant to the Naomi. For memory maps and general low-level stuff, Mame's https://github.com/mamedev/mame/blob/master/src/mame/drivers/naomi.cpp is extremely valuable. Also the headers for various libnaomi modules contain descriptions for how to use the functions found within. And of course, you can look at the source code to the various examples or the included netdimm menu to see some actual code.
+
+*NOTE*: the toolchain and associated scripts build on top of the python code in the root of this repo. To successfully build and run the examples you will need to first set up dependencies and such. Please see the readme at the root of this repo for more details!
 
 TODOs
 =====
