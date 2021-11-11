@@ -1,4 +1,4 @@
-all: zlib libbz2 libpng freetype libjpeg
+all: zlib libbz2 libpng freetype libjpeg libxmp
 
 .PHONY: zlib
 zlib:
@@ -20,6 +20,10 @@ freetype:
 libjpeg:
 	$(MAKE) -C libjpeg install
 
+.PHONY: libxmp
+libxmp:
+	$(MAKE) -C libxmp install
+
 .PHONY: clean
 clean:
 	$(MAKE) -C zlib clean
@@ -27,6 +31,7 @@ clean:
 	$(MAKE) -C libpng clean
 	$(MAKE) -C freetype clean
 	$(MAKE) -C libjpeg clean
+	$(MAKE) -C libxmp clean
 
 .PHONY: allclean
 allclean:
@@ -35,3 +40,4 @@ allclean:
 	$(MAKE) -C libpng allclean
 	$(MAKE) -C freetype allclean
 	$(MAKE) -C libjpeg allclean
+	$(MAKE) -C libxmp allclean
