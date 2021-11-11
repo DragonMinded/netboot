@@ -14,6 +14,13 @@ include ../../Makefile.base
 libnaomimessage.a: ${OBJS}
 	$(AR) -rcs -o $@ $^
 
+# Package up all the dependencies and such that libnaomi needs and put them
+# into our install directory.
+.PHONY: install
+install: libnaomimessage.a
+	mkdir -p ${NAOMI_SH_BASE}/lib
+	cp libnaomimessage.a ${NAOMI_SH_BASE}/lib
+
 # Include a simple clean target which wipes the build directory
 # and kills any library built.
 .PHONY: clean

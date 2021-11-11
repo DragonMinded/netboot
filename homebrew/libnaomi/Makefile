@@ -60,6 +60,15 @@ build/aica.bin.o: build/aica.bin ${BIN2C_FILE}
 libnaomi.a: ${OBJS} build/aica.bin.o
 	$(AR) -rcs -o $@ $^
 
+# Package up all the dependencies and such that libnaomi needs and put them
+# into our install directory.
+.PHONY: install
+install: libnaomi.a
+	mkdir -p ${NAOMI_SH_BASE}/lib
+	cp libnaomi.a ${NAOMI_SH_BASE}/lib
+	mkdir -p ${NAOMI_SH_BASE}/include
+	cp -r naomi ${NAOMI_SH_BASE}/include
+
 # Include a simple clean target which wipes the build directory
 # and kills any library built.
 .PHONY: clean
