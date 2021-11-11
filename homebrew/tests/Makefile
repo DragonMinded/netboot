@@ -21,6 +21,10 @@ ifeq ($(call libmissing,freetype), 0)
 LIBS += -lfreetype -lbz2 -lz -lpng16
 endif
 
+# Provide a rule to build our ROM FS.
+build/romfs.bin: romfs/ ${ROMFSGEN_FILE}
+	${ROMFSGEN} $@ $<
+
 # Auto-find test cases and add them to the binary.
 TEST_SOURCES := $(wildcard *.c)
 
@@ -55,7 +59,7 @@ build/aica_test.bin.o: build/aica_test.bin ${BIN2C_FILE}
 
 # Provide the top-level ROM creation target for this binary.
 # See scripts.makerom for details about what is customizable.
-tests.bin: build/naomi.bin
+tests.bin: build/naomi.bin build/romfs.bin
 	PYTHONPATH=../../ python3 -m scripts.makerom $@ \
 		--title "libNaomi Test Suite ROM" \
 		--publisher "DragonMinded" \
@@ -63,7 +67,9 @@ tests.bin: build/naomi.bin
 		--section $<,${START_ADDR} \
 		--entrypoint ${MAIN_ADDR} \
 		--main-binary-includes-test-binary \
-		--test-entrypoint ${TEST_ADDR}
+		--test-entrypoint ${TEST_ADDR} \
+		--align-before-data 4 \
+		--filedata build/romfs.bin
 
 # Include a simple clean target which wipes the build directory
 # and kills any binary built.

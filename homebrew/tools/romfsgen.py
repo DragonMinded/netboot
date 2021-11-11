@@ -76,7 +76,7 @@ def make_directory(directory: str, parent: Optional[int], parententries: Optiona
     # Now, generate the header!
     header = b""
     for fname, entry in files.items():
-        headerentry = struct.pack("<III", entry.offset, entry.size, entry.type)
+        headerentry = struct.pack("<iII", entry.offset, entry.size, entry.type)
         filename = fname.encode("utf-8")[:(256 - 12)]
         if len(filename) < (256 - 12):
             filename = filename + b"\0" * ((256 - 12) - len(filename))

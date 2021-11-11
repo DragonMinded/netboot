@@ -3,6 +3,7 @@
 #include <string.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <unistd.h>
 #include "naomi/system.h"
 #include "naomi/romfs.h"
 #include "naomi/cart.h"
@@ -34,7 +35,7 @@ static romfs_hook_t active_hooks[MAX_ROM_FILESYSTEMS];
 typedef struct
 {
     // The offset, as relative to the start of the directory that it is in.
-    uint32_t offset;
+    int32_t offset;
 
     // The size, in bytes if it is a file or in entries if it is a directory.
     uint32_t size;
@@ -258,8 +259,14 @@ int _romfs_fstat(void *fshandle, void *file, struct stat *st)
     {
         open_file_t *filehandle = (open_file_t *)file;
 
-        // TODO: Implement.
-        return -ENOTSUP;
+        uint32_t old_irq = irq_disable();
+        memset(st, 0, sizeof(struct stat));
+        st->st_mode = S_IFREG;
+        st->st_nlink = 1;
+        st->st_size = filehandle->size;
+        irq_restore(old_irq);
+
+        return 0;
     }
     else
     {
@@ -273,8 +280,82 @@ int _romfs_lseek(void *fshandle, void *file, _off_t amount, int dir)
     {
         open_file_t *filehandle = (open_file_t *)file;
 
-        // TODO: Implement.
-        return -ENOTSUP;
+        uint32_t old_irq = irq_disable();
+        int seek_off = 0;
+
+        switch(dir)
+        {
+            case SEEK_SET:
+            {
+                if (amount > 0)
+                {
+                    filehandle->seek = amount;
+                }
+                else
+                {
+                    filehandle->seek = 0;
+                }
+
+                if (filehandle->seek > filehandle->size)
+                {
+                    filehandle->seek = filehandle->size;
+                }
+
+                seek_off = filehandle->seek;
+                break;
+            }
+            case SEEK_CUR:
+            {
+                int new_loc = (int)filehandle->seek + amount;
+
+                if (new_loc > 0)
+                {
+                    filehandle->seek = new_loc;
+                }
+                else
+                {
+                    filehandle->seek = 0;
+                }
+
+                if (filehandle->seek > filehandle->size)
+                {
+                    filehandle->seek = filehandle->size;
+                }
+
+                seek_off = filehandle->seek;
+                break;
+            }
+            case SEEK_END:
+            {
+                int new_loc = (int)filehandle->size + amount;
+
+                if (new_loc > 0)
+                {
+                    filehandle->seek = new_loc;
+                }
+                else
+                {
+                    filehandle->seek = 0;
+                }
+
+                if (filehandle->seek > filehandle->size)
+                {
+                    filehandle->seek = filehandle->size;
+                }
+
+                seek_off = filehandle->seek;
+                break;
+            }
+            default:
+            {
+                seek_off = -EINVAL;
+                break;
+            }
+        }
+
+        irq_restore(old_irq);
+
+        return seek_off;
     }
     else
     {
