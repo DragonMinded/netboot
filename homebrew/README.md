@@ -15,7 +15,7 @@ For ease of tracking down program bugs, an exception handler is present which pr
 
 If you are looking for a great resource for programming, the first thing I would recommend is https://github.com/Kochise/dreamcast-docs which is mostly relevant to the Naomi. For memory maps and general low-level stuff, Mame's https://github.com/mamedev/mame/blob/master/src/mame/drivers/naomi.cpp is extremely valuable. Also the headers for various libnaomi modules contain descriptions for how to use the functions found within. And of course, you can look at the source code to the various examples or the included netdimm menu to see some actual code.
 
-*NOTE*: the toolchain and associated scripts build on top of the python code in the root of this repo. To successfully build and run the examples you will need to first set up dependencies and such. Please see the readme at the root of this repo for more details!
+**NOTE**: the toolchain and associated scripts build on top of the python code in the root of this repo. To successfully build and run the examples you will need to first set up dependencies and such. Please see the readme at the root of this repo for more details!
 
 TODOs
 =====
