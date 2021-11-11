@@ -125,27 +125,34 @@ ARMOBJCOPY = ${NAOMI_ARM_OBJCOPY}
 # Set up default archiver, used for creating libraries.
 ARMAR = ${NAOMI_ARM_AR}
 
+# Our venv python3 so that dependencies work properly.
+VENV_PYTHON3 = ${NAOMI_BASE}/tools/pyenv/bin/python3
+
 # Set up various toolchain utilities.
 BIN2C_FILE = $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/bin2c.py
-BIN2C = python3 ${BIN2C_FILE}
+BIN2C = ${VENV_PYTHON3} ${BIN2C_FILE}
 
 # Set up various toolchain utilities.
-ADDR = python3 $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/addr.py
+ADDR = ${VENV_PYTHON3} $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/addr.py
 
 # Set up various toolchain utilities.
-DATE = python3 $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/date.py
+DATE = ${VENV_PYTHON3} $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/date.py
 
 # Set up various toolchain utilities.
 IMG2C_FILE = $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/sprite.py
-IMG2C = python3 ${IMG2C_FILE}
+IMG2C = ${VENV_PYTHON3} ${IMG2C_FILE}
 
 # Set up various toolchain utilities.
 PITCHGEN_FILE = $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/pitchgen.py
-PITCHGEN = python3 ${PITCHGEN_FILE}
+PITCHGEN = ${VENV_PYTHON3} ${PITCHGEN_FILE}
 
 # Set up various toolchain utilities.
 ROMFSGEN_FILE = $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/romfsgen.py
-ROMFSGEN = python3 ${ROMFSGEN_FILE}
+ROMFSGEN = ${VENV_PYTHON3} ${ROMFSGEN_FILE}
+
+# Set up various toolchain utilities.
+MAKEROM_FILE = $(dir $(abspath $(lastword $(MAKEFILE_LIST))))../scripts/makerom.py
+MAKEROM = ${VENV_PYTHON3} ${MAKEROM_FILE}
 
 # Set up library detection utility.
 libmissing = $(shell ${LD} -l$(1) 2>&1 | grep "cannot find" | wc -l)
@@ -169,6 +176,9 @@ SRCS ?=
 
 # A list of libraries that should be linked against.
 LIBS ?=
+
+# The actual bin file that we want to compile before attaching a rom header to it.
+NAOMI_BIN_FILE ?= build/naomi.bin
 
 # The desired start address of the executable. Its totally okay to leave this alone.
 # If you need to move it, however, it is overrideable.

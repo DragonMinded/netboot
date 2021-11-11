@@ -169,6 +169,9 @@ SRCS ?=
 # A list of libraries that should be linked against.
 LIBS ?=
 
+# The actual bin file that we want to compile before attaching a rom header to it.
+NAOMI_BIN_FILE ?= build/naomi.bin
+
 # The desired start address of the executable. Its totally okay to leave this alone.
 # If you need to move it, however, it is overrideable.
 START_ADDR ?= 0xc021000

@@ -22,13 +22,13 @@ SRCS += doit.raw
 include ../../Makefile.base
 
 # Provide the top-level ROM creation target for this binary.
-# See scripts.makerom for details about what is customizable.
-audiotest.bin: build/naomi.bin
-	PYTHONPATH=../../../ python3 -m scripts.makerom $@ \
+# See scripts/makerom.py for details about what is customizable.
+audiotest.bin: ${MAKEROM_FILE} ${NAOMI_BIN_FILE}
+	${MAKEROM} $@ \
 		--title "Audio Test" \
 		--publisher "DragonMinded" \
 		--serial "${SERIAL}" \
-		--section $<,${START_ADDR} \
+		--section ${NAOMI_BIN_FILE},${START_ADDR} \
 		--entrypoint ${MAIN_ADDR} \
 		--main-binary-includes-test-binary \
 		--test-entrypoint ${TEST_ADDR}

@@ -1,4 +1,13 @@
-all: libnaomi libnaomimessage examples tests
+all: pyenv libnaomi libnaomimessage examples tests
+
+${NAOMI_BASE}/tools/pyenv:
+	mkdir -p ${NAOMI_BASE}/tools
+	cd ${NAOMI_BASE}/tools && python3 -m venv pyenv
+	${NAOMI_BASE}/tools/pyenv/bin/python3 -m pip install wheel pillow
+	cd ../ && ${NAOMI_BASE}/tools/pyenv/bin/python3 -m pip install --no-warn-conflicts .
+
+.PHONY: pyenv
+pyenv: ${NAOMI_BASE}/tools/pyenv
 
 .PHONY: libnaomi
 libnaomi:
@@ -20,15 +29,16 @@ tests: libnaomi libnaomimessage
 copy: libnaomi libnaomimessage examples
 	$(MAKE) -C examples copy
 
-.PHONY: install-venv
-install-venv:
+.PHONY: wipe-install-venv
+wipe-install-venv:
+	mkdir -p ${NAOMI_BASE}/tools
 	cd ${NAOMI_BASE}/tools && rm -rf pyenv
 	cd ${NAOMI_BASE}/tools && python3 -m venv pyenv
-	${NAOMI_BASE}/tools/pyenv/bin/python3 -m pip install wheel
+	${NAOMI_BASE}/tools/pyenv/bin/python3 -m pip install wheel pillow
 	cd ../ && ${NAOMI_BASE}/tools/pyenv/bin/python3 -m pip install --no-warn-conflicts .
 
 .PHONY: install
-install: libnaomi libnaomimessage install-venv
+install: libnaomi libnaomimessage wipe-install-venv
 	$(MAKE) -C libnaomi install
 	$(MAKE) -C libnaomi/message install
 	mkdir -p ${NAOMI_BASE}/tools

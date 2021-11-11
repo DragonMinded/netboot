@@ -18,13 +18,13 @@ build/romfs.bin: romfs/ ${ROMFSGEN_FILE}
 	${ROMFSGEN} $@ $<
 
 # Provide the top-level ROM creation target for this binary.
-# See scripts.makerom for details about what is customizable.
-carttest.bin: build/naomi.bin build/romfs.bin
-	PYTHONPATH=../../../ python3 -m scripts.makerom $@ \
+# See scripts/makerom.py for details about what is customizable.
+carttest.bin: ${MAKEROM_FILE} ${NAOMI_BIN_FILE} build/romfs.bin
+	${MAKEROM} $@ \
 		--title "Cartridge Reading Example" \
 		--publisher "DragonMinded" \
 		--serial "${SERIAL}" \
-		--section $<,${START_ADDR} \
+		--section ${NAOMI_BIN_FILE},${START_ADDR} \
 		--entrypoint ${MAIN_ADDR} \
 		--main-binary-includes-test-binary \
 		--test-entrypoint ${TEST_ADDR} \

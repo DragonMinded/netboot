@@ -36,13 +36,13 @@ build/%.o: %.png ${IMG2C_FILE}
 	${CC} -c build/$<.c -o $@
 
 # Provide the top-level ROM creation target for this binary.
-# See scripts.makerom for details about what is customizable.
-netbootmenu.bin: build/naomi.bin
-	PYTHONPATH=../../ python3 -m scripts.makerom $@ \
+# See scripts/makerom.py for details about what is customizable.
+netbootmenu.bin: ${MAKEROM_FILE} ${NAOMI_BIN_FILE}
+	${MAKEROM} $@ \
 		--title "Net Boot ROM Picker Menu" \
 		--publisher "DragonMinded" \
 		--serial "${SERIAL}" \
-		--section $<,${START_ADDR} \
+		--section ${NAOMI_BIN_FILE},${START_ADDR} \
 		--entrypoint ${MAIN_ADDR} \
 		--main-binary-includes-test-binary \
 		--test-entrypoint ${TEST_ADDR}

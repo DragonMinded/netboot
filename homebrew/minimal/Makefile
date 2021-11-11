@@ -14,13 +14,13 @@ SRCS += main.c
 include ${NAOMI_BASE}/tools/Makefile.base
 
 # Provide the top-level ROM creation target for this binary.
-# See scripts.makerom for details about what is customizable.
-helloworld.bin: ${MAKEROM_FILE} build/naomi.bin
+# See scripts/makerom.py for details about what is customizable.
+helloworld.bin: ${MAKEROM_FILE} ${NAOMI_BIN_FILE}
 	${MAKEROM} $@ \
 		--title "Hello World" \
 		--publisher "Your Name Here" \
 		--serial "${SERIAL}" \
-		--section $<,${START_ADDR} \
+		--section ${NAOMI_BIN_FILE},${START_ADDR} \
 		--entrypoint ${MAIN_ADDR} \
 		--main-binary-includes-test-binary \
 		--test-entrypoint ${TEST_ADDR}

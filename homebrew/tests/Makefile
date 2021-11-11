@@ -58,13 +58,13 @@ build/aica_test.bin.o: build/aica_test.bin ${BIN2C_FILE}
 	${CC} -c $<.c -o $@
 
 # Provide the top-level ROM creation target for this binary.
-# See scripts.makerom for details about what is customizable.
-tests.bin: build/naomi.bin build/romfs.bin
-	PYTHONPATH=../../ python3 -m scripts.makerom $@ \
+# See scripts/makerom.py for details about what is customizable.
+tests.bin: ${MAKEROM_FILE} ${NAOMI_BIN_FILE} build/romfs.bin
+	${MAKEROM} $@ \
 		--title "libNaomi Test Suite ROM" \
 		--publisher "DragonMinded" \
 		--serial "${SERIAL}" \
-		--section $<,${START_ADDR} \
+		--section ${NAOMI_BIN_FILE},${START_ADDR} \
 		--entrypoint ${MAIN_ADDR} \
 		--main-binary-includes-test-binary \
 		--test-entrypoint ${TEST_ADDR} \
