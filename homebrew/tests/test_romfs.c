@@ -1,6 +1,9 @@
 // vim: set fileencoding=utf-8
 #include <stdlib.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include "naomi/romfs.h"
 
 void test_romfs_simple(test_context_t *context)
@@ -115,11 +118,90 @@ void test_romfs_seek(test_context_t *context)
     ASSERT(fclose(fp) == 0, "ROMFS failed to close file!");
 
     romfs_free_default();
-
 }
 
-// TODO: Test for fstat.
+void test_romfs_stat(test_context_t *context)
+{
+    ASSERT(romfs_init_default() == 0, "ROMFS init failed!");
 
-// TODO: Test for stat.
+    int filedes = open("rom://test.txt", O_RDONLY);
 
-// TODO: Test for directory traversal.
+    struct stat buffer;
+    ASSERT(fstat(filedes, &buffer) == 0, "ROMFS fstat call failed, errno is \"%s\" (%d)!", strerror(errno), errno);
+    ASSERT((buffer.st_mode & S_IFREG) == S_IFREG, "ROMFS fstat call reutrned invalid mode %04lx", buffer.st_mode);
+    ASSERT(buffer.st_nlink == 1, "ROMFS fstat call returned invalid number of links %d", buffer.st_nlink);
+    ASSERT(buffer.st_size == 19, "ROMFS fstat call returned invalid file size %ld", buffer.st_size);
+
+    close(filedes);
+
+    struct stat buffer2;
+    ASSERT(stat("rom://test.txt", &buffer2) == 0, "ROMFS fstat call failed, errno is \"%s\" (%d)!", strerror(errno), errno);
+    ASSERT((buffer2.st_mode & S_IFREG) == S_IFREG, "ROMFS fstat call reutrned invalid mode %04lx", buffer2.st_mode);
+    ASSERT(buffer2.st_nlink == 1, "ROMFS fstat call returned invalid number of links %d", buffer2.st_nlink);
+    ASSERT(buffer2.st_size == 19, "ROMFS fstat call returned invalid file size %ld", buffer2.st_size);
+
+    ASSERT(stat("rom://missing.txt", &buffer2) == -1, "ROMFS fstat call succeeded unexpectedly!");
+    ASSERT(errno == ENOENT, "ROMFS errno wrong, errno returned is \"%s\" (%d)!", strerror(errno), errno);
+
+    romfs_free_default();
+}
+
+void test_romfs_traversal(test_context_t *context)
+{
+    char buffer[128];
+    FILE *fp;
+
+    ASSERT(romfs_init_default() == 0, "ROMFS init failed!");
+
+    // Test that we can locate a file in a subdirectory.
+    fp = fopen("rom://subdir/test.txt", "r");
+    memset(buffer, 0x0, 128);
+    ASSERT(fread(buffer, 1, 128, fp) == 20, "ROMFS returned wrong read length!");
+    ASSERT(strcmp(buffer, "This is other data!\n") == 0, "ROMFS returned data from wrong file!");
+    fclose(fp);
+
+    // Test that we do not find a file that is in the root when we go into a subdirectory.
+    fp = fopen("rom://empty_dir/test.txt", "r");
+    ASSERT(fp == 0, "ROMFS unexpectedly opened file!");
+
+    // Test that we can traverse to our own directory as many times as needed.
+    fp = fopen("rom://./subdir/test.txt", "r");
+    memset(buffer, 0x0, 128);
+    ASSERT(fread(buffer, 1, 128, fp) == 20, "ROMFS returned wrong read length!");
+    ASSERT(strcmp(buffer, "This is other data!\n") == 0, "ROMFS returned data from wrong file!");
+    fclose(fp);
+
+    fp = fopen("rom://./test.txt", "r");
+    memset(buffer, 0x0, 128);
+    ASSERT(fread(buffer, 1, 128, fp) == 19, "ROMFS returned wrong read length!");
+    ASSERT(strcmp(buffer, "This is test data.\n") == 0, "ROMFS returned data from wrong file!");
+    fclose(fp);
+
+    fp = fopen("rom://./subdir/././././test.txt", "r");
+    memset(buffer, 0x0, 128);
+    ASSERT(fread(buffer, 1, 128, fp) == 20, "ROMFS returned wrong read length!");
+    ASSERT(strcmp(buffer, "This is other data!\n") == 0, "ROMFS returned data from wrong file!");
+    fclose(fp);
+
+    // Test that we can traverse back up the directory tree and get files correctly.
+    fp = fopen("rom://empty_dir/../subdir/../test.txt", "r");
+    memset(buffer, 0x0, 128);
+    ASSERT(fread(buffer, 1, 128, fp) == 19, "ROMFS returned wrong read length!");
+    ASSERT(strcmp(buffer, "This is test data.\n") == 0, "ROMFS returned data from wrong file!");
+    fclose(fp);
+
+    // Test that we can go up in the root directory and still get the root directory.
+    fp = fopen("rom://../../../test.txt", "r");
+    memset(buffer, 0x0, 128);
+    ASSERT(fread(buffer, 1, 128, fp) == 19, "ROMFS returned wrong read length!");
+    ASSERT(strcmp(buffer, "This is test data.\n") == 0, "ROMFS returned data from wrong file!");
+    fclose(fp);
+
+    fp = fopen("rom://../../../subdir/test.txt", "r");
+    memset(buffer, 0x0, 128);
+    ASSERT(fread(buffer, 1, 128, fp) == 20, "ROMFS returned wrong read length!");
+    ASSERT(strcmp(buffer, "This is other data!\n") == 0, "ROMFS returned data from wrong file!");
+    fclose(fp);
+
+    romfs_free_default();
+}
