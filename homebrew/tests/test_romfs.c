@@ -205,3 +205,5 @@ void test_romfs_traversal(test_context_t *context)
 
     romfs_free_default();
 }
+
+// TODO: Need a test for dup().

@@ -19,7 +19,7 @@
 
 // Base channel offset calculator, to be used with below
 // register constants.
-#define CHANNEL(channel, reg) (((channel) << 7) + (reg))
+#define CHANNEL(channel, reg) ((((unsigned int)(channel)) << 5) + (reg))
 #define AICA_CFG_ADDR_HIGH (0x00 >> 2)
 #define AICA_CFG_ADDR_LOW (0x04 >> 2)
 #define AICA_CFG_LOOP_START (0x08 >> 2)
@@ -39,8 +39,10 @@
 #define AICA_CFG_UNKNOWN6 (0x40 >> 2)
 #define AICA_CFG_UNKNOWN7 (0x44 >> 2)
 
-// Common registers
+// Common registers.
 #define AICA_VERSION (0x2800 >> 2)
+#define AICA_CHANNEL_OBSERVE (0x280C >> 2)
+#define AICA_CHANNEL_POSITION (0x2814 >> 2)
 
 // Our command buffer for talking to the SH.
 #define AICA_CMD_BUFFER(x) *((volatile uint32_t *)(0x20000 + x))
@@ -62,7 +64,7 @@ void aica_reset()
     volatile uint32_t *aicabase = (volatile uint32_t *)AICA_BASE;
 
     // Set master DAC volume to 0 when initializing registers.
-    aicabase[AICA_VERSION] = aicabase[AICA_VERSION] & 0xFFFFFFF0;
+    aicabase[AICA_VERSION] = aicabase[AICA_VERSION] & 0xFFF0;
 
     /* Reset all 64 channels to a silent state */
     for(unsigned int chan = 0; chan < AICA_MAX_CHANNELS; chan++)
@@ -89,7 +91,7 @@ void aica_reset()
     }
 
     // Set master DAC volume back to full volume
-    aicabase[AICA_VERSION] = (aicabase[AICA_VERSION] & 0xFFFFFFF0) | 0xF;
+    aicabase[AICA_VERSION] = (aicabase[AICA_VERSION] & 0xFFF0) | 0xF;
 }
 
 void aica_start_sound_oneshot(int channel, void *data, int format, int num_samples, int sample_rate, int vol, int pan)
@@ -188,6 +190,88 @@ void aica_stop_sound(int channel)
 
     // Don't forget to clear not just the start bit, but also the loop bit as well.
     aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] = (aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] & 0x3DFF) | 0x8000;
+}
+
+int aica_get_channel_position(int channel)
+{
+    volatile uint32_t *aicabase = (volatile uint32_t *)AICA_BASE;
+
+    /* Request to observe a particular channel */
+    aicabase[AICA_CHANNEL_OBSERVE] = ((channel << 8) & 0x3F00) | (aicabase[AICA_CHANNEL_OBSERVE] & 0xC0FF);
+
+    /* Spinloop for a wee bit */
+    for (volatile int i = 0; i < 40; i++) { ; }
+
+    /* Grab the position */
+    return aicabase[AICA_CHANNEL_POSITION] & 0xFFFF;
+}
+
+#define LEFT_STEREO_CHANNEL 62
+#define RIGHT_STEREO_CHANNEL 63
+
+void aica_start_stereo_ringbuffer(void *ldata, void *rdata, int format, int num_samples, int sample_rate)
+{
+    if (num_samples <= 0)
+    {
+        // Nothing to play?
+        return;
+    }
+    if (sample_rate < 1000)
+    {
+        sample_rate = 1000;
+    }
+    if (sample_rate > 96000)
+    {
+        sample_rate = 96000;
+    }
+
+    volatile uint32_t *aicabase = (volatile uint32_t *)AICA_BASE;
+
+    /* Set sample format and buffer address */
+    aicabase[CHANNEL(LEFT_STEREO_CHANNEL, AICA_CFG_ADDR_HIGH)] = 0x8200 | ((format & 0x3) << 7) | ((((unsigned long)ldata) >> 16) & 0x7F);
+    aicabase[CHANNEL(LEFT_STEREO_CHANNEL, AICA_CFG_ADDR_LOW)] = ((unsigned long)ldata) & 0xFFFF;
+    aicabase[CHANNEL(RIGHT_STEREO_CHANNEL, AICA_CFG_ADDR_HIGH)] = 0x8200 | ((format & 0x3) << 7) | ((((unsigned long)rdata) >> 16) & 0x7F);
+    aicabase[CHANNEL(RIGHT_STEREO_CHANNEL, AICA_CFG_ADDR_LOW)] = ((unsigned long)rdata) & 0xFFFF;
+
+    /* Number of samples */
+    aicabase[CHANNEL(LEFT_STEREO_CHANNEL, AICA_CFG_LOOP_START)] = 0;
+    aicabase[CHANNEL(LEFT_STEREO_CHANNEL, AICA_CFG_LOOP_END)] = num_samples;
+    aicabase[CHANNEL(RIGHT_STEREO_CHANNEL, AICA_CFG_LOOP_START)] = 0;
+    aicabase[CHANNEL(RIGHT_STEREO_CHANNEL, AICA_CFG_LOOP_END)] = num_samples;
+
+    /* Convert samplerate to pitch register format */
+    unsigned int pitch = pitch_reg(sample_rate);
+    aicabase[CHANNEL(LEFT_STEREO_CHANNEL, AICA_CFG_PITCH)] = pitch;
+    aicabase[CHANNEL(RIGHT_STEREO_CHANNEL, AICA_CFG_PITCH)] = pitch;
+
+    /* Set pan for each channel to respective speaker */
+    aicabase[CHANNEL(LEFT_STEREO_CHANNEL, AICA_CFG_PAN_VOLUME)] = (PAN_LEFT & 0x1F) | (0xD << 8);
+    aicabase[CHANNEL(RIGHT_STEREO_CHANNEL, AICA_CFG_PAN_VOLUME)] = (PAN_RIGHT & 0x1F) | (0xD << 8);
+
+    /* Set volume, LFO and the rest for both channels */
+    aicabase[CHANNEL(LEFT_STEREO_CHANNEL, AICA_CFG_VOLUME2)] = 0x20 | ((VOL_MAX & 0xFF) << 8);
+    aicabase[CHANNEL(LEFT_STEREO_CHANNEL, AICA_CFG_ADSR1)] = 0x001F;
+    aicabase[CHANNEL(LEFT_STEREO_CHANNEL, AICA_CFG_ADSR2)] = 0x001F;
+    aicabase[CHANNEL(LEFT_STEREO_CHANNEL, AICA_CFG_LFO1)] = 0;
+    aicabase[CHANNEL(LEFT_STEREO_CHANNEL, AICA_CFG_LFO2)] = 0;
+    aicabase[CHANNEL(RIGHT_STEREO_CHANNEL, AICA_CFG_VOLUME2)] = 0x20 | ((VOL_MAX & 0xFF) << 8);
+    aicabase[CHANNEL(RIGHT_STEREO_CHANNEL, AICA_CFG_ADSR1)] = 0x001F;
+    aicabase[CHANNEL(RIGHT_STEREO_CHANNEL, AICA_CFG_ADSR2)] = 0x001F;
+    aicabase[CHANNEL(RIGHT_STEREO_CHANNEL, AICA_CFG_LFO1)] = 0;
+    aicabase[CHANNEL(RIGHT_STEREO_CHANNEL, AICA_CFG_LFO2)] = 0;
+
+    /* Enable playback of both channels simultaneously */
+    aicabase[CHANNEL(LEFT_STEREO_CHANNEL, AICA_CFG_ADDR_HIGH)] = (aicabase[CHANNEL(LEFT_STEREO_CHANNEL, AICA_CFG_ADDR_HIGH)] & 0x3FFF) | 0xC000;
+    aicabase[CHANNEL(RIGHT_STEREO_CHANNEL, AICA_CFG_ADDR_HIGH)] = (aicabase[CHANNEL(RIGHT_STEREO_CHANNEL, AICA_CFG_ADDR_HIGH)] & 0x3FFF) | 0xC000;
+}
+
+void aica_stop_stereo_ringbuffer()
+{
+    volatile uint32_t *aicabase = (volatile uint32_t *)AICA_BASE;
+
+    // Don't forget to clear not just the start bit, but also the loop bit as well.
+    aicabase[CHANNEL(LEFT_STEREO_CHANNEL, AICA_CFG_ADDR_HIGH)] = (aicabase[CHANNEL(LEFT_STEREO_CHANNEL, AICA_CFG_ADDR_HIGH)] & 0x3DFF) | 0x8000;
+    aicabase[CHANNEL(RIGHT_STEREO_CHANNEL, AICA_CFG_ADDR_HIGH)] = (aicabase[CHANNEL(RIGHT_STEREO_CHANNEL, AICA_CFG_ADDR_HIGH)] & 0x3DFF) | 0x8000;
 }
 
 #define FLAGS_IN_USE 0x1
@@ -323,6 +407,10 @@ void main()
     channel_info_t channel_info[MAX_CHANNELS];
     memset(channel_info, 0, sizeof(channel_info_t) * MAX_CHANNELS);
 
+    // Remember our stereo ringbuffer locations.
+    uint32_t leftlocation = 0;
+    uint32_t rightlocation = 0;
+
     while( 1 )
     {
         // Update our uptime.
@@ -345,6 +433,8 @@ void main()
 
                     // None of the channels are playing anything anymore.
                     memset(channel_info, 0, sizeof(channel_info_t) * MAX_CHANNELS);
+                    leftlocation = 0;
+                    rightlocation = 0;
 
                     AICA_CMD_BUFFER(CMD_BUFFER_RESPONSE) = RESPONSE_SUCCESS;
                     break;
@@ -549,6 +639,134 @@ void main()
                         mysample->flags &= (~FLAGS_LOOP);
                         mysample->sampleloop = 0xFFFFFFFF;
                         AICA_CMD_BUFFER(CMD_BUFFER_RESPONSE) = RESPONSE_SUCCESS;
+                    }
+                    break;
+                }
+                case REQUEST_START_STEREO_RINGBUFFER:
+                {
+                    // Request that we allocate two ringbuffers for L/R audio and start playing them.
+                    uint32_t numsamples = params[0];
+                    uint32_t format = params[1];
+                    uint32_t samplerate = params[2];
+
+                    int sndformat = 0;
+                    if (format == ALLOCATE_AUDIO_FORMAT_8BIT)
+                    {
+                        sndformat = FORMAT_8BIT;
+                    }
+                    else if (format == ALLOCATE_AUDIO_FORMAT_16BIT)
+                    {
+                        sndformat = FORMAT_16BIT;
+                    }
+                    else
+                    {
+                        // Can't play this?
+                        break;
+                    }
+
+                    // Add a new sample.
+                    leftlocation = 0;
+                    rightlocation = 0;
+                    samples = new_sample(samples, &leftlocation, numsamples, format, samplerate);
+
+                    if (leftlocation)
+                    {
+                        samples = new_sample(samples, &rightlocation, numsamples, format, samplerate);
+                        if (rightlocation)
+                        {
+                            uint32_t datasize = numsamples * ((sndformat == FORMAT_16BIT) ? 2 : 1);
+                            memset((void *)leftlocation, 0, datasize);
+                            memset((void *)rightlocation, 0, datasize);
+
+                            aica_start_stereo_ringbuffer((void *)leftlocation, (void *)rightlocation, sndformat, numsamples, samplerate);
+                            AICA_CMD_BUFFER(CMD_BUFFER_RESPONSE) = RESPONSE_SUCCESS;
+                        }
+                        else
+                        {
+                            sample_info_t *mysample = find_sample(samples, leftlocation);
+                            if (mysample)
+                            {
+                                // Free it.
+                                mysample->flags = 0;
+                            }
+
+                            leftlocation = 0;
+                            rightlocation = 0;
+                        }
+                    }
+
+                    break;
+                }
+                case REQUEST_STOP_STEREO_RINGBUFFER:
+                {
+                    if (leftlocation && rightlocation)
+                    {
+                        // First, stop the sound.
+                        aica_stop_stereo_ringbuffer();
+
+                        // Second, mark the backing buffers as free.
+                        sample_info_t *leftsample = find_sample(samples, leftlocation);
+                        if (leftsample)
+                        {
+                            // Free it.
+                            leftsample->flags = 0;
+                        }
+                        sample_info_t *rightsample = find_sample(samples, rightlocation);
+                        if (rightsample)
+                        {
+                            // Free it.
+                            rightsample->flags = 0;
+                        }
+
+                        // Third, forget where the backing buffers are.
+                        leftlocation = 0;
+                        rightlocation = 0;
+
+                        // Return success.
+                        AICA_CMD_BUFFER(CMD_BUFFER_RESPONSE) = RESPONSE_SUCCESS;
+                    }
+
+                    break;
+                }
+                case REQUEST_RINGBUFFER_LOCATION:
+                {
+                    if (leftlocation && rightlocation)
+                    {
+                        uint32_t channel = params[0];
+                        switch (channel)
+                        {
+                            case CHANNEL_LEFT:
+                            {
+                                AICA_CMD_BUFFER(CMD_BUFFER_RESPONSE) = leftlocation;
+                                break;
+                            }
+                            case CHANNEL_RIGHT:
+                            {
+                                AICA_CMD_BUFFER(CMD_BUFFER_RESPONSE) = rightlocation;
+                                break;
+                            }
+                        }
+                    }
+                    break;
+                }
+                case REQUEST_RINGBUFFER_POSITION:
+                {
+                    if (leftlocation && rightlocation)
+                    {
+                        uint32_t channel = params[0];
+                        switch (channel)
+                        {
+                            case CHANNEL_LEFT:
+                            {
+                                AICA_CMD_BUFFER(CMD_BUFFER_RESPONSE) = aica_get_channel_position(LEFT_STEREO_CHANNEL);
+                                break;
+                            }
+                            case CHANNEL_RIGHT:
+                            {
+                                AICA_CMD_BUFFER(CMD_BUFFER_RESPONSE) = aica_get_channel_position(RIGHT_STEREO_CHANNEL);
+                                break;
+                            }
+                        }
                     }
                     break;
                 }

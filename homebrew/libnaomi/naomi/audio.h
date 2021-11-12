@@ -80,6 +80,31 @@ int audio_set_registered_sound_loop(int sound, unsigned int loop_point);
 // will not be converted to one-shot sounds.
 int audio_clear_registered_sound_loop(int sound);
 
+// Registers a stereo ringbuffer which can be written to for software-mixed sounds.
+// Returns 0 on successful ringbuffer initialization or a negative number on failure.
+// The format should be identical to audio_play_sound()/audio_register_sound(), and is
+// the format of data you will be writing later. The samplerate is the playback speed
+// of the buffer in hz. The num_samples is how many samples you want available in your
+// ringbuffer. Higher means less chance of underflow but higher latency on audio output.
+int audio_register_ringbuffer(int format, unsigned int samplerate, unsigned int num_samples);
+
+// Frees up a previously registered stereo ringbuffer.
+void audio_unregister_ringbuffer();
+
+// Write interleaved stereo data to the ringbuffer. The number of samples here is the
+// number of stereo sample pairs. It is assumed that the left channel comes first, then
+// the right. Returns the number of sample pairs that were successfully written.
+int audio_write_stereo_data(void *data, unsigned int num_samples);
+
+// Constants for the channel input to the below function.
+#define AUDIO_CHANNEL_LEFT 0
+#define AUDIO_CHANNEL_RIGHT 1
+
+// Write mono data to a particular channel in the ringbuffer. The number of samples here
+// is the number of individual samples for the channel. Returns the number of samples
+// that were successfully written.
+int audio_write_mono_data(int channel, void *data, unsigned int num_samples);
+
 #ifdef __cplusplus
 }
 #endif

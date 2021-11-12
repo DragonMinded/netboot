@@ -3,8 +3,10 @@
 #include <sys/types.h>
 #include <sys/reent.h>
 #include <sys/errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include "naomi/system.h"
 #include "naomi/maple.h"
 #include "naomi/timer.h"
@@ -424,6 +426,8 @@ typedef struct
     /* The handle as returned to newlib which will be given to all userspace
      * code calling standard file routines. */
     int fileno;
+    /* How many copies of ourselves exist. */
+    int copies;
 } fs_handle_t;
 
 static fs_mapping_t filesystems[MAX_FILESYSTEMS];
@@ -545,6 +549,85 @@ int _fs_next_handle()
     irq_restore(old_irq);
 
     return newhandle;
+}
+
+int dup(int oldfile)
+{
+    // Make sure to copy everything atomically.
+    uint32_t old_irq = irq_disable();
+
+    int oldoffset = -1;
+    for (int j = 0; j < MAX_OPEN_HANDLES; j++)
+    {
+        if (handles[j].fileno == oldfile)
+        {
+            oldoffset = j;
+            break;
+        }
+    }
+
+    int newfile;
+    if (oldoffset == -1)
+    {
+        errno = EBADF;
+        newfile = -1;
+    }
+    else
+    {
+        int newoffset = -1;
+        for (int j = 0; j < MAX_OPEN_HANDLES; j++)
+        {
+            if (handles[j].fileno == 0)
+            {
+                newoffset = j;
+                break;
+            }
+        }
+
+        if (newoffset == -1)
+        {
+            errno = EMFILE;
+            newfile = -1;
+        }
+        else
+        {
+            // Duplicate a file handle, returning a new handle.
+            newfile = _fs_next_handle();
+
+            // Set up the new file.
+            handles[newoffset].fileno = newfile;
+            handles[newoffset].handle = handles[oldoffset].handle;
+            handles[newoffset].fs_mapping = handles[oldoffset].fs_mapping;
+            handles[newoffset].copies = handles[oldoffset].copies;
+
+            // Set the copies plus 1 to all copies of this file handle.
+            handles[oldoffset].copies++;
+            for (int j = 0; j < MAX_OPEN_HANDLES; j++)
+            {
+                if (handles[j].handle == handles[oldoffset].handle)
+                {
+                    handles[j].copies++;
+                }
+            }
+        }
+    }
+
+    irq_restore(old_irq);
+    return newfile;
+}
+
+FILE * popen(const char *command, const char *type)
+{
+    // Don't support process open.
+    errno = ENOTSUP;
+    return 0;
+}
+
+int pclose(FILE *stream)
+{
+    // Don't support process close.
+    errno = ENOTSUP;
+    return -1;
 }
 
 int _fs_get_hooks(int fileno, filesystem_t **fs, void **fshandle, void **handle)
@@ -751,22 +834,48 @@ int _close_r(struct _reent *reent, int file)
     void *handle = 0;
     if (_fs_get_hooks(file, &fs, &fshandle, &handle))
     {
+        /* First, figure out if we need to close this handle at all, or if
+         * we have some duplicates hanging around. */
+        int copies = 0;
+        for (int i = 0; i < MAX_OPEN_HANDLES; i++)
+        {
+            if (handles[i].fileno == file)
+            {
+                copies = handles[i].copies;
+            }
+        }
+
         int retval;
         if (fs->close == 0)
         {
             /* Filesystem doesn't support close */
-            reent->_errno = ENOTSUP;
-            retval = -1;
+            retval = -ENOTSUP;
         }
         else
         {
-            /* Perform the close action. */
-            retval = fs->close(fshandle, handle);
+            if (copies == 1)
+            {
+                /* Perform the close action. */
+                retval = fs->close(fshandle, handle);
+            }
+            else
+            {
+                /* Don't actually close the file, we have more than one handle around. */
+                retval = 0;
+            }
         }
 
         /* Finally, before we return, unregister this handle. */
         for( int i = 0; i < MAX_OPEN_HANDLES; i++)
         {
+            if (handles[i].handle == handle)
+            {
+                handles[i].copies --;
+                if (handles[i].copies == 0)
+                {
+                    memset(&handles[i], 0, sizeof(fs_handle_t));
+                }
+            }
             if (handles[i].fileno == file)
             {
                 memset(&handles[i], 0, sizeof(fs_handle_t));
@@ -1005,6 +1114,7 @@ int _open_r(struct _reent *reent, const char *path, int flags, int mode)
                 handles[i].fileno = _fs_next_handle();
                 handles[i].handle = ptr;
                 handles[i].fs_mapping = mapping;
+                handles[i].copies = 1;
 
                 /* Return our own handle */
                 return handles[i].fileno;
