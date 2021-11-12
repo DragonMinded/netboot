@@ -232,6 +232,30 @@ void audio_unregister_sound(int sound)
     }
 }
 
+int audio_set_registered_sound_loop(int sound, unsigned int loop_point)
+{
+    if (sound > 0)
+    {
+        return __audio_exchange_command(REQUEST_SET_LOOP_POINT, sound, loop_point, 0, 0);
+    }
+    else
+    {
+        return -1;
+    }
+}
+
+int audio_clear_registered_sound_loop(int sound)
+{
+    if (sound > 0)
+    {
+        return __audio_exchange_command(REQUEST_CLEAR_LOOP_POINT, sound, 0, 0, 0);
+    }
+    else
+    {
+        return -1;
+    }
+}
+
 int audio_play_registered_sound(int sound, uint32_t speakers, float volume)
 {
     if (sound > 0)
@@ -248,6 +272,18 @@ int audio_play_registered_sound(int sound, uint32_t speakers, float volume)
         uint32_t loudness = __audio_volume_to_loudness(volume);
 
         return __audio_exchange_command(REQUEST_START_PLAY, sound, panning, loudness, 0) == RESPONSE_SUCCESS ? 0 : -1;
+    }
+    else
+    {
+        return -1;
+    }
+}
+
+int audio_stop_registered_sound(int sound)
+{
+    if (sound > 0)
+    {
+        return __audio_exchange_command(REQUEST_STOP_PLAY, sound, 0, 0, 0);
     }
     else
     {

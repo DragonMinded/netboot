@@ -57,9 +57,28 @@ int audio_register_sound(int format, unsigned int samplerate, void *data, unsign
 void audio_unregister_sound(int sound);
 
 // Play a previously-registered sound. This will be played on any available audio
-// channel. Passing it a negative number is the same as a noop. Returns zero on
-// success, or a negative value if there were no available channels.
+// channel. Passing it a negative number will perform a noop with a negative return.
+// Returns zero on success, or a negative value if there were no available channels.
+// You can call this as many times as you wand and that many copies of the sound
+// will play up to the hardware limit of simultaneous sounds.
 int audio_play_registered_sound(int sound, uint32_t speakers, float volume);
+
+// Stop every playing instance of a previously-registered sound. Returns zero on
+// success, or a negative value on failure. If you pass it a negative sound it will
+// behave like a noop except for returning failure.
+int audio_stop_registered_sound(int sound);
+
+// Requests that all subsequent audio_play_registered_sound() calls for this particular
+// registered sound be looped at a particular loop point. The loop point must be between
+// 0 and the number of samples in the sound. Set the loop point to 0 to repeat the
+// entire sound. Note that existing sounds that are currently playing will not be
+// converted to looping versions of the sound.
+int audio_set_registered_sound_loop(int sound, unsigned int loop_point);
+
+// Requests that all subsequent audio_play_registered_sound() calls for this particular
+// registered sound not be looped. Note that existing sounds that are currently looping
+// will not be converted to one-shot sounds.
+int audio_clear_registered_sound_loop(int sound);
 
 #ifdef __cplusplus
 }

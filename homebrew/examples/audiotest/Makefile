@@ -17,6 +17,7 @@ SRCS += four.raw
 SRCS += five.raw
 SRCS += six.raw
 SRCS += doit.raw
+SRCS += doot.raw
 
 # Pick up base makefile rules common to all examples.
 include ../../Makefile.base

@@ -45,6 +45,9 @@
 // Our command buffer for talking to the SH.
 #define AICA_CMD_BUFFER(x) *((volatile uint32_t *)(0x20000 + x))
 
+// The maximum hardware supported channels.
+#define AICA_MAX_CHANNELS 64
+
 // Our sample locations.
 #define FIRST_SAMPLE_LOCATION 0x20100
 
@@ -62,7 +65,7 @@ void aica_reset()
     aicabase[AICA_VERSION] = aicabase[AICA_VERSION] & 0xFFFFFFF0;
 
     /* Reset all 64 channels to a silent state */
-    for(unsigned int chan = 0; chan < 64; chan++)
+    for(unsigned int chan = 0; chan < AICA_MAX_CHANNELS; chan++)
     {
         // Initialize important registers
         aicabase[CHANNEL(chan, AICA_CFG_ADDR_HIGH)] = 0x8000;
@@ -187,18 +190,24 @@ void aica_stop_sound(int channel)
     aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] = (aicabase[CHANNEL(channel, AICA_CFG_ADDR_HIGH)] & 0x3DFF) | 0x8000;
 }
 
+#define FLAGS_IN_USE 0x1
+#define FLAGS_DISCARD_AFTER_USE 0x2
+#define FLAGS_LOOP 0x4
+
 typedef struct sample_info_struct
 {
+    // Flags, such as if this sample is in use or not, if it should be discarded
+    // after playing, whether it is a looping sample or regular sample, etc.
     // Whether this registered sample is in use or not.
-    unsigned int in_use;
-    // Whether to discard this sample once it is not playing.
-    unsigned int discard_after_use;
+    uint32_t flags;
     // The raw location in memory this sample resides.
     uint32_t location;
     // The raw size in memory this sample can be.
     unsigned int maxsize;
     // The number of individual sample values this sample contains.
     unsigned int numsamples;
+    // The loop point of the sample. If there is no loop point, this will be 0xFFFFFFFF.
+    unsigned int sampleloop;
     // The format of the sample, either ALLOCATE_AUDIO_FORMAT_8BIT or ALLOCATE_AUDIO_FORMAT_16BIT.
     unsigned int format;
     // The sample rate of this sample.
@@ -211,7 +220,7 @@ sample_info_t *find_sample(sample_info_t *head, uint32_t location)
 {
     while (head != 0)
     {
-        if (head->in_use && head->location == location)
+        if ((head->flags & FLAGS_IN_USE) && head->location == location)
         {
             return head;
         }
@@ -230,12 +239,12 @@ sample_info_t *new_sample(sample_info_t *head, uint32_t *location, unsigned int 
 
     while (head != 0)
     {
-        if (!head->in_use && head->maxsize >= size)
+        if (!(head->flags & FLAGS_IN_USE) && head->maxsize >= size)
         {
             // We can reuse this!
-            head->in_use = 1;
-            head->discard_after_use = 0;
+            head->flags = FLAGS_IN_USE;
             head->numsamples = numsamples;
+            head->sampleloop = 0xFFFFFFFF;
             head->format = format;
             head->samplerate = samplerate;
 
@@ -262,11 +271,11 @@ sample_info_t *new_sample(sample_info_t *head, uint32_t *location, unsigned int 
     // DMA to us must be 32-byte aligned and in chunks of 32 bytes, so allocate
     // based on that knowledge.
     sample_info_t *new = (sample_info_t *)spot;
-    new->in_use = 1;
-    new->discard_after_use = 0;
+    new->flags = FLAGS_IN_USE;
     new->location = (spot + sizeof(sample_info_t) + 31) & 0xFFFFFFE0;
     new->maxsize = (size + 31) & 0xFFFFFFE0;
     new->numsamples = numsamples;
+    new->sampleloop = 0xFFFFFFFF;
     new->format = format;
     new->samplerate = samplerate;
     new->next = 0;
@@ -289,6 +298,10 @@ sample_info_t *new_sample(sample_info_t *head, uint32_t *location, unsigned int 
     }
 }
 
+// The maximum channels we have for triggered sounds to play. We reserve two at the
+// top of the channel list for ringbuffer-style mixed sound from the SH-4.
+#define MAX_CHANNELS 62
+
 typedef struct
 {
     // When this channel is guaranteed to be free, as compared to the millisecond timer.
@@ -307,8 +320,8 @@ void main()
     aica_reset();
 
     // Reset our channel info trackers to a known state.
-    channel_info_t channel_info[64];
-    memset(channel_info, 0, sizeof(channel_info_t) * 64);
+    channel_info_t channel_info[MAX_CHANNELS];
+    memset(channel_info, 0, sizeof(channel_info_t) * MAX_CHANNELS);
 
     while( 1 )
     {
@@ -331,7 +344,7 @@ void main()
                     aica_reset();
 
                     // None of the channels are playing anything anymore.
-                    memset(channel_info, 0, sizeof(channel_info_t) * 64);
+                    memset(channel_info, 0, sizeof(channel_info_t) * MAX_CHANNELS);
 
                     AICA_CMD_BUFFER(CMD_BUFFER_RESPONSE) = RESPONSE_SUCCESS;
                     break;
@@ -360,11 +373,10 @@ void main()
                     if (mysample)
                     {
                         // Free it.
-                        mysample->in_use = 0;
-                        mysample->discard_after_use = 0;
+                        mysample->flags = 0;
 
                         // Free up any channels playing this sample.
-                        for (unsigned int chan = 0; chan < 64; chan++)
+                        for (unsigned int chan = 0; chan < MAX_CHANNELS; chan++)
                         {
                             if (channel_info[chan].sample == mysample)
                             {
@@ -389,15 +401,14 @@ void main()
                     if (mysample)
                     {
                         // Cool, found it, now assign it to a channel.
-                        for (unsigned int chan = 0; chan < 64; chan++)
+                        for (unsigned int chan = 0; chan < MAX_CHANNELS; chan++)
                         {
                             if (channel_info[chan].free_time <= millisecond_timer)
                             {
-                                if (channel_info[chan].sample != 0 && channel_info[chan].sample->discard_after_use)
+                                if (channel_info[chan].sample != 0 && (channel_info[chan].sample->flags & FLAGS_DISCARD_AFTER_USE))
                                 {
                                     // Free old sample.
-                                    channel_info[chan].sample->in_use = 0;
-                                    channel_info[chan].sample->discard_after_use = 0;
+                                    channel_info[chan].sample->flags = 0;
                                     channel_info[chan].sample = 0;
                                 }
 
@@ -425,7 +436,14 @@ void main()
 
                                 // We can use this channel.
                                 channel_info[chan].sample = mysample;
-                                channel_info[chan].free_time = millisecond_timer + ((mysample->numsamples * 1000) / mysample->samplerate) + 1;
+                                if (mysample->sampleloop == 0xFFFFFFFF)
+                                {
+                                    channel_info[chan].free_time = millisecond_timer + ((mysample->numsamples * 1000) / mysample->samplerate) + 1;
+                                }
+                                else
+                                {
+                                    channel_info[chan].free_time = 0xFFFFFFFF;
+                                }
 
                                 if (speakers & ALLOCATE_SPEAKER_LEFT)
                                 {
@@ -447,11 +465,45 @@ void main()
                                 }
 
                                 // Actually play it!
-                                aica_start_sound_oneshot(chan, (void *)mysample->location, format, mysample->numsamples, mysample->samplerate, vol, pan);
+                                if (mysample->sampleloop == 0xFFFFFFFF)
+                                {
+                                    aica_start_sound_oneshot(chan, (void *)mysample->location, format, mysample->numsamples, mysample->samplerate, vol, pan);
+                                }
+                                else
+                                {
+                                    aica_start_sound_loop(chan, (void *)mysample->location, format, mysample->numsamples, mysample->samplerate, vol, pan, mysample->sampleloop);
+                                }
                                 AICA_CMD_BUFFER(CMD_BUFFER_RESPONSE) = RESPONSE_SUCCESS;
                                 break;
                             }
                         }
+                    }
+                    break;
+                }
+                case REQUEST_STOP_PLAY:
+                {
+                    // Find the sample to stop playing.
+                    uint32_t location = params[0];
+
+                    sample_info_t *mysample = find_sample(samples, location);
+                    if (mysample)
+                    {
+                        for (unsigned int chan = 0; chan < MAX_CHANNELS; chan++)
+                        {
+                            if (channel_info[chan].sample == mysample)
+                            {
+                                aica_stop_sound(chan);
+                                channel_info[chan].sample = 0;
+                                channel_info[chan].free_time = 0;
+                            }
+                        }
+                        if (mysample->flags & FLAGS_DISCARD_AFTER_USE)
+                        {
+                            // Free this sample.
+                            mysample->flags = 0;
+                        }
+
+                        AICA_CMD_BUFFER(CMD_BUFFER_RESPONSE) = RESPONSE_SUCCESS;
                     }
                     break;
                 }
@@ -463,7 +515,39 @@ void main()
                     sample_info_t *mysample = find_sample(samples, location);
                     if (mysample)
                     {
-                        mysample->discard_after_use = 1;
+                        mysample->flags |= FLAGS_DISCARD_AFTER_USE;
+                        AICA_CMD_BUFFER(CMD_BUFFER_RESPONSE) = RESPONSE_SUCCESS;
+                    }
+                    break;
+                }
+                case REQUEST_SET_LOOP_POINT:
+                {
+                    // Find the sample to mark as looping instead of one-shot.
+                    uint32_t location = params[0];
+                    uint32_t sampleloop = params[1];
+
+                    sample_info_t *mysample = find_sample(samples, location);
+                    if (mysample)
+                    {
+                        if (sampleloop < mysample->numsamples)
+                        {
+                            mysample->flags |= FLAGS_LOOP;
+                            mysample->sampleloop = sampleloop;
+                            AICA_CMD_BUFFER(CMD_BUFFER_RESPONSE) = RESPONSE_SUCCESS;
+                        }
+                    }
+                    break;
+                }
+                case REQUEST_CLEAR_LOOP_POINT:
+                {
+                    // Find the sample to discard after playing.
+                    uint32_t location = params[0];
+
+                    sample_info_t *mysample = find_sample(samples, location);
+                    if (mysample)
+                    {
+                        mysample->flags &= (~FLAGS_LOOP);
+                        mysample->sampleloop = 0xFFFFFFFF;
                         AICA_CMD_BUFFER(CMD_BUFFER_RESPONSE) = RESPONSE_SUCCESS;
                     }
                     break;
@@ -478,16 +562,15 @@ void main()
         if (bookkeeping_timer != millisecond_timer)
         {
             bookkeeping_timer = millisecond_timer;
-            for (unsigned int chan = 0; chan < 64; chan++)
+            for (unsigned int chan = 0; chan < MAX_CHANNELS; chan++)
             {
                 if (channel_info[chan].free_time <= millisecond_timer && channel_info[chan].sample != 0)
                 {
                     // See if this sample needs freeing.
-                    if (channel_info[chan].sample->discard_after_use)
+                    if (channel_info[chan].sample->flags & FLAGS_DISCARD_AFTER_USE)
                     {
                         // It does!
-                        channel_info[chan].sample->in_use = 0;
-                        channel_info[chan].sample->discard_after_use = 0;
+                        channel_info[chan].sample->flags = 0;
                     }
 
                     // This channel doesn't need a reference to the sample anymore.
