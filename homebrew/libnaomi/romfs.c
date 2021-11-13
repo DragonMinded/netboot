@@ -129,6 +129,14 @@ directory_entry_t *_romfs_find_entry(uint32_t rootoffset, void *directory, unsig
     // Null terminate this, cuz, you know?
     next_entry[loc] = 0;
 
+    if (rest != 0 && next_entry[0] == 0)
+    {
+        // Empty directory specifier, treat it as a "."
+        next_entry[loc] = '.';
+        loc++;
+        next_entry[loc] = 0;
+    }
+
     // Now, find this entry.
     directory_entry_t *entry = _romfs_find_entry_in_directory(directory, entries, next_entry);
     if (entry == 0)

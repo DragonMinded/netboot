@@ -384,3 +384,5 @@ void test_romfs_directory(test_context_t *context)
 }
 
 // TODO: Need a test for dup().
+
+// TODO: Need a test for files of type "rom://subdir//file.txt" to check for redundant slashes.
