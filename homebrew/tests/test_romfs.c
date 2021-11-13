@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <dirent.h>
 #include "naomi/romfs.h"
 
 void test_romfs_simple(test_context_t *context)
@@ -203,6 +204,182 @@ void test_romfs_traversal(test_context_t *context)
     ASSERT(strcmp(buffer, "This is other data!\n") == 0, "ROMFS returned data from wrong file!");
     fclose(fp);
 
+    romfs_free_default();
+}
+
+void test_romfs_directory(test_context_t *context)
+{
+    ASSERT(romfs_init_default() == 0, "ROMFS init failed!");
+
+    DIR *dirp;
+    int file_count;
+
+    // Test the root directory.
+    dirp = opendir("rom://");
+    ASSERT(dirp != 0, "Failed to open directory in ROMFS, errno is \"%s\" (%d)!", strerror(errno), errno);
+
+    file_count = 0;
+    while (1)
+    {
+        errno = 0;
+        struct dirent* direntp = readdir( dirp );
+        if (direntp == NULL)
+        {
+            ASSERT(errno == 0, "Got error return from readdir, errno is \"%s\" (%d)!", strerror(errno), errno);
+            break;
+        }
+        file_count++;
+
+        if (strcmp(direntp->d_name, ".") == 0)
+        {
+            ASSERT(direntp->d_type == DT_DIR, "Expected %s to be %d but got %d", direntp->d_name, DT_DIR, direntp->d_type);
+            continue;
+        }
+        if (strcmp(direntp->d_name, "..") == 0)
+        {
+            ASSERT(direntp->d_type == DT_DIR, "Expected %s to be %d but got %d", direntp->d_name, DT_DIR, direntp->d_type);
+            continue;
+        }
+        if (strcmp(direntp->d_name, "test.txt") == 0)
+        {
+            ASSERT(direntp->d_type == DT_REG, "Expected %s to be %d but got %d", direntp->d_name, DT_REG, direntp->d_type);
+            continue;
+        }
+        if (strcmp(direntp->d_name, "subdir") == 0)
+        {
+            ASSERT(direntp->d_type == DT_DIR, "Expected %s to be %d but got %d", direntp->d_name, DT_DIR, direntp->d_type);
+            continue;
+        }
+        if (strcmp(direntp->d_name, "empty_dir") == 0)
+        {
+            ASSERT(direntp->d_type == DT_DIR, "Expected %s to be %d but got %d", direntp->d_name, DT_DIR, direntp->d_type);
+            continue;
+        }
+
+        ASSERT(0, "Unexpected file %s in directory!", direntp->d_name);
+    }
+
+    ASSERT(file_count == 5, "ROMFS returned wrong number of files %d to us!", file_count);
+    ASSERT(closedir(dirp) == 0, "ROMFS failed to close directory, errno is \"%s\" (%d)!", strerror(errno), errno);
+
+    // Test a subdirectory
+    dirp = opendir("rom://subdir/");
+    ASSERT(dirp != 0, "Failed to open directory in ROMFS, errno is \"%s\" (%d)!", strerror(errno), errno);
+
+    file_count = 0;
+    while (1)
+    {
+        errno = 0;
+        struct dirent* direntp = readdir( dirp );
+        if (direntp == NULL)
+        {
+            ASSERT(errno == 0, "Got error return from readdir, errno is \"%s\" (%d)!", strerror(errno), errno);
+            break;
+        }
+        file_count++;
+
+        if (strcmp(direntp->d_name, ".") == 0)
+        {
+            ASSERT(direntp->d_type == DT_DIR, "Expected %s to be %d but got %d", direntp->d_name, DT_DIR, direntp->d_type);
+            continue;
+        }
+        if (strcmp(direntp->d_name, "..") == 0)
+        {
+            ASSERT(direntp->d_type == DT_DIR, "Expected %s to be %d but got %d", direntp->d_name, DT_DIR, direntp->d_type);
+            continue;
+        }
+        if (strcmp(direntp->d_name, "test.txt") == 0)
+        {
+            ASSERT(direntp->d_type == DT_REG, "Expected %s to be %d but got %d", direntp->d_name, DT_REG, direntp->d_type);
+            continue;
+        }
+        if (strcmp(direntp->d_name, "file.txt") == 0)
+        {
+            ASSERT(direntp->d_type == DT_REG, "Expected %s to be %d but got %d", direntp->d_name, DT_REG, direntp->d_type);
+            continue;
+        }
+
+        ASSERT(0, "Unexpected file %s in directory!", direntp->d_name);
+    }
+
+    ASSERT(file_count == 4, "ROMFS returned wrong number of files %d to us!", file_count);
+    ASSERT(closedir(dirp) == 0, "ROMFS failed to close directory, errno is \"%s\" (%d)!", strerror(errno), errno);
+
+    // Test a subdirectory with no suffix slash.
+    dirp = opendir("rom://subdir");
+    ASSERT(dirp != 0, "Failed to open directory in ROMFS, errno is \"%s\" (%d)!", strerror(errno), errno);
+
+    file_count = 0;
+    while (1)
+    {
+        errno = 0;
+        struct dirent* direntp = readdir( dirp );
+        if (direntp == NULL)
+        {
+            ASSERT(errno == 0, "Got error return from readdir, errno is \"%s\" (%d)!", strerror(errno), errno);
+            break;
+        }
+        file_count++;
+
+        if (strcmp(direntp->d_name, ".") == 0)
+        {
+            ASSERT(direntp->d_type == DT_DIR, "Expected %s to be %d but got %d", direntp->d_name, DT_DIR, direntp->d_type);
+            continue;
+        }
+        if (strcmp(direntp->d_name, "..") == 0)
+        {
+            ASSERT(direntp->d_type == DT_DIR, "Expected %s to be %d but got %d", direntp->d_name, DT_DIR, direntp->d_type);
+            continue;
+        }
+        if (strcmp(direntp->d_name, "test.txt") == 0)
+        {
+            ASSERT(direntp->d_type == DT_REG, "Expected %s to be %d but got %d", direntp->d_name, DT_REG, direntp->d_type);
+            continue;
+        }
+        if (strcmp(direntp->d_name, "file.txt") == 0)
+        {
+            ASSERT(direntp->d_type == DT_REG, "Expected %s to be %d but got %d", direntp->d_name, DT_REG, direntp->d_type);
+            continue;
+        }
+
+        ASSERT(0, "Unexpected file %s in directory!", direntp->d_name);
+    }
+
+    ASSERT(file_count == 4, "ROMFS returned wrong number of files %d to us!", file_count);
+    ASSERT(closedir(dirp) == 0, "ROMFS failed to close directory, errno is \"%s\" (%d)!", strerror(errno), errno);
+
+    // Test an empty directory
+    dirp = opendir("rom://empty_dir/");
+    ASSERT(dirp != 0, "Failed to open directory in ROMFS, errno is \"%s\" (%d)!", strerror(errno), errno);
+
+    file_count = 0;
+    while (1)
+    {
+        errno = 0;
+        struct dirent* direntp = readdir( dirp );
+        if (direntp == NULL)
+        {
+            ASSERT(errno == 0, "Got error return from readdir, errno is \"%s\" (%d)!", strerror(errno), errno);
+            break;
+        }
+        file_count++;
+
+        if (strcmp(direntp->d_name, ".") == 0)
+        {
+            ASSERT(direntp->d_type == DT_DIR, "Expected %s to be %d but got %d", direntp->d_name, DT_DIR, direntp->d_type);
+            continue;
+        }
+        if (strcmp(direntp->d_name, "..") == 0)
+        {
+            ASSERT(direntp->d_type == DT_DIR, "Expected %s to be %d but got %d", direntp->d_name, DT_DIR, direntp->d_type);
+            continue;
+        }
+
+        ASSERT(0, "Unexpected file %s in directory!", direntp->d_name);
+    }
+
+    ASSERT(file_count == 2, "ROMFS returned wrong number of files %d to us!", file_count);
+    ASSERT(closedir(dirp) == 0, "ROMFS failed to close directory, errno is \"%s\" (%d)!", strerror(errno), errno);
     romfs_free_default();
 }
 

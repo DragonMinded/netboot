@@ -1431,3 +1431,194 @@ uint32_t *utf8_convert(const char * const str)
 
     return chars;
 }
+
+DIR *opendir(const char *name)
+{
+    int mapping = _fs_get_fs_by_name(name);
+    if (mapping >= 0)
+    {
+        filesystem_t *fs = filesystems[mapping].fs;
+        if (fs->opendir == 0)
+        {
+            /* Filesystem doesn't support opendir */
+            errno = ENOTSUP;
+            return 0;
+        }
+
+        void *handle = fs->opendir(filesystems[mapping].fshandle, name + strlen(filesystems[mapping].prefix));
+        int errnohandle = (int)handle;
+
+        if (errnohandle > 0)
+        {
+            /* Create new DIR handle */
+            DIR *dir = malloc(sizeof(DIR));
+            dir->handle = handle;
+            dir->fs = mapping;
+            dir->ent = malloc(sizeof(struct dirent));
+            return dir;
+        }
+        else
+        {
+            /* Couldn't open for some reason */
+            if (errnohandle == 0)
+            {
+                errno = ENOENT;
+            }
+            else
+            {
+                errno = -errnohandle;
+            }
+            return 0;
+        }
+    }
+
+    /* We don't have a filesystem mapping for this file. */
+    errno = ENOTSUP;
+    return 0;
+}
+
+struct dirent *readdir(DIR *dirp)
+{
+    if (dirp == 0)
+    {
+        errno = EINVAL;
+        return 0;
+    }
+    else
+    {
+        if (dirp->fs >= 0)
+        {
+            filesystem_t *fs = filesystems[dirp->fs].fs;
+            if (fs->readdir == 0)
+            {
+                /* Filesystem doesn't support readdir */
+                errno = ENOTSUP;
+                return 0;
+            }
+
+            int retval = fs->readdir(filesystems[dirp->fs].fshandle, dirp->handle, dirp->ent);
+            if (retval < 0)
+            {
+                errno = -retval;
+                return 0;
+            }
+            else if(retval > 0)
+            {
+                return dirp->ent;
+            }
+            else
+            {
+                return 0;
+            }
+        }
+        else
+        {
+            /* Somehow gave us a bogus DIR structure. */
+            errno = ENOTSUP;
+            return 0;
+        }
+    }
+}
+
+void seekdir(DIR *dirp, long loc)
+{
+    if (dirp == 0)
+    {
+        return;
+    }
+    else
+    {
+        if (dirp->fs >= 0)
+        {
+            filesystem_t *fs = filesystems[dirp->fs].fs;
+            if (fs->seekdir == 0)
+            {
+                /* Filesystem doesn't support seekdir/telldir */
+                return;
+            }
+
+            fs->seekdir(filesystems[dirp->fs].fshandle, dirp->handle, loc);
+        }
+    }
+}
+
+long telldir(DIR *dirp)
+{
+    if (dirp == 0)
+    {
+        errno = EINVAL;
+        return -1;
+    }
+    else
+    {
+        if (dirp->fs >= 0)
+        {
+            filesystem_t *fs = filesystems[dirp->fs].fs;
+            if (fs->seekdir == 0)
+            {
+                /* Filesystem doesn't support seekdir/telldir */
+                errno = ENOTSUP;
+                return -1;
+            }
+
+            int retval = fs->seekdir(filesystems[dirp->fs].fshandle, dirp->handle, -1);
+            if (retval < 0)
+            {
+                errno = -retval;
+                return -1;
+            }
+            else
+            {
+                return retval;
+            }
+        }
+        else
+        {
+            /* Somehow gave us a bogus DIR structure. */
+            errno = ENOTSUP;
+            return -1;
+        }
+    }
+}
+
+int closedir(DIR *dirp)
+{
+    if (dirp == 0)
+    {
+        errno = EINVAL;
+        return -1;
+    }
+    else
+    {
+        if (dirp->fs >= 0)
+        {
+            filesystem_t *fs = filesystems[dirp->fs].fs;
+            if (fs->closedir == 0)
+            {
+                /* Filesystem doesn't support closedir */
+                errno = ENOTSUP;
+                return -1;
+            }
+
+            int retval = fs->closedir(filesystems[dirp->fs].fshandle, dirp->handle);
+            free(dirp->ent);
+            free(dirp);
+
+            if (retval < 0)
+            {
+                errno = -retval;
+                return -1;
+            }
+            else
+            {
+                return retval;
+            }
+        }
+        else
+        {
+            /* Somehow gave us a bogus DIR structure. */
+            errno = ENOTSUP;
+            return -1;
+        }
+    }
+}

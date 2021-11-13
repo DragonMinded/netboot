@@ -82,7 +82,7 @@ directory_entry_t *_romfs_find_entry_in_directory(void *directory, unsigned int 
     {
         return 0;
     }
-    
+
     for (unsigned int i = 0; i < entries; i++)
     {
         if (strcmp(dir[i].filename, filename) == 0)
@@ -140,7 +140,10 @@ directory_entry_t *_romfs_find_entry(uint32_t rootoffset, void *directory, unsig
     // Okay, if we don't need to recurse (there was no rest) then this is the answer.
     if (rest == 0 || rest[0] == 0)
     {
-        *actual_offset = rootoffset + entry->offset;
+        if (actual_offset)
+        {
+            *actual_offset = rootoffset + entry->offset;
+        }
         return entry;
     }
 
@@ -154,7 +157,7 @@ directory_entry_t *_romfs_find_entry(uint32_t rootoffset, void *directory, unsig
 
     // Okay, safe to recurse.
     void *dirdata = malloc(entry->size * 256);
-    cart_read(dirdata, rootoffset + entry->offset, entry->size * 256); 
+    cart_read(dirdata, rootoffset + entry->offset, entry->size * 256);
     entry = _romfs_find_entry(rootoffset + entry->offset, dirdata, entry->size, rest, actual_offset);
     free(dirdata);
     return entry;
@@ -192,7 +195,7 @@ void *_romfs_open(void *fshandle, const char *name, int flags, int mode)
 {
     if (flags & O_DIRECTORY)
     {
-        // Don't currently support directory listing.
+        // Don't support directory listing through open/read/close.
         return (void *)-ENOTSUP;
     }
 
@@ -430,6 +433,146 @@ int _romfs_read(void *fshandle, void *file, void *ptr, int len)
     }
 }
 
+typedef struct
+{
+    directory_entry_t *dirsector;
+    uint32_t offset;
+    int loc;
+    int size;
+} dir_t;
+
+void *_romfs_opendir( void *fshandle, const char *path )
+{
+    if (path[0] != '/')
+    {
+        // Files MUST be absolute.
+        return (void *)-ENOENT;
+    }
+
+    // We must get our handle properly.
+    if (fshandle == 0)
+    {
+        return (void *)-EINVAL;
+    }
+
+    romfs_hook_t *hooks = (romfs_hook_t *)fshandle;
+    if (strcmp(path, "/") == 0)
+    {
+        dir_t *dir = malloc(sizeof(dir_t));
+        dir->dirsector = (directory_entry_t *)hooks->rootdir;
+        dir->offset = hooks->rootoffset;
+        dir->loc = 0;
+        dir->size = hooks->rootentries;
+        return dir;
+    }
+    else
+    {
+        uint32_t actual_offset = 0;
+        directory_entry_t *diritself = _romfs_find_entry(hooks->rootoffset, hooks->rootdir, hooks->rootentries, &path[1], &actual_offset);
+        if (diritself == 0)
+        {
+            return (void *)-ENOENT;
+        }
+        if (diritself->type != ENTRY_TYPE_DIR)
+        {
+            return (void *)-ENOTDIR;
+        }
+
+        dir_t *dir = malloc(sizeof(dir_t));
+        dir->dirsector = malloc(256 * diritself->size);
+        dir->offset = actual_offset;
+        dir->loc = 0;
+        dir->size = diritself->size;
+        cart_read(dir->dirsector, actual_offset, 256 * diritself->size);
+        return dir;
+    }
+}
+
+int _romfs_readdir( void *fshandle, void *dir, struct dirent *entry )
+{
+    if (dir == 0 || entry == 0)
+    {
+        return -EINVAL;
+    }
+    else
+    {
+        dir_t *actualdir = (dir_t *)dir;
+        if (actualdir->loc == actualdir->size)
+        {
+            // We reached the end of iteration!
+            return 0;
+        }
+        else
+        {
+            // Copy the entry details.
+            memset(entry->d_name, 0, NAME_MAX + 1);
+            strncpy(entry->d_name, actualdir->dirsector[actualdir->loc].filename, FILENAME_LEN < NAME_MAX ? FILENAME_LEN : NAME_MAX);
+            entry->d_ino = actualdir->offset + actualdir->dirsector[actualdir->loc].offset;
+
+            if (actualdir->dirsector[actualdir->loc].type == ENTRY_TYPE_DIR)
+            {
+                entry->d_type = DT_DIR;
+            }
+            else if (actualdir->dirsector[actualdir->loc].type == ENTRY_TYPE_FILE)
+            {
+                entry->d_type = DT_REG;
+            }
+            else
+            {
+                entry->d_type = DT_UNKNOWN;
+            }
+
+            // Advance to the next entry.
+            actualdir->loc ++;
+
+            return 1;
+        }
+    }
+}
+
+int _romfs_seekdir( void *fshandle, void *dir, int loc )
+{
+    if (dir == 0)
+    {
+        return -EINVAL;
+    }
+    else
+    {
+        dir_t *actualdir = (dir_t *)dir;
+        if (loc < 0)
+        {
+            loc = actualdir->loc;
+        }
+        if (loc > actualdir->size)
+        {
+            loc = actualdir->loc;
+        }
+
+        actualdir->loc = loc;
+        return actualdir->loc;
+    }
+}
+
+int _romfs_closedir( void *fshandle, void *dir )
+{
+    if (fshandle == 0 || dir == 0)
+    {
+        return -EINVAL;
+    }
+    else
+    {
+        romfs_hook_t *hooks = (romfs_hook_t *)fshandle;
+        dir_t *actualdir = (dir_t *)dir;
+
+        if (actualdir->dirsector != hooks->rootdir)
+        {
+            free(actualdir->dirsector);
+        }
+        free(actualdir);
+        return 0;
+    }
+}
+
 static filesystem_t romfs_hooks = {
     _romfs_open,
     _romfs_fstat,
@@ -441,6 +584,10 @@ static filesystem_t romfs_hooks = {
     0,  // We don't support mkdir.
     0,  // We don't support rename.
     0,  // We don't support unlink.
+    _romfs_opendir,
+    _romfs_readdir,
+    _romfs_seekdir,
+    _romfs_closedir,
 };
 
 int romfs_init(uint32_t rom_offset, char *prefix)

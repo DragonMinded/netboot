@@ -68,6 +68,7 @@ install: libnaomi.a
 	cp libnaomi.a ${NAOMI_SH_BASE}/lib
 	mkdir -p ${NAOMI_SH_BASE}/include
 	cp -r naomi ${NAOMI_SH_BASE}/include
+	cp -r sys ${NAOMI_SH_BASE}/include
 
 # Include a simple clean target which wipes the build directory
 # and kills any library built.

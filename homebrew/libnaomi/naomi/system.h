@@ -6,6 +6,7 @@ extern "C" {
 #endif
 
 #include <sys/stat.h>
+#include <dirent.h>
 
 // Constants that relate to the entire system (SH-4 specific).
 #define UNCACHED_MIRROR 0xA0000000
@@ -76,12 +77,15 @@ int unhook_stdio_calls( stdio_t *stdio_calls );
 // Actual struct full of callbacks which will be used to provide the functionality
 // of the filesystem. If you do not have an implementation for one or more of these
 // functions, set them to NULL and the system code will correctly provide a ENOTSUP
-// errno to the calling function. All functions except for open should return the
-// correct return value for the particular hook on success, or a negative errno
-// value on failure. This will be passed on to the user code calling the file function.
-// For open, on success a valid pointer to an internal structure should be returned.
-// On failure, a negative value representing the negated errno should be returned
-// (a cast might be required).
+// errno to the calling function. All functions except for open and opendir should
+// return the correct return value for the particular hook on success, or a negative
+// errno value on failure. This will be passed on to the user code calling the file
+// function. For open and opendir, on success a valid pointer to an internal structure
+// should be returned. On failure, a negative value representing the negated errno
+// should be returned (a cast might be required). For readdir, the dirent entry is
+// passed as a pointer to be filled out so that system code can handle allocating
+// space for it. On success it should return 1, on encountering the end of directory
+// it should return 0 and on failure it should return a negative errno value.
 typedef struct
 {
     // File handling routines.
@@ -98,8 +102,11 @@ typedef struct
     int (*rename)( void *fshandle, const char *oldname, const char *newname );
     int (*unlink)( void *fshandle, const char *name );
 
-    // For now, we have no directory handling routines because newlib provides
-    // no hooks for us so we will need to patch it. Boo.
+    // Directory handling routines.
+    void *(*opendir)( void *fshandle, const char *path );
+    int (*readdir)( void *fshandle, void *dir, struct dirent *entry );
+    int (*seekdir)( void *fshandle, void *dir, int loc );
+    int (*closedir)( void *fshandle, void *dir );
 } filesystem_t;
 
 // The longest prefix we can accept for a given filesystem.
