@@ -8,6 +8,7 @@ extern "C" {
 #include <sys/types.h>
 
 #define NAME_MAX 255
+#define PATH_MAX 2047
 
 #define DT_UNKNOWN 0
 #define DT_REG 1

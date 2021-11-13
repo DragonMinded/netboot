@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <dirent.h>
 #include "naomi/system.h"
 #include "naomi/maple.h"
 #include "naomi/timer.h"
@@ -675,6 +676,199 @@ int _fs_get_fs_by_name(const char * const name)
 
 }
 
+char *realpath(const char *restrict path, char *restrict resolved_path)
+{
+    if (path == 0)
+    {
+        errno = EINVAL;
+        return 0;
+    }
+
+    int mapping = _fs_get_fs_by_name(path);
+    if (mapping >= 0)
+    {
+        const char *fullpath = path + strlen(filesystems[mapping].prefix);
+
+        if (fullpath[0] != '/')
+        {
+            // Paths MUST be absolute, we do not support chdir()!
+            errno = ENOENT;
+            return 0;
+        }
+        // Skip past leading '/'.
+        fullpath ++;
+
+        // We need some memory for resolved_path if its not provided.
+        int allocated = 0;
+        if (resolved_path == 0)
+        {
+            resolved_path = malloc(PATH_MAX + 1);
+            allocated = 1;
+        }
+
+        if (fullpath[0] != 0)
+        {
+            char **parts = malloc(sizeof(char *));
+            parts[0] = malloc(PATH_MAX + 1);
+            memset(parts[0], 0, PATH_MAX + 1);
+            int partscount = 1;
+            int partpos = 0;
+            int trailing_slash = 0;
+
+            // Separate out into parts.
+            while (fullpath[0] != 0)
+            {
+                if (fullpath[0] == '/')
+                {
+                    if (fullpath[1] == 0)
+                    {
+                        // Don't need a new allocation, we're good as-is.
+                        trailing_slash = 1;
+                        break;
+                    }
+                    else
+                    {
+                        // Need to allocate more for parts.
+                        partscount++;
+                        parts = realloc(parts, sizeof(char *) * partscount);
+                        parts[partscount - 1] = malloc(PATH_MAX + 1);
+                        memset(parts[partscount - 1], 0, PATH_MAX + 1);
+                        partpos = 0;
+                    }
+
+                    // Skip past this character.
+                    fullpath++;
+                }
+                else
+                {
+                    parts[partscount - 1][partpos] = fullpath[0];
+                    partpos++;
+                    fullpath++;
+                }
+            }
+
+            // At this point we have a string of path parts. Now we need to rejoin
+            // them all canonicalized. First, take care of . and .. in the path.
+            char **newparts = malloc(sizeof(char *) * partscount);
+            int newpartscount = 0;
+            for (int i = 0; i < partscount; i++)
+            {
+                if (parts[i][0] == 0 || strcmp(parts[i], ".") == 0)
+                {
+                    // Ignore it, its just pointing at the current directory.
+                }
+                else if (strcmp(parts[i], "..") == 0)
+                {
+                    // Pop one directory.
+                    if (newpartscount > 0)
+                    {
+                        newpartscount--;
+                    }
+                }
+                else
+                {
+                    // Push one directory.
+                    newparts[newpartscount] = parts[i];
+                    newpartscount++;
+                }
+            }
+
+            // Now, we must go through and make sure each part of the canonical path
+            // is actually a directory.
+            int all_okay = 1;
+            strcpy(resolved_path, filesystems[mapping].prefix);
+            strcat(resolved_path, "/");
+
+            for (int i = 0; i < newpartscount; i++)
+            {
+                // First, concatenate it onto the path.
+                if (resolved_path[strlen(resolved_path) - 1] != '/')
+                {
+                    strcat(resolved_path, "/");
+                }
+                strcat(resolved_path, newparts[i]);
+
+                // Second, make sure it is a directory. It can only be a file if it
+                // is the last entry in the path.
+                struct stat st;
+                if (stat(resolved_path, &st) != 0)
+                {
+                    // We leave the errno alone so it can be returned.
+                    all_okay = 0;
+                    break;
+                }
+
+                if ((st.st_mode & S_IFDIR) != 0)
+                {
+                    // Its a directory!
+                    if (i == (newpartscount - 1))
+                    {
+                        // Need to append a final '/'.
+                        strcat(resolved_path, "/");
+                    }
+                }
+                else if ((st.st_mode & S_IFREG) != 0)
+                {
+                    // It can only be a file if it is the last part.
+                    if (i != (newpartscount - 1))
+                    {
+                        errno = ENOTDIR;
+                        all_okay = 0;
+                        break;
+                    }
+                    else if(trailing_slash)
+                    {
+                        errno = ENOTDIR;
+                        all_okay = 0;
+                        break;
+                    }
+                }
+                else
+                {
+                    // Unclear what this is, not valid.
+                    errno = ENOTDIR;
+                    all_okay = 0;
+                    break;
+                }
+            }
+
+            // Now, free up memory.
+            for (int i = 0; i < partscount; i++)
+            {
+                free(parts[i]);
+            }
+            free(parts);
+            free(newparts);
+
+            // Finally, return it if it was okay.
+            if (all_okay)
+            {
+                return resolved_path;
+            }
+            else
+            {
+                if (allocated)
+                {
+                    free(resolved_path);
+                }
+
+                return 0;
+            }
+        }
+        else
+        {
+            // Path is already normalized root path.
+            strcpy(resolved_path, path);
+            return resolved_path;
+        }
+    }
+    else
+    {
+        errno = ENOENT;
+        return 0;
+    }
+}
+
 _ssize_t _read_r(struct _reent *reent, int file, void *ptr, size_t len)
 {
     if( file == 0 )
@@ -1234,8 +1428,19 @@ int _stat_r(struct _reent *reent, const char *path, struct stat *st)
         }
         else
         {
-            reent->_errno = -handleint;
-            return -1;
+            if (-handleint == EISDIR)
+            {
+                /* This is actually a directory, not a file. */
+                memset(st, 0, sizeof(struct stat));
+                st->st_mode = S_IFDIR;
+                st->st_nlink = 1;
+                return 0;
+            }
+            else
+            {
+                reent->_errno = -handleint;
+                return -1;
+            }
         }
     }
 

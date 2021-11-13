@@ -129,7 +129,7 @@ void test_romfs_stat(test_context_t *context)
 
     struct stat buffer;
     ASSERT(fstat(filedes, &buffer) == 0, "ROMFS fstat call failed, errno is \"%s\" (%d)!", strerror(errno), errno);
-    ASSERT((buffer.st_mode & S_IFREG) == S_IFREG, "ROMFS fstat call reutrned invalid mode %04lx", buffer.st_mode);
+    ASSERT((buffer.st_mode & S_IFREG) == S_IFREG, "ROMFS fstat call returned invalid mode %04lx", buffer.st_mode);
     ASSERT(buffer.st_nlink == 1, "ROMFS fstat call returned invalid number of links %d", buffer.st_nlink);
     ASSERT(buffer.st_size == 19, "ROMFS fstat call returned invalid file size %ld", buffer.st_size);
 
@@ -137,12 +137,21 @@ void test_romfs_stat(test_context_t *context)
 
     struct stat buffer2;
     ASSERT(stat("rom://test.txt", &buffer2) == 0, "ROMFS fstat call failed, errno is \"%s\" (%d)!", strerror(errno), errno);
-    ASSERT((buffer2.st_mode & S_IFREG) == S_IFREG, "ROMFS fstat call reutrned invalid mode %04lx", buffer2.st_mode);
+    ASSERT((buffer2.st_mode & S_IFREG) == S_IFREG, "ROMFS fstat call returned invalid mode %04lx", buffer2.st_mode);
     ASSERT(buffer2.st_nlink == 1, "ROMFS fstat call returned invalid number of links %d", buffer2.st_nlink);
     ASSERT(buffer2.st_size == 19, "ROMFS fstat call returned invalid file size %ld", buffer2.st_size);
 
     ASSERT(stat("rom://missing.txt", &buffer2) == -1, "ROMFS fstat call succeeded unexpectedly!");
     ASSERT(errno == ENOENT, "ROMFS errno wrong, errno returned is \"%s\" (%d)!", strerror(errno), errno);
+
+    struct stat buffer3;
+    ASSERT(stat("rom://subdir", &buffer3) == 0, "ROMFS fstat call failed, errno is \"%s\" (%d)!", strerror(errno), errno);
+    ASSERT((buffer3.st_mode & S_IFDIR) == S_IFDIR, "ROMFS fstat call returned invalid mode %04lx", buffer3.st_mode);
+    ASSERT(buffer3.st_nlink == 1, "ROMFS fstat call returned invalid number of links %d", buffer3.st_nlink);
+
+    ASSERT(stat("rom://subdir/", &buffer3) == 0, "ROMFS fstat call failed, errno is \"%s\" (%d)!", strerror(errno), errno);
+    ASSERT((buffer3.st_mode & S_IFDIR) == S_IFDIR, "ROMFS fstat call returned invalid mode %04lx", buffer3.st_mode);
+    ASSERT(buffer3.st_nlink == 1, "ROMFS fstat call returned invalid number of links %d", buffer3.st_nlink);
 
     romfs_free_default();
 }
@@ -179,6 +188,12 @@ void test_romfs_traversal(test_context_t *context)
     fclose(fp);
 
     fp = fopen("rom://./subdir/././././test.txt", "r");
+    memset(buffer, 0x0, 128);
+    ASSERT(fread(buffer, 1, 128, fp) == 20, "ROMFS returned wrong read length!");
+    ASSERT(strcmp(buffer, "This is other data!\n") == 0, "ROMFS returned data from wrong file!");
+    fclose(fp);
+
+    fp = fopen("rom://./subdir/././////./test.txt", "r");
     memset(buffer, 0x0, 128);
     ASSERT(fread(buffer, 1, 128, fp) == 20, "ROMFS returned wrong read length!");
     ASSERT(strcmp(buffer, "This is other data!\n") == 0, "ROMFS returned data from wrong file!");
@@ -383,6 +398,115 @@ void test_romfs_directory(test_context_t *context)
     romfs_free_default();
 }
 
-// TODO: Need a test for dup().
+void test_romfs_dup(test_context_t *context)
+{
+    ASSERT(romfs_init_default() == 0, "ROMFS init failed!");
 
-// TODO: Need a test for files of type "rom://subdir//file.txt" to check for redundant slashes.
+    int fd = open("rom://test.txt", O_RDONLY);
+    char buf[128];
+
+    ASSERT(read(fd, buf, 10) == 10, "ROMFS returned wrong bytes read!");
+    ASSERT(lseek(fd, 0, SEEK_CUR) == 10, "ROMFS returned wrong location for file!");
+
+    // Now, duplicate it.
+    int fd2 = dup(fd);
+    ASSERT(fd2 != fd, "Duplicate file descriptor is the same!");
+    ASSERT(lseek(fd, 0, SEEK_CUR) == 10, "ROMFS returned wrong location for file!");
+    ASSERT(lseek(fd2, 0, SEEK_CUR) == 10, "ROMFS returned wrong location for file!");
+
+    // Read from one, ensure both move.
+    ASSERT(read(fd, buf, 1) == 1, "ROMFS returned wrong bytes read!");
+    ASSERT(lseek(fd, 0, SEEK_CUR) == 11, "ROMFS returned wrong location for file!");
+    ASSERT(lseek(fd2, 0, SEEK_CUR) == 11, "ROMFS returned wrong location for file!");
+
+    ASSERT(read(fd2, buf, 1) == 1, "ROMFS returned wrong bytes read!");
+    ASSERT(lseek(fd, 0, SEEK_CUR) == 12, "ROMFS returned wrong location for file!");
+    ASSERT(lseek(fd2, 0, SEEK_CUR) == 12, "ROMFS returned wrong location for file!");
+
+    // Close one, make sure we can access the other still.
+    close(fd);
+
+    ASSERT(read(fd2, buf, 1) == 1, "ROMFS returned wrong bytes read!");
+    ASSERT(read(fd, buf, 1) == -1, "ROMFS returned unexpected success for closed file!");
+    ASSERT(lseek(fd2, 0, SEEK_CUR) == 13, "ROMFS returned wrong location for file!");
+    ASSERT(lseek(fd, 0, SEEK_CUR) == -1, "ROMFS returned unexpected success for closed file!");
+
+    // Close the other, make sure neither can be accessed.
+    close(fd2);
+    ASSERT(read(fd2, buf, 1) == -1, "ROMFS returned unexpected success for closed file!");
+    ASSERT(lseek(fd2, 0, SEEK_CUR) == -1, "ROMFS returned unexpected success for closed file!");
+
+    romfs_free_default();
+}
+
+void test_romfs_realpath(test_context_t *context)
+{
+    char *abspath;
+
+    ASSERT(romfs_init_default() == 0, "ROMFS init failed!");
+
+    // Test for already absolute root.
+    ASSERT(abspath = realpath("rom://", 0), "realpath() returned failure, errno is \"%s\" (%d)!", strerror(errno), errno);
+    ASSERT(strcmp(abspath, "rom://") == 0, "realpath() returned invalid canonical path %s!", abspath);
+    free(abspath);
+
+    // Test for as many slashes or current directory markers as we want.
+    ASSERT(abspath = realpath("rom:///.///.//", 0), "realpath() returned failure, errno is \"%s\" (%d)!", strerror(errno), errno);
+    ASSERT(strcmp(abspath, "rom://") == 0, "realpath() returned invalid canonical path %s!", abspath);
+    free(abspath);
+
+    // Test for subdirectories.
+    ASSERT(abspath = realpath("rom://subdir", 0), "realpath() returned failure, errno is \"%s\" (%d)!", strerror(errno), errno);
+    ASSERT(strcmp(abspath, "rom://subdir/") == 0, "realpath() returned invalid canonical path %s!", abspath);
+    free(abspath);
+
+    ASSERT(abspath = realpath("rom://subdir/", 0), "realpath() returned failure, errno is \"%s\" (%d)!", strerror(errno), errno);
+    ASSERT(strcmp(abspath, "rom://subdir/") == 0, "realpath() returned invalid canonical path %s!", abspath);
+    free(abspath);
+
+    // Test for traversal past root.
+    ASSERT(abspath = realpath("rom://../subdir/", 0), "realpath() returned failure, errno is \"%s\" (%d)!", strerror(errno), errno);
+    ASSERT(strcmp(abspath, "rom://subdir/") == 0, "realpath() returned invalid canonical path %s!", abspath);
+    free(abspath);
+
+    // Test for regular traversal.
+    ASSERT(abspath = realpath("rom://subdir/..", 0), "realpath() returned failure, errno is \"%s\" (%d)!", strerror(errno), errno);
+    ASSERT(strcmp(abspath, "rom://") == 0, "realpath() returned invalid canonical path %s!", abspath);
+    free(abspath);
+
+    ASSERT(abspath = realpath("rom://subdir/../", 0), "realpath() returned failure, errno is \"%s\" (%d)!", strerror(errno), errno);
+    ASSERT(strcmp(abspath, "rom://") == 0, "realpath() returned invalid canonical path %s!", abspath);
+    free(abspath);
+
+    ASSERT(abspath = realpath("rom://subdir/../subdir", 0), "realpath() returned failure, errno is \"%s\" (%d)!", strerror(errno), errno);
+    ASSERT(strcmp(abspath, "rom://subdir/") == 0, "realpath() returned invalid canonical path %s!", abspath);
+    free(abspath);
+
+    // Test for basic files.
+    ASSERT(abspath = realpath("rom://subdir/../test.txt", 0), "realpath() returned failure, errno is \"%s\" (%d)!", strerror(errno), errno);
+    ASSERT(strcmp(abspath, "rom://test.txt") == 0, "realpath() returned invalid canonical path %s!", abspath);
+    free(abspath);
+
+    ASSERT(abspath = realpath("rom://subdir/file.txt", 0), "realpath() returned failure, errno is \"%s\" (%d)!", strerror(errno), errno);
+    ASSERT(strcmp(abspath, "rom://subdir/file.txt") == 0, "realpath() returned invalid canonical path %s!", abspath);
+    free(abspath);
+
+    // Test for nonexistent files.
+    ASSERT(realpath("rom://inval.txt", 0) == 0, "realpath() returned unexpected success!");
+    ASSERT(errno = ENOENT, "realpath() returned invalid errno %d, expected %d", errno, ENOENT);
+
+    ASSERT(realpath("rom://subdir/inval.txt", 0) == 0, "realpath() returned unexpected success!");
+    ASSERT(errno = ENOENT, "realpath() returned invalid errno %d, expected %d", errno, ENOENT);
+
+    ASSERT(realpath("rom://nonexistent/test.txt", 0) == 0, "realpath() returned unexpected success!");
+    ASSERT(errno = ENOENT, "realpath() returned invalid errno %d, expected %d", errno, ENOENT);
+
+    // Test for file in non-last location.
+    ASSERT(realpath("rom://test.txt/subdir/", 0) == 0, "realpath() returned unexpected success!");
+    ASSERT(errno = ENOTDIR, "realpath() returned invalid errno %d, expected %d", errno, ENOTDIR);
+
+    ASSERT(realpath("rom://test.txt/", 0) == 0, "realpath() returned unexpected success!");
+    ASSERT(errno = ENOTDIR, "realpath() returned invalid errno %d, expected %d", errno, ENOTDIR);
+
+    romfs_free_default();
+}
