@@ -44,7 +44,11 @@ def main() -> int:
     pixels = texture.convert('RGBA')
     outdata: List[bytes] = []
 
-    if args.depth == 2:
+    if args.depth == 1:
+        for r, g, b, _ in pixels.getdata():
+            gray = int(0.2989 * r + 0.5870 * g + 0.1140 * b)
+            outdata.append(struct.pack("<B", gray))
+    elif args.depth == 2:
         for r, g, b, a in pixels.getdata():
             outdata.append(struct.pack("<H", ((b >> 3) & (0x1F << 0)) | ((g << 2) & (0x1F << 5)) | ((r << 7) & (0x1F << 10)) | ((a << 8) & 0x8000)))
     else:

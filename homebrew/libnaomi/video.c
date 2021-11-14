@@ -186,6 +186,11 @@ unsigned int video_depth()
     return global_video_depth;
 }
 
+void *video_framebuffer()
+{
+    return buffer_base;
+}
+
 unsigned int video_is_vertical()
 {
     return global_video_vertical;
@@ -354,8 +359,8 @@ void video_init_simple()
     videobase[POWERVR2_FB_CLIP_Y] = (global_video_height << 16) | (0 << 0);
 
     // Wait for vblank like games do.
-    while(!(videobase[POWERVR2_SYNC_STAT] & 0x01ff)) { ; }
-    while((videobase[POWERVR2_SYNC_STAT] & 0x01ff)) { ; }
+    uint32_t vblank_in_position = videobase[POWERVR2_VBLANK_INTERRUPT] & 0x1FF;
+    while((videobase[POWERVR2_SYNC_STAT] & 0x1FF) != vblank_in_position) { ; }
     irq_restore(old_interrupts);
 }
 

@@ -14,22 +14,25 @@ extern "C" {
 
 // Constants that relate to the Naomi's memory map.
 #define BIOS_BASE 0x00000000
-#define BIOS_SIZE 0x200000
+#define BIOS_SIZE 0x00200000
 
 #define SRAM_BASE 0x00200000
-#define SRAM_SIZE 0x8000
+#define SRAM_SIZE 0x00008000
 
 #define SOUNDRAM_BASE 0x00800000
-#define SOUNDRAM_SIZE 0x800000
+#define SOUNDRAM_SIZE 0x00800000
+
+#define TEXRAM_BASE 0x04000000
+#define TEXRAM_SIZE 0x01000000
 
 #define VRAM_BASE 0x05000000
-#define VRAM_SIZE 0x1000000
+#define VRAM_SIZE 0x01000000
 
 #define RAM_BASE 0x0c000000
-#define RAM_SIZE 0x2000000
+#define RAM_SIZE 0x02000000
 
 #define STORE_QUEUE_BASE 0xE0000000
-#define STORE_QUEUE_SIZE 0x4000000
+#define STORE_QUEUE_SIZE 0x04000000
 
 // A 32-byte aligned and 32-byte multiple hardware memset that is about 3x faster than
 // the fastest tight loop that you can write in software. Returns nonzero if the copy was

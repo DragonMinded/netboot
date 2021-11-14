@@ -43,6 +43,10 @@ unsigned int video_height();
 // be 2 or 4 depending on the video mode.
 unsigned int video_depth();
 
+// The current framebuffer that we are rendering to, for instances where
+// you need direct access.
+void *video_framebuffer();
+
 // Scratch memory area in the VRAM region safe to modify without possibly
 // corrupting video contents.
 void *video_scratch_area();
