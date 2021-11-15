@@ -14,6 +14,7 @@
 typedef struct
 {
     void *public;
+    uint32_t id;
     unsigned int type;
     uint32_t max;
     uint32_t current;
@@ -21,19 +22,28 @@ typedef struct
 } semaphore_internal_t;
 
 static semaphore_internal_t *semaphores[MAX_SEM_AND_MUTEX];
-static uint32_t semaphore_counter = 1;
-static uint32_t mutex_counter = 1;
+static uint32_t semaphore_counter = MAX_SEM_AND_MUTEX;
+static int global_semaphore_count = 0;
+static int global_mutex_count = 0;
 
 semaphore_internal_t *_semaphore_find(void * semaphore, unsigned int type)
 {
     if (semaphore != 0)
     {
-        for (unsigned int i = 0; i < MAX_SEM_AND_MUTEX; i++)
+        unsigned int id = 0;
+        if (type == SEM_TYPE_MUTEX)
         {
-            if (semaphores[i] != 0 && semaphores[i]->public == semaphore && semaphores[i]->type == type)
-            {
-                return semaphores[i];
-            }
+            id = ((mutex_t *)semaphore)->id;
+        }
+        else if (type == SEM_TYPE_SEMAPHORE)
+        {
+            id = ((semaphore_t *)semaphore)->id;
+        }
+        unsigned int slot = id % MAX_SEM_AND_MUTEX;
+
+        if (semaphores[slot] != 0 && semaphores[slot]->id == id && semaphores[slot]->type == type)
+        {
+            return semaphores[slot];
         }
     }
 
@@ -515,8 +525,9 @@ void _thread_init()
 
     thread_counter = 1;
     global_counter_counter = 1;
-    semaphore_counter = 1;
-    mutex_counter = 1;
+    semaphore_counter = MAX_SEM_AND_MUTEX;
+    global_semaphore_count = 0;
+    global_mutex_count = 0;
     current_profile = 0;
     running_time_denominator = 0;
     interruptions = 0;
@@ -586,6 +597,8 @@ void _thread_free()
         round_robin = 0;
     }
     round_robin_count = 0;
+    global_semaphore_count = 0;
+    global_mutex_count = 0;
 
     irq_restore(old_interrupts);
 }
@@ -1348,27 +1361,18 @@ void semaphore_init(semaphore_t *semaphore, uint32_t initial_value)
     if (semaphore)
     {
         // Enforce maximum, since we combine semaphores and mutexes.
-        int sem_count = 0;
-        for (unsigned int i = 0; i < MAX_SEM_AND_MUTEX; i++)
-        {
-            if (semaphores[i] != 0 && semaphores[i]->type == SEM_TYPE_SEMAPHORE)
-            {
-                sem_count++;
-            }
-        }
-        if (sem_count >= MAX_SEMAPHORES)
+        if (global_semaphore_count >= MAX_SEMAPHORES)
         {
             return;
         }
 
         for (unsigned int i = 0; i < MAX_SEM_AND_MUTEX; i++)
         {
-            if (semaphores[i] == 0)
-            {
-                // Assign an ID to this semaphore. This is basically meaningless,
-                // but we might as well do something with the data passed in.
-                semaphore->id = semaphore_counter++;
+            uint32_t semaphore_id = semaphore_counter + i;
+            unsigned int slot = semaphore_id % MAX_SEM_AND_MUTEX;
 
+            if (semaphores[slot] == 0)
+            {
                 // Create semaphore.
                 semaphore_internal_t *internal = malloc(sizeof(semaphore_internal_t));
                 if (internal == 0)
@@ -1378,13 +1382,18 @@ void semaphore_init(semaphore_t *semaphore, uint32_t initial_value)
 
                 // Set up the pointer and initial value.
                 internal->public = semaphore;
+                internal->id = semaphore_id;
                 internal->type = SEM_TYPE_SEMAPHORE;
                 internal->max = initial_value;
                 internal->current = initial_value;
 
                 // Put it in our registry.
-                semaphores[i] = internal;
+                semaphores[slot] = internal;
 
+                // Assign an ID to this semaphore so we can look it up again later.
+                semaphore->id = semaphore_id;
+                semaphore_counter = semaphore_id + 1;
+                global_semaphore_count ++;
                 break;
             }
         }
@@ -1413,15 +1422,13 @@ void semaphore_free(semaphore_t *semaphore)
 
     if (semaphore)
     {
-        for (unsigned int i = 0; i < MAX_SEM_AND_MUTEX; i++)
+        int slot = semaphore->id % MAX_SEM_AND_MUTEX;
+        if (semaphores[slot] != 0 && semaphores[slot]->id == semaphore->id && semaphores[slot]->type == SEM_TYPE_SEMAPHORE)
         {
-            if (semaphores[i] != 0 && semaphores[i]->public == semaphore && semaphores[i]->type == SEM_TYPE_SEMAPHORE)
-            {
-                free(semaphores[i]);
-                semaphores[i] = 0;
-                semaphore->id = 0;
-                break;
-            }
+            free(semaphores[slot]);
+            semaphores[slot] = 0;
+            semaphore->id = 0;
+            global_semaphore_count --;
         }
     }
 
@@ -1435,28 +1442,19 @@ void mutex_init(mutex_t *mutex)
     if (mutex)
     {
         // Enforce maximum, since we combine semaphores and mutexes.
-        int mut_count = 0;
-        for (unsigned int i = 0; i < MAX_SEM_AND_MUTEX; i++)
-        {
-            if (semaphores[i] != 0 && semaphores[i]->type == SEM_TYPE_MUTEX)
-            {
-                mut_count++;
-            }
-        }
-        if (mut_count >= MAX_MUTEXES)
+        if (global_mutex_count >= MAX_MUTEXES)
         {
             return;
         }
 
         for (unsigned int i = 0; i < MAX_SEM_AND_MUTEX; i++)
         {
-            if (semaphores[i] == 0)
-            {
-                // Assign an ID to this mutex. This is basically meaningless,
-                // but we might as well do something with the data passed in.
-                mutex->id = mutex_counter++;
+            uint32_t mutex_id = semaphore_counter + i;
+            unsigned int slot = mutex_id % MAX_SEM_AND_MUTEX;
 
-                // Create semaphore.
+            if (semaphores[slot] == 0)
+            {
+                // Create mutex.
                 semaphore_internal_t *internal = malloc(sizeof(semaphore_internal_t));
                 if (internal == 0)
                 {
@@ -1465,13 +1463,18 @@ void mutex_init(mutex_t *mutex)
 
                 // Set up the pointer and initial value.
                 internal->public = mutex;
+                internal->id = mutex_id;
                 internal->type = SEM_TYPE_MUTEX;
                 internal->max = 1;
                 internal->current = 1;
 
                 // Put it in our registry.
-                semaphores[i] = internal;
+                semaphores[slot] = internal;
 
+                // Assign an ID to this semaphore so we can look it up again later.
+                mutex->id = mutex_id;
+                semaphore_counter = mutex_id + 1;
+                global_mutex_count ++;
                 break;
             }
         }
@@ -1482,29 +1485,26 @@ void mutex_init(mutex_t *mutex)
 
 int mutex_try_lock(mutex_t *mutex)
 {
-    // This doesn't use a syscall since we don't want to context switch.
+    // This doesn't use a syscall since we don't want to context switch as this function
+    // supports being called with interrupts disabled, such as in HW drivers.
     uint32_t old_interrupts = irq_disable();
     int acquired = 0;
 
     if (mutex)
     {
-        for (unsigned int i = 0; i < MAX_SEM_AND_MUTEX; i++)
+        int slot = mutex->id % MAX_SEM_AND_MUTEX;
+        if (semaphores[slot] != 0 && semaphores[slot]->id == mutex->id && semaphores[slot]->type == SEM_TYPE_MUTEX)
         {
-            if (semaphores[i] != 0 && semaphores[i]->public == mutex && semaphores[i]->type == SEM_TYPE_MUTEX)
+            // This is the right mutex. See if we can acquire it.
+            if (semaphores[slot]->current > 0)
             {
-                // This is the right mutex. See if we can acquire it.
-                if (semaphores[i]->current > 0)
-                {
-                    acquired = 1;
-                    semaphores[i]->current --;
+                acquired = 1;
+                semaphores[slot]->current --;
 
-                    // Keep track of whether this was acquired with interrupts disabled or not.
-                    // This is because if it was, the subsequent unlock must be done without
-                    // syscalls as well.
-                    semaphores[i]->irq_disabled = _irq_was_disabled(old_interrupts);
-                }
-
-                break;
+                // Keep track of whether this was acquired with interrupts disabled or not.
+                // This is because if it was, the subsequent unlock must be done without
+                // syscalls as well.
+                semaphores[slot]->irq_disabled = _irq_was_disabled(old_interrupts);
             }
         }
     }
@@ -1529,17 +1529,15 @@ void mutex_unlock(mutex_t * mutex)
 
     if (mutex)
     {
-        for (unsigned int i = 0; i < MAX_SEM_AND_MUTEX; i++)
+        int slot = mutex->id % MAX_SEM_AND_MUTEX;
+        if (semaphores[slot] != 0 && semaphores[slot]->id == mutex->id && semaphores[slot]->type == SEM_TYPE_MUTEX && semaphores[slot]->irq_disabled)
         {
-            if (semaphores[i] != 0 && semaphores[i]->public == mutex && semaphores[i]->type == SEM_TYPE_MUTEX && semaphores[i]->irq_disabled)
-            {
-                // Unlock the mutex, exit without doing a syscall.
-                semaphores[i]->current ++;
-                semaphores[i]->irq_disabled = 0;
+            // Unlock the mutex, exit without doing a syscall.
+            semaphores[slot]->current ++;
+            semaphores[slot]->irq_disabled = 0;
 
-                irq_restore(old_interrupts);
-                return;
-            }
+            irq_restore(old_interrupts);
+            return;
         }
     }
 
@@ -1556,15 +1554,13 @@ void mutex_free(mutex_t *mutex)
 
     if (mutex)
     {
-        for (unsigned int i = 0; i < MAX_SEM_AND_MUTEX; i++)
+        int slot = mutex->id % MAX_SEM_AND_MUTEX;
+        if (semaphores[slot] != 0 && semaphores[slot]->id == mutex->id && semaphores[slot]->type == SEM_TYPE_MUTEX)
         {
-            if (semaphores[i] != 0 && semaphores[i]->public == mutex && semaphores[i]->type == SEM_TYPE_MUTEX)
-            {
-                free(semaphores[i]);
-                semaphores[i] = 0;
-                mutex->id = 0;
-                break;
-            }
+            free(semaphores[slot]);
+            semaphores[slot] = 0;
+            mutex->id = 0;
+            global_mutex_count --;
         }
     }
 
