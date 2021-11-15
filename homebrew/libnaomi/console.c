@@ -13,12 +13,13 @@ static unsigned int console_width = 0;
 static unsigned int console_height = 0;
 static unsigned int console_overscan = 0;
 static unsigned int console_visible = 0;
+static unsigned int console_pos = 0;
 static void *curhooks = 0;
 
 #define TAB_WIDTH 4
 
 #define move_buffer() \
-    memmove(render_buffer, render_buffer + (sizeof(char) * console_width), strlen(render_buffer) - (sizeof(char) * console_width)); \
+    memmove(render_buffer, render_buffer + (sizeof(char) * console_width), (console_width * (console_height - 1))); \
     pos -= console_width;
 
 static int __console_write( const char * const buf, unsigned int len )
@@ -32,7 +33,7 @@ static int __console_write( const char * const buf, unsigned int len )
         return len;
     }
 
-    int pos = strlen(render_buffer);
+    int pos = console_pos;
 
     /* Copy over to screen buffer */
     for(int x = 0; x < len; x++)
@@ -78,7 +79,7 @@ static int __console_write( const char * const buf, unsigned int len )
     }
 
     /* Cap off the end! */
-    render_buffer[pos] = 0;
+    console_pos = pos;
 
     /* Always write all */
     irq_restore(old_interrupts);
@@ -93,15 +94,16 @@ void console_init(unsigned int overscan)
         console_width = (video_width() - (overscan * 2)) / 8;
         console_height = (video_height() - (overscan * 2)) / 8;
         console_overscan = overscan;
+        console_pos = 0;
         console_visible = 1;
 
         /* Get memory for that size */
-        render_buffer = malloc((console_width * console_height) + 1);
+        render_buffer = malloc((console_width * console_height));
         if (render_buffer == 0)
         {
             _irq_display_invariant("malloc failure", "failed to allocate memory for console!");
         }
-        memset(render_buffer, 0, (console_width * console_height) + 1);
+        memset(render_buffer, ' ', (console_width * console_height));
 
         /* Register ourselves with newlib */
         stdio_t console_calls = { 0, __console_write, 0 };
@@ -119,6 +121,7 @@ void console_free()
         render_buffer = 0;
         console_width = 0;
         console_height = 0;
+        console_pos = 0;
 
         /* Unregister ourselves from newlib */
         unhook_stdio_calls( curhooks );
@@ -133,26 +136,10 @@ void console_render()
         fflush( stdout );
 
         /* Render now */
-        char *console_start = render_buffer;
-        char *console_end = render_buffer + strlen(render_buffer);
-        unsigned int line = console_overscan;
-        char *line_buf = malloc(console_width + 1);
-        if (line_buf == 0)
+        for (int pos = 0; pos < console_width * console_height; pos++)
         {
-            _irq_display_invariant("malloc failure", "failed to allocate memory for line display!");
+            video_draw_debug_character(console_overscan + ((pos % console_width) * 8), console_overscan + ((pos / console_width) * 8), rgb(255, 255, 255), render_buffer[pos]);
         }
-
-        while (console_start != console_end)
-        {
-            memcpy(line_buf, console_start, console_width);
-            line_buf[console_width] = 0;
-
-            video_draw_debug_text(console_overscan, line, rgb(255, 255, 255), line_buf);
-            console_start += strlen(line_buf);
-            line += 8;
-        }
-
-        free(line_buf);
     }
 }
 
@@ -168,7 +155,7 @@ char * console_save()
     if (render_buffer)
     {
         // Return where we are in the console, so it can be restored later.
-        location = render_buffer + strlen(render_buffer);
+        location = render_buffer + console_pos;
     }
 
     irq_restore(old_interrupts);
@@ -181,7 +168,8 @@ void console_restore(char *location)
     if (render_buffer && location >= render_buffer && location < (render_buffer + (console_width * console_height)))
     {
         // If the pointer is within our console, cap the console off at that location.
-        location[0] = 0;
+        console_pos = (int)(location - render_buffer);
+        memset(render_buffer + console_pos, ' ', (console_width * console_height) - console_pos);
     }
     irq_restore(old_interrupts);
 }
