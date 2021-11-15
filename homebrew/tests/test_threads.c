@@ -210,39 +210,39 @@ void test_threads_mutex_lock(test_context_t *context)
 
 void *wait_thread(void *param)
 {
+    int profile = profile_start();
     timer_wait(250000);
-    return 0;
+    return ((void *)(uint32_t)profile_end(profile));
 }
 
 void *sleep_thread(void *param)
 {
+    int profile = profile_start();
     thread_sleep(250000);
-    return 0;
+    return ((void *)(uint32_t)profile_end(profile));
 }
 
 void test_threads_sleep(test_context_t *context)
 {
     // First test wait.
     uint32_t thread = thread_create("test", wait_thread, 0);
-    int profile = profile_start();
 
+    thread_priority(thread, MAX_PRIORITY - 1);
     thread_start(thread);
-    thread_join(thread);
-    uint64_t time_spent = profile_end(profile);
+    uint32_t time_spent = (uint32_t)thread_join(thread);
     thread_destroy(thread);
 
-    ASSERT(time_spent > 250000, "Did not wait enough time in thread!");
-    ASSERT(time_spent < 251000, "Spent too much time bookkeeping!");
+    ASSERT(time_spent > 250000, "Did not wait enough time (%lu) in thread!", time_spent);
+    ASSERT(time_spent < 251000, "Spent too much time (%lu) bookkeeping!", time_spent);
 
     // Now test sleep.
     thread = thread_create("test", sleep_thread, 0);
-    profile = profile_start();
 
+    thread_priority(thread, MAX_PRIORITY - 1);
     thread_start(thread);
-    thread_join(thread);
-    time_spent = profile_end(profile);
+    time_spent = (uint32_t)thread_join(thread);
     thread_destroy(thread);
 
-    ASSERT(time_spent > 250000, "Did not wait enough time in thread!");
-    ASSERT(time_spent < 251000, "Spent too much time bookkeeping!");
+    ASSERT(time_spent > 250000, "Did not wait enough time (%lu) in thread!", time_spent);
+    ASSERT(time_spent < 251000, "Spent too much time (%lu) bookkeeping!", time_spent);
 }
