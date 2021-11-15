@@ -76,7 +76,7 @@ float translation_matrix[4][4] = {
     { 1.0,   0.0,    0.0,   0.0 },
     { 0.0,   1.0,    0.0,   0.0 },
     { 0.0,   0.0,    1.0,   0.0 },
-    { 0.0,   0.0,  ZOFFS,   1.0 },  
+    { 0.0,   0.0,  ZOFFS,   1.0 },
 };
 
 /* rotation functions */
@@ -134,10 +134,10 @@ void init_twiddletab()
     for(int x=0; x<1024; x++)
     {
         twiddletab[x] = (
-            (x&1) | 
-            ((x&2)<<1) | 
-            ((x&4)<<2) | 
-            ((x&8)<<3) | 
+            (x&1) |
+            ((x&2)<<1) |
+            ((x&4)<<2) |
+            ((x&8)<<3) |
             ((x&16)<<4) |
             ((x&32)<<5) |
             ((x&64)<<6) |
@@ -178,9 +178,16 @@ void draw_face(float *p1, float *p2, float *p3, float *p4, void *tex, int pal)
         TA_POLYMODE1_Z_ALWAYS |
         TA_POLYMODE1_CULL_CCW;
     mypoly.mode2 =
-        TA_POLYMODE2_BLEND_DEFAULT|TA_POLYMODE2_FOG_DISABLED|
-        TA_POLYMODE2_TEXTURE_CLAMP_U|TA_POLYMODE2_TEXTURE_CLAMP_V|
-        TA_POLYMODE2_TEXTURE_REPLACE|TA_POLYMODE2_U_SIZE_256|TA_POLYMODE2_V_SIZE_256;
+        TA_POLYMODE2_TEXTURE_DECAL |
+        TA_POLYMODE2_U_SIZE_256 |
+        TA_POLYMODE2_V_SIZE_256 |
+        TA_POLYMODE2_TEXTURE_CLAMP_U |
+        TA_POLYMODE2_TEXTURE_CLAMP_V |
+        TA_POLYMODE2_FOG_DISABLED |
+        TA_POLYMODE2_ENABLE_SRC_BLEND |
+        TA_POLYMODE2_ENABLE_DST_BLEND |
+        TA_POLYMODE2_SRC_BLEND_ONE |
+        TA_POLYMODE2_DST_BLEND_ZERO;
     mypoly.texture =
         TA_TEXTUREMODE_CLUT8 |
         TA_TEXTUREMODE_CLUTBANK8(pal) |
