@@ -122,14 +122,13 @@ static thread_t *threads[MAX_THREADS];
 
 thread_t *_thread_find_by_id(uint32_t id)
 {
-    for (unsigned int i = 0; i < highest_thread; i++)
+    unsigned int slot = id % MAX_THREADS;
+    if (threads[slot] != 0 && threads[slot]->id == id)
     {
-        if (threads[i] != 0 && threads[i]->id == id)
-        {
-            return threads[i];
-        }
+        return threads[slot];
     }
 
+    // Couldn't find it.
     return 0;
 }
 
@@ -196,7 +195,10 @@ thread_t *_thread_create(char *name, int priority)
 
     for (unsigned int i = 0; i < MAX_THREADS; i++)
     {
-        if (threads[i] == 0)
+        uint32_t thread_id = thread_counter + i;
+        unsigned int slot = thread_id % MAX_THREADS;
+
+        if (threads[slot] == 0)
         {
             thread = malloc(sizeof(thread_t));
             if (thread == 0)
@@ -205,14 +207,14 @@ thread_t *_thread_create(char *name, int priority)
             }
             memset(thread, 0, sizeof(thread_t));
 
-            thread->id = thread_counter++;
+            thread->id = thread_id;
             thread->priority = priority;
             thread->state = THREAD_STATE_STOPPED;
             strncpy(thread->name, name, 63);
 
-            threads[i] = thread;
-            highest_thread = (i + 1) > highest_thread ? (i + 1) : highest_thread;
-
+            threads[slot] = thread;
+            highest_thread = (slot + 1) > highest_thread ? (slot + 1) : highest_thread;
+            thread_counter = thread_id + 1;
             break;
         }
     }
@@ -523,7 +525,7 @@ void _thread_init()
 {
     uint32_t old_interrupts = irq_disable();
 
-    thread_counter = 1;
+    thread_counter = MAX_THREADS;
     global_counter_counter = MAX_GLOBAL_COUNTERS;
     semaphore_counter = MAX_SEM_AND_MUTEX;
     global_semaphore_count = 0;
@@ -1622,14 +1624,11 @@ void thread_destroy(uint32_t tid)
 {
     uint32_t old_interrupts = irq_disable();
 
-    for (unsigned int i = 0; i < highest_thread; i++)
+    unsigned int slot = tid % MAX_THREADS;
+    if (threads[slot] != 0 && threads[slot]->id == tid)
     {
-        if (threads[i] != 0 && threads[i]->id == tid)
-        {
-            _thread_destroy(threads[i]);
-            threads[i] = 0;
-            break;
-        }
+        _thread_destroy(threads[slot]);
+        threads[slot] = 0;
     }
 
     irq_restore(old_interrupts);
