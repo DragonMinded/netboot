@@ -165,19 +165,19 @@ typedef struct
 } global_counter_t;
 
 static global_counter_t *global_counters[MAX_GLOBAL_COUNTERS];
-static uint32_t global_counter_counter = 1;
+static uint32_t global_counter_counter = MAX_GLOBAL_COUNTERS;
 
 global_counter_t *_global_counter_find(uint32_t counterid)
 {
-    for (unsigned int i = 0; i < MAX_GLOBAL_COUNTERS; i++)
+    unsigned int slot = counterid % MAX_GLOBAL_COUNTERS;
+    if (global_counters[slot] != 0 && global_counters[slot]->id == counterid)
     {
-        if (global_counters[i] != 0 && global_counters[i]->id == counterid)
-        {
-            return global_counters[i];
-        }
+        return global_counters[slot];
     }
-
-    return 0;
+    else
+    {
+        return 0;
+    }
 }
 
 void * _idle_thread(void *param)
@@ -524,7 +524,7 @@ void _thread_init()
     uint32_t old_interrupts = irq_disable();
 
     thread_counter = 1;
-    global_counter_counter = 1;
+    global_counter_counter = MAX_GLOBAL_COUNTERS;
     semaphore_counter = MAX_SEM_AND_MUTEX;
     global_semaphore_count = 0;
     global_mutex_count = 0;
@@ -1290,7 +1290,10 @@ void *global_counter_init(uint32_t initial_value)
 
     for (unsigned int i = 0; i < MAX_GLOBAL_COUNTERS; i++)
     {
-        if (global_counters[i] == 0)
+        uint32_t counterid = global_counter_counter + i;
+        unsigned int slot = counterid % MAX_GLOBAL_COUNTERS;
+
+        if (global_counters[slot] == 0)
         {
             // Create counter.
             global_counter_t *counter = malloc(sizeof(global_counter_t));
@@ -1300,15 +1303,15 @@ void *global_counter_init(uint32_t initial_value)
             }
 
             // Set up the ID and initial value.
-            counter->id = global_counter_counter++;
+            counter->id = counterid;
             counter->current = initial_value;
+            global_counter_counter = counterid + 1;
 
             // Put it in our registry.
-            global_counters[i] = counter;
+            global_counters[slot] = counter;
 
             // Return it.
             retval = (void *)counter->id;
-
             break;
         }
     }
@@ -1341,14 +1344,12 @@ void global_counter_free(void *counter)
 {
     uint32_t old_interrupts = irq_disable();
 
-    for (unsigned int i = 0; i < MAX_GLOBAL_COUNTERS; i++)
+    uint32_t id = (uint32_t)counter;
+    unsigned int slot = id % MAX_GLOBAL_COUNTERS;
+    if (global_counters[slot] != 0 && global_counters[slot]->id == id)
     {
-        if (global_counters[i] != 0 && global_counters[i]->id == (uint32_t)counter)
-        {
-            free(global_counters[i]);
-            global_counters[i] = 0;
-            break;
-        }
+        free(global_counters[slot]);
+        global_counters[slot] = 0;
     }
 
     irq_restore(old_interrupts);
