@@ -15,6 +15,10 @@ SRCS += dejavusans.ttf
 # Pick up base makefile rules common to all examples.
 include ../Makefile.base
 
+# Link against libnaomimessage so we can spit the testsuite out to the
+# host as well as the onscreen console.
+LIBS += -lnaomimessage
+
 # Only link against freetype if it has itself been compiled.
 ifeq ($(call libmissing,freetype), 0)
 # Libraries that we want to link against.

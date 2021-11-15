@@ -6,6 +6,7 @@
 #include "naomi/eeprom.h"
 #include "naomi/console.h"
 #include "naomi/timer.h"
+#include "naomi/message/message.h"
 
 typedef struct {
     const char * name;
@@ -227,6 +228,10 @@ void main()
     // Wait until the video thread has started up before trying to print to the console.
     while (global_counter_value(counter) == 0) { thread_yield(); }
     global_counter_free(counter);
+
+    // Allow the printf messages to go to a connected host as well.
+    message_init();
+    message_stdio_redirect_init();
 
     // Run the test suite!
     run_suite();
