@@ -255,20 +255,31 @@ void main()
        writes to the texture memory.  So for these 8bpp textures, we have
        to write two pixels at a time.  Fortunatelty, the twiddling algorithm
        (palette based textures can not be non-twiddled) keeps horizontally
-       adjacent pixel pairs together, so it's not a real problem.            */
+       adjacent pixel pairs together, so it's not a real problem. */
     for(int i=0; i<256; i++)
     {
         for(int j=0; j<256; j+=2)
         {
-            /* Texture 0 = Mandelbrot */
             tex[0][twiddletab[i]|(twiddletab[j]>>1)] = (tex1_png_data[j + 1 + (i * 256)] << 8) | tex1_png_data[j + (i * 256)];
             tex[1][twiddletab[i]|(twiddletab[j]>>1)] = (tex2_png_data[j + 1 + (i * 256)] << 8) | tex2_png_data[j + (i * 256)];
         }
     }
 
-    /* Create two sets of tile descriptors, to do double buffering */
+    int framebuffer_width;
+    int framebuffer_height;
+    if (video_is_vertical())
+    {
+        framebuffer_width = video_height();
+        framebuffer_height = video_width();
+    }
+    else
+    {
+        framebuffer_width = video_width();
+        framebuffer_height = video_height();
+    }
 
-    tiles = ta_create_tile_descriptors(bufs->tile_descriptor, bufs->tile_buffer, 640/32, 480/32);
+    /* Create two sets of tile descriptors, to do double buffering */
+    tiles = ta_create_tile_descriptors(bufs->tile_descriptor, bufs->tile_buffer, framebuffer_width / 32, framebuffer_height / 32);
 
     int i = 0;
     int j = 0;
@@ -322,8 +333,10 @@ void main()
         /* Clear section of screen in case the TA isn't running */
         video_fill_box(0, 0, video_width(), 64, rgb(0, 0, 0));
 
+        /* TODO: Set request to wait for TA commit end here. */
+
         /* Set up the command list compiler to use the right set of buffers */
-        ta_set_target(bufs->cmd_list, bufs->tile_buffer, 640/32, 480/32);
+        ta_set_target(bufs->cmd_list, bufs->tile_buffer, framebuffer_width / 32, framebuffer_height / 32);
 
         /* Draw the 6 faces of the cube */
         draw_face(trans_coords[0], trans_coords[1], trans_coords[2], trans_coords[3], tex[0], 0);
@@ -340,16 +353,10 @@ void main()
          * that's an interrupt. Instead, just sleep for a bit. */
         timer_wait(2500);
 
+        /* TODO: Set request to wait for TA render end here. */
+
         /* Start rendering the new command list to the screen */
-        ta_begin_render(
-            bufs->cmd_list,  // commandlist
-            tiles,  // tiles
-            video_framebuffer(),  // video framebuffer
-            (video_is_vertical() ? video_height() : video_width()) * video_depth(),  // modulo,
-            TA_PIXFMT_RGB555|TA_PIXFMT_DITHER, // pixelformat
-            640,  // clipw
-            480   // cliph
-        );
+        ta_begin_render(bufs->cmd_list, tiles, video_framebuffer(), 0.2);
 
         /* TODO: This should wait for the render pipeline to be clear but
          * that's an interrupt. Instead, just sleep for a bit. */

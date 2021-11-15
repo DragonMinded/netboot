@@ -17,10 +17,14 @@
 
 /* Command: User clip */
 
-struct user_clip_list {
-  unsigned int cmd;
-  int not_used[3];
-  float xmin, ymin, xmax, ymax;
+struct user_clip_list
+{
+    unsigned int cmd;
+    int not_used[3];
+    float xmin;
+    float ymin;
+    float xmax;
+    float ymax;
 };
 
 #define TA_CMD_USERCLIP 0x20000000
@@ -28,18 +32,24 @@ struct user_clip_list {
 
 /* Command: Polygon / Modifier volume */
 
-struct polygon_list {
+struct polygon_list
+{
   unsigned int cmd;
   unsigned int mode1;
   unsigned int mode2;
   unsigned int texture;
-  float alpha, red, green, blue; /* used with intensity type colour */
+  /* used with intensity type colour */
+  float alpha;
+  float red;
+  float green;
+  float blue;
 };
 		    
-struct modifier_list {
-  unsigned int cmd;
-  unsigned int instruction;
-  int not_used[6];
+struct modifier_list
+{
+    unsigned int cmd;
+    unsigned int instruction;
+    int not_used[6];
 };
 
 
@@ -148,10 +158,16 @@ struct modifier_list {
 
 /* Command: Vertex */
 
-struct packed_colour_vertex_list  {
-  unsigned int cmd;
-  float x, y, z, u, v;
-  unsigned int colour, ocolour;
+struct packed_colour_vertex_list
+{
+    unsigned int cmd;
+    float x;
+    float y;
+    float z;
+    float u;
+    float v;
+    unsigned int colour;
+    unsigned int ocolour;
 };
 
 /* other vertex types are available... */
@@ -161,13 +177,10 @@ struct packed_colour_vertex_list  {
 #define TA_CMD_VERTEX_EOS 0x10000000  /* end of strip */
 
 
-
-extern unsigned int ta_set_target(void *cmdlist, void *tilebuf, int w, int h);
-extern void *ta_create_tile_descriptors(void *ptr, void *buf, int w, int h);
+extern unsigned int ta_set_target(void *cmdlist, void *tilebuf, int tile_width, int tile_height);
+extern void *ta_create_tile_descriptors(void *ptr, void *buf, int tile_width, int tile_height);
 extern void ta_wait_render();
-extern void ta_begin_render(void *cmdlist, void *tiles,
-			    void *scrn, int modulo, int pixfmt,
-			    int clipw, int cliph);
+extern void ta_begin_render(void *cmdlist, void *tiles, void *scrn, float zclip);
 
 
 #define TA_LIST_SHORT 32

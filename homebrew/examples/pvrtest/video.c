@@ -2,7 +2,8 @@
 
 /* Initialize the PVR subsystem to a known state */
 
-/* These values mainly from Dans 3dtest program... */
+/* TODO: Pretty much this entire file shouldn't exist, it should all be moved into
+ * libnaomi video.c and setup for you when you call video_init. */
 
 static unsigned int three_d_params[] = {
 	0x8098, 0x00800408,	/* Polygon sorting and cache sizes */
