@@ -430,11 +430,17 @@ typedef struct
 } timer_t;
 
 static timer_t timers[MAX_TIMERS];
-static unsigned int timer_counter = 1;
+static unsigned int timer_counter = MAX_TIMERS;
 
 void _user_timer_init()
 {
-    timer_counter = 1;
+    // To make sure we never reuse a timer counter, but we can also use
+    // the handle for any active timer to look up the timer itself with
+    // a single array index. We will use timer_counter % MAX_TIMERS to
+    // do that lookup but still compare it to the handle so that a timer
+    // which was freed and another allocated at the same index does not
+    // match.
+    timer_counter = MAX_TIMERS;
     memset(timers, 0, sizeof(timer_t) * MAX_TIMERS);
 }
 
@@ -451,15 +457,24 @@ int timer_start(uint32_t microseconds)
 
     for (unsigned int i = 0; i < MAX_TIMERS; i++)
     {
-        if (timers[i].handle == 0)
+        unsigned int handle = timer_counter + i;
+        unsigned int slot = handle % MAX_TIMERS;
+
+        if (timers[slot].handle == 0)
         {
-            // Found a timer!
-            timer = timer_counter++;
-            timers[i].handle = timer;
-            timers[i].profile_start = _profile_get_current(0);
-            timers[i].adjustments = 0;
-            timers[i].irq_disabled = irq_disabled;
-            timers[i].microseconds = microseconds;
+            // Found a timer! Rememer its full handle so we can compare later.
+            timers[slot].handle = handle;
+            timers[slot].profile_start = _profile_get_current(0);
+            timers[slot].adjustments = 0;
+            timers[slot].irq_disabled = irq_disabled;
+            timers[slot].microseconds = microseconds;
+
+            // Set our timer counter to this handle + 1 so that we find the next
+            // slot on the next request for a new timer.
+            timer = handle;
+            timer_counter = handle + 1;
+
+            // Get outta here! We got a timer.
             break;
         }
     }
@@ -474,18 +489,16 @@ void timer_stop(int timer)
 
     if (timer >= 0)
     {
-        for (unsigned int i = 0; i < MAX_TIMERS; i++)
+        unsigned int slot = timer % MAX_TIMERS;
+
+        if (timers[slot].handle == timer)
         {
-            if (timers[i].handle == timer)
-            {
-                // Found the previously allocated timer.
-                timers[i].handle = 0;
-                timers[i].profile_start = 0;
-                timers[i].adjustments = 0;
-                timers[i].irq_disabled = 0;
-                timers[i].microseconds = 0;
-                break;
-            }
+            // Found the previously allocated timer.
+            timers[slot].handle = 0;
+            timers[slot].profile_start = 0;
+            timers[slot].adjustments = 0;
+            timers[slot].irq_disabled = 0;
+            timers[slot].microseconds = 0;
         }
     }
 
@@ -502,40 +515,38 @@ uint32_t _timer_elapsed_or_left(int timer, int which)
 
     if (timer >= 0)
     {
-        for (unsigned int i = 0; i < MAX_TIMERS; i++)
+        unsigned int slot = timer % MAX_TIMERS;
+        if (timers[slot].handle == timer)
         {
-            if (timers[i].handle == timer)
+            // Found the previously allocated timer.
+            if (timers[slot].irq_disabled && (TIMER_TCR(timer) & 0x100))
             {
-                // Found the previously allocated timer.
-                if (timers[i].irq_disabled && (TIMER_TCR(timer) & 0x100))
-                {
-                    // This should not clear any pending interrupts for the timer, so
-                    // we don't adjust the profiler timer itself as it will make an
-                    // adjustment to its own counter inside the profile interrupt handler
-                    // callback. Note, however, that if you wait a very long time (more
-                    // than a second) between two calls to timer_left or timer_elapsed
-                    // and you are running with interrupts disabled, the return values for
-                    // timer_left and timer_elapsed could be wrong (we don't know how many
-                    // adjustments to add here, since we don't know how many overflows occured).
-                    // It is not recommended to run for that amount of time without interrupts,
-                    // however, as many other things in the system will break, such as the
-                    // profile timer.
-                    TIMER_TCR(timer) &= ~0x100;
-                    timers[i].adjustments++;
-                }
+                // This should not clear any pending interrupts for the timer, so
+                // we don't adjust the profiler timer itself as it will make an
+                // adjustment to its own counter inside the profile interrupt handler
+                // callback. Note, however, that if you wait a very long time (more
+                // than a second) between two calls to timer_left or timer_elapsed
+                // and you are running with interrupts disabled, the return values for
+                // timer_left and timer_elapsed could be wrong (we don't know how many
+                // adjustments to add here, since we don't know how many overflows occured).
+                // It is not recommended to run for that amount of time without interrupts,
+                // however, as many other things in the system will break, such as the
+                // profile timer.
+                TIMER_TCR(timer) &= ~0x100;
+                timers[slot].adjustments++;
+            }
 
-                // Calculate actual delta.
-                calculated = _profile_get_current(timers[i].adjustments) - timers[i].profile_start;
-                if (calculated > timers[i].microseconds)
-                {
-                    calculated = timers[i].microseconds;
-                }
+            // Calculate actual delta.
+            calculated = _profile_get_current(timers[slot].adjustments) - timers[slot].profile_start;
+            if (calculated > timers[slot].microseconds)
+            {
+                calculated = timers[slot].microseconds;
+            }
 
-                // Flip it if we are requested to.
-                if (which == CALCULATE_LEFT)
-                {
-                    calculated = timers[i].microseconds - calculated;
-                }
+            // Flip it if we are requested to.
+            if (which == CALCULATE_LEFT)
+            {
+                calculated = timers[slot].microseconds - calculated;
             }
         }
     }
