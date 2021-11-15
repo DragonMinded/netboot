@@ -40,7 +40,7 @@ do { \
         int __len = snprintf(context->reason, context->reasonleft, "assertion failure"); \
         context->reason += __len; \
         context->reasonleft -= __len; \
-        LOG("ASSERTION FAILED (%s:%d):\n  %s,\n  ", context->name, __LINE__, #condition); \
+        LOG("%c[31mASSERTION FAILED (%s:%d)%c[0m:\n  %s,\n  ", 0x1B, context->name, __LINE__, 0x1B, #condition); \
         LOG(msg, ##__VA_ARGS__); \
         return; \
     } \
@@ -54,7 +54,7 @@ do { \
             int __len = snprintf(context->reason, context->reasonleft, "assertion failure"); \
             context->reason += __len; \
             context->reasonleft -= __len; \
-            LOG("ASSERTION FAILED (%s:%d):\n  %s[%d] != %s[%d],\n  ", context->name, __LINE__, #expected, __pos, #actual, __pos); \
+            LOG("%c[31mASSERTION FAILED (%s:%d)%c[0m:\n  %s[%d] != %s[%d],\n  ", 0x1B, context->name, __LINE__, 0x1B, #expected, __pos, #actual, __pos); \
             LOG(msg, ##__VA_ARGS__); \
             return; \
         } \
@@ -119,10 +119,16 @@ void * video(void * param)
     }
 }
 
+#define CYAN (char []){ 0x1B, '[', '3', '6', 'm', 0 }
+#define RED (char []){ 0x1B, '[', '3', '1', 'm', 0 }
+#define GREEN (char []){ 0x1B, '[', '3', '2', 'm', 0 }
+#define YELLOW (char []){ 0x1B, '[', '2', ';', '3', '3', 'm', 0 }
+#define RESET (char []){ 0x1B, '[', '0', 'm', 0 }
+
 void run_suite()
 {
     printf("====================\n");
-    printf("Starting tests\n%d tests to run\n", (sizeof(tests) / sizeof(tests[0])));
+    printf("Starting tests\n%s%d tests to run%s\n", CYAN, (sizeof(tests) / sizeof(tests[0])), RESET);
     printf("====================\n\n");
 
     // Run the tests!
@@ -165,55 +171,42 @@ void run_suite()
 
         if (context.result == TEST_PASSED)
         {
-            printf("PASSED, %ldns\n", nsec);
+            printf("%sPASSED%s, %s%ldns%s\n", GREEN, RESET, CYAN, nsec, RESET);
             passed ++;
         }
         else if (context.result == TEST_SKIPPED)
         {
             if (strlen(reasonbuffer))
             {
-                printf("SKIPPED, %ldns (%s)\n", nsec, reasonbuffer);
+                printf("%sSKIPPED%s, %s%ldns%s (%s)\n", YELLOW, RESET, CYAN, nsec, RESET, reasonbuffer);
             }
             else
             {
-                printf("SKIPPED, %ldns\n", nsec);
+                printf("%sSKIPPED%s, %s%ldns%s\n", YELLOW, RESET, CYAN, nsec, RESET);
             }
             skipped ++;
         }
-        else if (context.result == TEST_TOO_LONG)
+        else if (context.result == TEST_TOO_LONG || context.result == TEST_FAILED)
         {
             if (strlen(reasonbuffer))
             {
-                printf("FAILED, %ldns (%s)\n", nsec, reasonbuffer);
+                printf("%sFAILED%s, %s%ldns%s (%s)\n", RED, RESET, CYAN, nsec, RESET, reasonbuffer);
             }
             else
             {
-                printf("FAILED, %ldns\n", nsec);
+                printf("%sFAILED%s, %s%ldns%s\n", RED, RESET, CYAN, nsec, RESET);
             }
             failed ++;
-        }
-        else if (context.result == TEST_FAILED)
-        {
-            if (strlen(reasonbuffer))
-            {
-                printf("FAILED, %ldns (%s)\n", nsec, reasonbuffer);
-            }
-            else
-            {
-                printf("FAILED, %ldns\n", nsec);
-            }
 
-            if (strlen(logbuffer))
+            if (context.result == TEST_FAILED && strlen(logbuffer))
             {
                 printf("%s\n", logbuffer);
             }
-
-            failed ++;
         }
     }
 
     printf("\n====================\n");
-    printf("Finished\n%d pass, %d fail, %d skip\n%ldns total duration\n", passed, failed, skipped, total_duration);
+    printf("Finished\n%s%d pass%s, %s%d fail%s, %s%d skip%s\n%s%ldns total duration%s\n", GREEN, passed, RESET, RED, failed, RESET, YELLOW, skipped, RESET, CYAN, total_duration, RESET);
     printf("====================\n");
 }
 
