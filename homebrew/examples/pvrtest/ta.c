@@ -28,10 +28,11 @@ void *ta_create_tile_descriptors(void *tile_descriptor_base, void *tile_buffer_b
     /* each tile uses 64 bytes of buffer space.  So buf must point to */
     /* 64*w*h bytes of data */
     unsigned int *vr = tile_descriptor_base;
-    unsigned int bf = ((unsigned int)tile_buffer_base)&0x00ffffff;
-    unsigned int strbase = (((unsigned int)tile_descriptor_base)&0x00ffffff)|0x80000000;
+    unsigned int opaquebase = ((unsigned int)tile_buffer_base) & 0x00ffffff;
+    unsigned int transbase = opaquebase + ((tile_width * tile_height) * TA_OBJECT_BUFFER_SIZE);
 
-    /* Set up header */
+    /* This seems to be here as a buffer for potential overflow from the tile buffer base.
+     * The amount we set here appears to need to match the amount we set in ta_begin_render() */
     for (int x = 0; x < 18; x++)
     {
         *vr++ = 0;
@@ -50,19 +51,31 @@ void *ta_create_tile_descriptors(void *tile_descriptor_base, void *tile_buffer_b
     {
         for (int y = 0; y < tile_height; y++)
         {
-            *vr++ = (y << 8) | (x << 2);
-            *vr++ = bf + ((x + (y * tile_width)) << 6);
-            *vr++ = strbase;
-            *vr++ = strbase;
-            *vr++ = strbase;
-            *vr++ = strbase;
+            int sob = (x == 0 && y == 0) ? 0x10000000 : 0x00000000;
+            int eob = (x == (tile_width - 1) && y == (tile_height - 1)) ? 0x80000000 : 0x00000000;
+
+            // Set start of buffer/end of buffer, set autosorted translucent polygons, set tile position
+            *vr++ = sob | eob | 0x20000000 | (y << 8) | (x << 2);
+
+            // Opaque polygons.
+            *vr++ = opaquebase + ((x + (y * tile_width)) * TA_OBJECT_BUFFER_SIZE);
+
+            // We don't support opaque modifiers, so nothing here.
+            *vr++ = 0x80000000;
+
+            // Translucent polygons.
+            *vr++ = transbase + ((x + (y * tile_width)) * TA_OBJECT_BUFFER_SIZE);
+
+            // We don't suppport translucent modifiers, so nothing here.
+            *vr++ = 0x80000000;
+
+            // We don't support punch-through polygons, so nothing here.
+            *vr++ = 0x80000000;
         }
     }
 
-    /* Mark the end of tile descriptor bit */
-    vr[-6] |= 0x80000000;
-
-    /* Pass this to ta_begin_render() tiles parameter */
+    /* Pass this to ta_begin_render() tiles parameter. The value we skip here should match
+     * the value we put in the above clearing loop, to skip it. */
     return ((char *)tile_descriptor_base) + (18 * 4);
 }
 

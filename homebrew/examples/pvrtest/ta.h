@@ -177,6 +177,8 @@ struct packed_colour_vertex_list
 #define TA_CMD_VERTEX_EOS 0x10000000  /* end of strip */
 
 
+#define TA_OBJECT_BUFFER_SIZE 64
+
 extern unsigned int ta_set_target(void *cmdlist, void *tilebuf, int tile_width, int tile_height);
 extern void *ta_create_tile_descriptors(void *ptr, void *buf, int tile_width, int tile_height);
 extern void ta_wait_render();

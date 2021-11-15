@@ -223,9 +223,11 @@ void draw_face(float *p1, float *p2, float *p3, float *p4, void *tex, int pal)
 #define MAX_V_TILE (480/32)
 
 struct ta_buffers {
-    char cmd_list[512*1024];
-    char tile_buffer[64*MAX_H_TILE*MAX_V_TILE];
-    int tile_descriptor[24+6*MAX_H_TILE*MAX_V_TILE];
+    /* TODO Is this enough room for command lists? */
+    char cmd_list[512 * 1024];
+    /* TODO Is this enough room for translucent and opaque polygons? */
+    char tile_buffer[2 * TA_OBJECT_BUFFER_SIZE * MAX_H_TILE * MAX_V_TILE];
+    int tile_descriptor[24 + (6 * MAX_H_TILE * MAX_V_TILE)];
 };
 
 
