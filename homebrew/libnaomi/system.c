@@ -432,13 +432,13 @@ typedef struct
 } fs_handle_t;
 
 static fs_mapping_t filesystems[MAX_FILESYSTEMS];
-static fs_handle_t handles[MAX_OPEN_HANDLES];
+static fs_handle_t handles[MAX_OPEN_FILES];
 
 void _fs_init()
 {
     uint32_t old_irq = irq_disable();
     memset(filesystems, 0, sizeof(fs_mapping_t) * MAX_FILESYSTEMS);
-    memset(handles, 0, sizeof(fs_handle_t) * MAX_OPEN_HANDLES);
+    memset(handles, 0, sizeof(fs_handle_t) * MAX_OPEN_FILES);
     irq_restore(old_irq);
 }
 
@@ -447,7 +447,7 @@ void _fs_free()
     uint32_t old_irq = irq_disable();
 
     // Go through and close all open file handles for all filesystems.
-    for (int j = 0; j < MAX_OPEN_HANDLES; j++)
+    for (int j = 0; j < MAX_OPEN_FILES; j++)
     {
         if (handles[j].fileno > 0 && handles[j].handle != 0)
         {
@@ -456,7 +456,7 @@ void _fs_free()
     }
 
     memset(filesystems, 0, sizeof(fs_mapping_t) * MAX_FILESYSTEMS);
-    memset(handles, 0, sizeof(fs_handle_t) * MAX_OPEN_HANDLES);
+    memset(handles, 0, sizeof(fs_handle_t) * MAX_OPEN_FILES);
     irq_restore(old_irq);
 }
 
@@ -517,7 +517,7 @@ int detach_filesystem( const char * const prefix )
             if (filesystems[i].fs->close != 0)
             {
                 /* We found the filesystem, now go through and close every open file handle */
-                for (int j = 0; j < MAX_OPEN_HANDLES; j++)
+                for (int j = 0; j < MAX_OPEN_FILES; j++)
                 {
                     if (handles[j].fileno > 0 && handles[j].fs_mapping == i && handles[j].handle != 0)
                     {
@@ -538,17 +538,31 @@ int detach_filesystem( const char * const prefix )
     return -2;
 }
 
-int _fs_next_handle()
+int _fs_next_free_handle()
 {
     /* Start past STDIN, STDOUT, STDERR file handles */
     static int handle = 3;
-    int newhandle;
+
+    /* The handle we're about to give back. If there aren't free handles, return -1. */
+    int newhandle = -1;
 
     /* Make sure we don't screw up and give the same file handle to multiple threads. */
     uint32_t old_irq = irq_disable();
-    newhandle = handle++;
-    irq_restore(old_irq);
+    for (unsigned int j = 0; j < MAX_OPEN_FILES; j++)
+    {
+        unsigned int slot = (handle + j) % MAX_OPEN_FILES;
 
+        if (handles[slot].fileno == 0)
+        {
+            /* Consume and then return this handle. */
+            newhandle = handle + j;
+            handle = newhandle + 1;
+            break;
+        }
+    }
+
+    /* Return either the handle we found, or -1 to indicate no more free files. */
+    irq_restore(old_irq);
     return newhandle;
 }
 
@@ -556,44 +570,23 @@ int dup(int oldfile)
 {
     // Make sure to copy everything atomically.
     uint32_t old_irq = irq_disable();
+    int newfile = -1;
 
-    int oldoffset = -1;
-    for (int j = 0; j < MAX_OPEN_HANDLES; j++)
+    if (handles[oldfile % MAX_OPEN_FILES].fileno == oldfile)
     {
-        if (handles[j].fileno == oldfile)
-        {
-            oldoffset = j;
-            break;
-        }
-    }
+        int oldoffset = oldfile % MAX_OPEN_FILES;
 
-    int newfile;
-    if (oldoffset == -1)
-    {
-        errno = EBADF;
-        newfile = -1;
-    }
-    else
-    {
-        int newoffset = -1;
-        for (int j = 0; j < MAX_OPEN_HANDLES; j++)
-        {
-            if (handles[j].fileno == 0)
-            {
-                newoffset = j;
-                break;
-            }
-        }
-
-        if (newoffset == -1)
+        // Duplicate a file handle, returning a new handle.
+        newfile = _fs_next_free_handle();
+        if (newfile < 0)
         {
             errno = EMFILE;
             newfile = -1;
         }
         else
         {
-            // Duplicate a file handle, returning a new handle.
-            newfile = _fs_next_handle();
+            // We have both the old file existing, and a new hanle for it.
+            int newoffset = newfile % MAX_OPEN_FILES;
 
             // Set up the new file.
             handles[newoffset].fileno = newfile;
@@ -603,7 +596,7 @@ int dup(int oldfile)
 
             // Set the copies plus 1 to all copies of this file handle.
             handles[oldoffset].copies++;
-            for (int j = 0; j < MAX_OPEN_HANDLES; j++)
+            for (int j = 0; j < MAX_OPEN_FILES; j++)
             {
                 if (handles[j].handle == handles[oldoffset].handle)
                 {
@@ -611,6 +604,11 @@ int dup(int oldfile)
                 }
             }
         }
+    }
+    else
+    {
+        errno = EBADF;
+        newfile = -1;
     }
 
     irq_restore(old_irq);
@@ -638,16 +636,14 @@ int _fs_get_hooks(int fileno, filesystem_t **fs, void **fshandle, void **handle)
         return 0;
     }
 
-    for (int i = 0; i < MAX_OPEN_HANDLES; i++)
+    int slot = fileno % MAX_OPEN_FILES;
+    if (handles[slot].fileno == fileno)
     {
-        if (handles[i].fileno == fileno)
-        {
-            // Found it!
-            *fs = filesystems[handles[i].fs_mapping].fs;
-            *fshandle = filesystems[handles[i].fs_mapping].fshandle;
-            *handle = handles[i].handle;
-            return 1;
-        }
+        // Found it!
+        *fs = filesystems[handles[slot].fs_mapping].fs;
+        *fshandle = filesystems[handles[slot].fs_mapping].fshandle;
+        *handle = handles[slot].handle;
+        return 1;
     }
 
     // Couldn't find it.
@@ -1030,14 +1026,7 @@ int _close_r(struct _reent *reent, int file)
     {
         /* First, figure out if we need to close this handle at all, or if
          * we have some duplicates hanging around. */
-        int copies = 0;
-        for (int i = 0; i < MAX_OPEN_HANDLES; i++)
-        {
-            if (handles[i].fileno == file)
-            {
-                copies = handles[i].copies;
-            }
-        }
+        int copies = handles[file % MAX_OPEN_FILES].copies;
 
         int retval;
         if (fs->close == 0)
@@ -1060,7 +1049,7 @@ int _close_r(struct _reent *reent, int file)
         }
 
         /* Finally, before we return, unregister this handle. */
-        for( int i = 0; i < MAX_OPEN_HANDLES; i++)
+        for( int i = 0; i < MAX_OPEN_FILES; i++)
         {
             if (handles[i].handle == handle)
             {
@@ -1294,44 +1283,45 @@ int _open_r(struct _reent *reent, const char *path, int flags, int mode)
     }
 
     /* Do we have room for a new file? */
-    for (int i = 0; i < MAX_OPEN_HANDLES; i++)
+    int newhandle = _fs_next_free_handle();
+    if (newhandle < 0)
     {
-        if (handles[i].fileno == 0)
+        /* No file handles available */
+        reent->_errno = ENFILE;
+        return -1;
+    }
+    else
+    {
+        /* Yes, we have room, try the open */
+        int slot = newhandle % MAX_OPEN_FILES;
+        void *ptr = fs->open(filesystems[mapping].fshandle, path + strlen(filesystems[mapping].prefix), flags, mode);
+        int errnoptr = (int)ptr;
+
+        if (errnoptr > 0)
         {
-            /* Yes, we have room, try the open */
-            void *ptr = fs->open(filesystems[mapping].fshandle, path + strlen(filesystems[mapping].prefix), flags, mode);
-            int errnoptr = (int)ptr;
+            /* Create new internal handle */
+            handles[slot].fileno = newhandle;
+            handles[slot].handle = ptr;
+            handles[slot].fs_mapping = mapping;
+            handles[slot].copies = 1;
 
-            if (errnoptr > 0)
+            /* Return our own handle */
+            return handles[slot].fileno;
+        }
+        else
+        {
+            /* Couldn't open for some reason */
+            if (errnoptr == 0)
             {
-                /* Create new internal handle */
-                handles[i].fileno = _fs_next_handle();
-                handles[i].handle = ptr;
-                handles[i].fs_mapping = mapping;
-                handles[i].copies = 1;
-
-                /* Return our own handle */
-                return handles[i].fileno;
+                reent->_errno = ENOENT;
             }
             else
             {
-                /* Couldn't open for some reason */
-                if (errnoptr == 0)
-                {
-                    reent->_errno = ENOENT;
-                }
-                else
-                {
-                    reent->_errno = -errnoptr;
-                }
-                return -1;
+                reent->_errno = -errnoptr;
             }
+            return -1;
         }
     }
-
-    /* No file handles available */
-    reent->_errno = ENFILE;
-    return -1;
 }
 
 int _unlink_r(struct _reent *reent, const char *path)

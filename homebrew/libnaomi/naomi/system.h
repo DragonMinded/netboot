@@ -75,7 +75,7 @@ int unhook_stdio_calls( stdio_t *stdio_calls );
 // full filesystems that can be attached to the system at one time, as well
 // as the total number of open file handles across all of them combined.
 #define MAX_FILESYSTEMS 16
-#define MAX_OPEN_HANDLES 256
+#define MAX_OPEN_FILES 256
 
 // Actual struct full of callbacks which will be used to provide the functionality
 // of the filesystem. If you do not have an implementation for one or more of these
