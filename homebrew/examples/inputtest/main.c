@@ -40,15 +40,17 @@ void main()
     printf("JVS IO ID: %s\n\n", version);
     video_display_on_vblank();
 
-    // Now, read the controls forever.
-    char * reset_loc = console_save();
-    int liveness = 0;
+    // Save the console position so we can go back to it.
+    printf("%c7", 0x1B);
 
+    // Now, read the controls forever.
+    int liveness = 0;
     while ( 1 )
     {
         // Put the console back to where it was before we entered the loop.
-        console_restore(reset_loc);
+        printf("%c8%c[J%c7", 0x1B, 0x1B, 0x1B);
 
+        // Print some information about the buttons.
         printf("Liveness indicator: %d\n", liveness++);
         jvs_buttons_t buttons;
         maple_request_jvs_buttons(0x01, &buttons);

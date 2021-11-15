@@ -23,10 +23,6 @@ void console_render();
 // Show or hide an initialized console.
 void console_set_visible(unsigned int visible);
 
-// Save or restore the current console position. You should only give console_restore()
-// a pointer that was retrieved from console_save() previously.
-char * console_save();
-void console_restore(char *);
 #ifdef __cplusplus
 }
 #endif

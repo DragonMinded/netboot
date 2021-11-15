@@ -14,8 +14,6 @@ void main()
     console_init(16);
 
     // Now, read the RTC forever.
-    char *reset_loc = console_save();
-
     while ( 1 )
     {
         // First poll buttons for a test mode request, since we specifically state that we
@@ -27,8 +25,8 @@ void main()
             enter_test_mode();
         }
 
-        // Put the console back to where it was before we entered the loop.
-        console_restore(reset_loc);
+        // Clear the console, so we can print to it again.
+        printf("%c[2J", 0x1B);
 
         time_t t = time(NULL);
         struct tm tm = *localtime(&t);

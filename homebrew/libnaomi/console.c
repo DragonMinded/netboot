@@ -40,6 +40,8 @@ static uint32_t cur_escape_flags = 0;
 static int cur_escape_number = 0;
 static int last_escape_numbers[10] = { 0 };
 static void *cur_hooks = 0;
+static uint16_t saved_attr = 0;
+static int saved_pos = 0;
 
 #define TAB_WIDTH 4
 
@@ -86,6 +88,115 @@ static int __console_write( const char * const buf, unsigned int len )
                     {
                         /* Reset all settings to default. */
                         cur_attr = (BLACK) << 4;
+                    }
+                    done = 1;
+                    break;
+                }
+                case 's':
+                {
+                    if (cur_escape_flags & ESCAPE_FLAGS_BRACKET)
+                    {
+                        /* Save cursor position. */
+                        saved_pos = pos;
+                    }
+                    done = 1;
+                    break;
+                }
+                case 'u':
+                {
+                    if (cur_escape_flags & ESCAPE_FLAGS_BRACKET)
+                    {
+                        /* Unsave cursor position. */
+                        pos = saved_pos;
+                    }
+                    done = 1;
+                    break;
+                }
+                case 'K':
+                {
+                    if (cur_escape_flags & ESCAPE_FLAGS_BRACKET)
+                    {
+                        if (cur_escape_number == -1)
+                        {
+                            /* Erase after cursor on line. */
+                            int col = pos % console_width;
+                            if (col < (console_width - 1))
+                            {
+                                int erasepos = pos;
+                                while(erasepos % console_width)
+                                {
+                                    render_buffer[erasepos + 1] = ' ';
+                                    render_attrs[erasepos + 1] = cur_attr;
+                                    erasepos ++;
+                                }
+                            }
+                        }
+                        if (cur_escape_number == 1)
+                        {
+                            /* Erase before cursor on line. */
+                            int col = pos % console_width;
+                            if (col > 0)
+                            {
+                                int erasepos = pos;
+                                while(erasepos % console_width)
+                                {
+                                    render_buffer[erasepos - 1] = ' ';
+                                    render_attrs[erasepos - 1] = cur_attr;
+                                    erasepos --;
+                                }
+                            }
+                        }
+                        if (cur_escape_number == 2)
+                        {
+                            /* Erase entire line. */
+                            int col = pos % console_width;
+                            int erasepos = pos - col;
+                            for (int i = 0; i < console_width; i++)
+                            {
+                                render_buffer[erasepos + i] = ' ';
+                                render_attrs[erasepos + i] = cur_attr;
+                            }
+                        }
+                    }
+                    done = 1;
+                    break;
+                }
+                case 'J':
+                {
+                    if (cur_escape_flags & ESCAPE_FLAGS_BRACKET)
+                    {
+                        if (cur_escape_number == -1)
+                        {
+                            /* Erase to the end of the screen. */
+                            int erasepos = pos + 1;
+                            while (erasepos < (console_width * console_height))
+                            {
+                                render_buffer[erasepos] = ' ';
+                                render_attrs[erasepos] = cur_attr;
+                                erasepos++;
+                            }
+                        }
+                        if (cur_escape_number == 1)
+                        {
+                            /* Erase to the beginning of the screen. */
+                            int erasepos = pos - 1;
+                            while (erasepos >= 0)
+                            {
+                                render_buffer[erasepos] = ' ';
+                                render_attrs[erasepos] = cur_attr;
+                                erasepos--;
+                            }
+                        }
+                        if (cur_escape_number == 2)
+                        {
+                            /* Erase the whole screen, set cursor to home. */
+                            for (int erasepos = 0; erasepos < (console_width * console_height); erasepos++)
+                            {
+                                render_buffer[erasepos] = ' ';
+                                render_attrs[erasepos] = cur_attr;
+                            }
+                            pos = 0;
+                        }
                     }
                     done = 1;
                     break;
@@ -317,6 +428,28 @@ static int __console_write( const char * const buf, unsigned int len )
                             cur_escape_number = (cur_escape_number * 10) + number;
                         }
                     }
+                    else
+                    {
+                        switch(buf[x])
+                        {
+                            case '7':
+                            {
+                                /* Save cursor and attrs. */
+                                saved_attr = cur_attr;
+                                saved_pos = pos;
+                                break;
+                            }
+                            case '8':
+                            {
+                                /* Restore cursor and attrs. */
+                                cur_attr = saved_attr;
+                                pos = saved_pos;
+                                break;
+                            }
+                        }
+
+                        done = 1;
+                    }
                     break;
                 }
                 default:
@@ -337,23 +470,21 @@ static int __console_write( const char * const buf, unsigned int len )
             switch(buf[x])
             {
                 case '\r':
-                case '\n':
-                    /* Add enough space to get to next line */
-                    if(!(pos % console_width))
-                    {
-                        render_buffer[pos] = ' ';
-                        render_attrs[pos] = cur_attr;
-                        pos++;
-                    }
-
-                    while(pos % console_width)
-                    {
-                        render_buffer[pos] = ' ';
-                        render_attrs[pos] = cur_attr;
-                        pos++;
-                    }
+                {
+                    /* Go to beginning of the line. */
+                    int col = pos % console_width;
+                    pos -= col;
                     break;
+                }
+                case '\n':
+                {
+                    /* Go to next line. */
+                    int col = pos % console_width;
+                    pos += console_width - col;
+                    break;
+                }
                 case '\t':
+                {
                     /* Add enough spaces to go to the next tab stop */
                     if(!(pos % TAB_WIDTH))
                     {
@@ -369,7 +500,9 @@ static int __console_write( const char * const buf, unsigned int len )
                         pos++;
                     }
                     break;
+                }
                 case 0x1B:
+                {
                     /* Escape sequence start */
                     cur_escape_flags = ESCAPE_FLAGS_PROCESSING;
                     cur_escape_number = -1;
@@ -378,12 +511,15 @@ static int __console_write( const char * const buf, unsigned int len )
                         last_escape_numbers[i] = -1;
                     }
                     break;
+                }
                 default:
+                {
                     /* Copy character over */
                     render_buffer[pos] = buf[x];
                     render_attrs[pos] = cur_attr;
                     pos++;
                     break;
+                }
             }
         }
     }
@@ -424,6 +560,8 @@ void console_init(unsigned int overscan)
         memset(render_attrs, (BLACK) << 4, (console_width * console_height) * sizeof(render_attrs[0]));
         cur_attr = (BLACK) << 4;
         cur_escape_flags = 0;
+        saved_attr = cur_attr;
+        saved_pos = console_pos;
 
         /* Register ourselves with newlib */
         stdio_t console_calls = { 0, __console_write, 0 };
@@ -560,31 +698,4 @@ void console_render()
 void console_set_visible(unsigned int visibility)
 {
     console_visible = visibility;
-}
-
-char * console_save()
-{
-    uint32_t old_interrupts = irq_disable();
-    char *location = 0;
-    if (render_buffer)
-    {
-        // Return where we are in the console, so it can be restored later.
-        location = render_buffer + console_pos;
-    }
-
-    irq_restore(old_interrupts);
-    return location;
-}
-
-void console_restore(char *location)
-{
-    uint32_t old_interrupts = irq_disable();
-    if (render_buffer && location >= render_buffer && location < (render_buffer + (console_width * console_height)))
-    {
-        // If the pointer is within our console, cap the console off at that location.
-        console_pos = (int)(location - render_buffer);
-        memset(render_buffer + console_pos, ' ', (console_width * console_height) - console_pos);
-        memset(render_attrs + console_pos, ((BLACK) << 4), ((console_width * console_height) - console_pos) * sizeof(render_attrs[0]));
-    }
-    irq_restore(old_interrupts);
 }
