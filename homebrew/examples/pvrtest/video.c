@@ -27,13 +27,6 @@ static unsigned int three_d_params[] = {
 	0x8008, 0x00000001,	/* TA reset */
 	0x8008, 0x00000000,	/* TA out of reset */
 	0x80e4, 0x00000000,	/* stride width */
-	0x6884, 0x00000000,	/* Disable all interrupt events */
-	0x6930, 0x00000000,
-	0x6938, 0x00000000,
-	0x6900, 0xffffffff,	/* Clear all pending int events */
-	0x6908, 0xffffffff,
-	0x6930, 0x002807ec,	/* Re-enable some events */
-	0x6938, 0x0000000e,
 	0x80b8, 0x0000ff07,	/* fog density */
 	0x80b4, 0x007f7f7f,	/* fog vertex color */
 	0x80b0, 0x007f7f7f,	/* fog table color */
@@ -59,11 +52,6 @@ static unsigned int scrn_params[] = {
 	0x8118, 0x00008040,	/* M */
 	0x80f4, 0x00000401,	/* anti-aliasing */
 	0x8048, 0x00000009,	/* alpha config */
-	0x7814, 0x00000000,	/* More interrupt control stuff (so it seems)*/
-	0x7834, 0x00000000,
-	0x7854, 0x00000000,
-	0x7874, 0x00000000,
-	0x78bc, 0x4659404f,
 	0x8040, 0x00000000	/* border color */
 };
 

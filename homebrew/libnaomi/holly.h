@@ -26,7 +26,10 @@
 
 #define HOLLY_EXTERNAL_INTERRUPT_DIMM_COMMS 0x00000008
 
-// Errors that have happened.
-#define HOLLY_ERROR_STATUS *((volatile uint32_t *)0xA05F6908)
+// Errors that have happened in various pieces of hardware.
+#define HOLLY_ERROR_IRQ_STATUS *((volatile uint32_t *)0xA05F6908)
+#define HOLLY_ERROR_IRQ_2_MASK *((volatile uint32_t *)0xA05F6918)
+#define HOLLY_ERROR_IRQ_4_MASK *((volatile uint32_t *)0xA05F6928)
+#define HOLLY_ERROR_IRQ_6_MASK *((volatile uint32_t *)0xA05F6938)
 
 #endif

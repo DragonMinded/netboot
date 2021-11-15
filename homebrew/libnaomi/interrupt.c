@@ -162,7 +162,7 @@ uint32_t _holly_interrupt()
         {
             // This cannot be cleared by writing a 1 to it. So we must figure
             // out what the error was and clear that.
-            HOLLY_ERROR_STATUS = HOLLY_ERROR_STATUS;
+            HOLLY_ERROR_IRQ_STATUS = HOLLY_ERROR_IRQ_STATUS;
             handled |= HOLLY_INTERNAL_INTERRUPT_ERROR;
         }
 
@@ -385,7 +385,14 @@ void _irq_init()
     HOLLY_EXTERNAL_IRQ_6_MASK = 0;
 
     // Kill any pending HOLLY errors.
-    HOLLY_ERROR_STATUS = HOLLY_ERROR_STATUS;
+    HOLLY_ERROR_IRQ_STATUS = HOLLY_ERROR_IRQ_STATUS;
+
+    // Disable all HOLLY external error interrupts unless later specifically
+    // enabled. This will mean that individual hardware drivers must enable
+    // errors they care about.
+    HOLLY_ERROR_IRQ_2_MASK = 0;
+    HOLLY_ERROR_IRQ_4_MASK = 0;
+    HOLLY_ERROR_IRQ_6_MASK = 0;
 
     // Allow timer interrupts, ignore RTC interrupts.
     INTC_IPRA = 0xFFF0;
@@ -436,7 +443,10 @@ void _irq_free()
     HOLLY_EXTERNAL_IRQ_2_MASK = 0;
     HOLLY_EXTERNAL_IRQ_4_MASK = 0;
     HOLLY_EXTERNAL_IRQ_6_MASK = 0;
-    HOLLY_ERROR_STATUS = HOLLY_ERROR_STATUS;
+    HOLLY_ERROR_IRQ_STATUS = HOLLY_ERROR_IRQ_STATUS;
+    HOLLY_ERROR_IRQ_2_MASK = 0;
+    HOLLY_ERROR_IRQ_4_MASK = 0;
+    HOLLY_ERROR_IRQ_6_MASK = 0;
     INTC_IPRA = 0x0000;
     INTC_IPRB = 0x0000;
     INTC_IPRC = 0x0000;
