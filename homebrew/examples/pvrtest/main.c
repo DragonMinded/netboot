@@ -165,12 +165,12 @@ void init_palette()
 void draw_face(float *p1, float *p2, float *p3, float *p4, void *tex, int pal)
 {
     struct polygon_list mypoly;
-    struct packed_colour_vertex_list myvertex;
+    struct packed_color_vertex_list myvertex;
 
     mypoly.cmd =
-        TA_CMD_POLYGON|TA_CMD_POLYGON_TYPE_OPAQUE|TA_CMD_POLYGON_SUBLIST|
-        TA_CMD_POLYGON_STRIPLENGTH_2|TA_CMD_POLYGON_TEXTURED;
-    mypoly.mode1 = TA_POLYMODE1_Z_ALWAYS|TA_POLYMODE1_CULL_CCW;
+        TA_CMD_POLYGON_OR_MODIFIER | TA_CMD_POLYGON_TYPE_OPAQUE | TA_CMD_POLYGON_SUBLIST |
+        TA_CMD_POLYGON_STRIPLENGTH_2 | TA_CMD_POLYGON_PACKED_COLOR | TA_CMD_POLYGON_TEXTURED;
+    mypoly.mode1 = TA_POLYMODE1_Z_ALWAYS | TA_POLYMODE1_CULL_CCW;
     mypoly.mode2 =
         TA_POLYMODE2_BLEND_DEFAULT|TA_POLYMODE2_FOG_DISABLED|
         TA_POLYMODE2_TEXTURE_CLAMP_U|TA_POLYMODE2_TEXTURE_CLAMP_V|
@@ -178,13 +178,13 @@ void draw_face(float *p1, float *p2, float *p3, float *p4, void *tex, int pal)
         TA_POLYMODE2_TEXTURE_REPLACE|TA_POLYMODE2_U_SIZE_256|TA_POLYMODE2_V_SIZE_256;
     mypoly.texture =
         TA_TEXTUREMODE_CLUT8|TA_TEXTUREMODE_CLUTBANK8(pal)|
-        TA_TEXTUREMODE_ADDRESS(tex);
+        TA_TEXTUREMODE_TWIDDLED|TA_TEXTUREMODE_ADDRESS(tex);
     mypoly.alpha = mypoly.red = mypoly.green = mypoly.blue = 0.0;
     ta_commit_list(&mypoly, TA_LIST_SHORT);
 
     myvertex.cmd = TA_CMD_VERTEX;
-    myvertex.colour = 0xffffffff;
-    myvertex.ocolour = 0;
+    myvertex.color = 0xffffffff;
+    myvertex.ocolor = 0;
 
     myvertex.x = p1[0];
     myvertex.y = p1[1];
@@ -212,7 +212,7 @@ void draw_face(float *p1, float *p2, float *p3, float *p4, void *tex, int pal)
     myvertex.z = p4[2];
     myvertex.u = 0.0;
     myvertex.v = 1.0;
-    myvertex.cmd |= TA_CMD_VERTEX_EOS;
+    myvertex.cmd |= TA_CMD_VERTEX_END_OF_STRIP;
     ta_commit_list(&myvertex, TA_LIST_SHORT);
 }
 

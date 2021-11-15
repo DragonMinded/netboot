@@ -38,7 +38,7 @@ struct polygon_list
   unsigned int mode1;
   unsigned int mode2;
   unsigned int texture;
-  /* used with intensity type colour */
+  /* used with intensity type color */
   float alpha;
   float red;
   float green;
@@ -52,14 +52,23 @@ struct modifier_list
     int not_used[6];
 };
 
+// Defines for the high byte of the TA cmd.
+#define TA_CMD_END_OF_LIST                0x00000000
+#define TA_CMD_USER_TILE_CLIP             0x20000000
+#define TA_CMD_OBJECT_LIST_SET            0x40000000
+#define TA_CMD_POLYGON_OR_MODIFIER        0x80000000
+#define TA_CMD_SPRITE                     0xA0000000
+#define TA_CMD_VERTEX                     0xE0000000
 
-#define TA_CMD_POLYGON                    0x80000000
-#define TA_CMD_MODIFIER                   0x80000000
-#define TA_CMD_POLYGON_TYPE_OPAQUE        (0<<24)
-#define TA_CMD_MODIFIER_TYPE_OPAQUE       (1<<24)
-#define TA_CMD_POLYGON_TYPE_TRANSPARENT   (2<<24)
-#define TA_CMD_MODIFIER_TYPE_TRANSPARENT  (3<<24)
-#define TA_CMD_POLYGON_TYPE_PUNCHTHRU     (4<<24)
+#define TA_CMD_VERTEX_END_OF_STRIP        0x10000000
+
+#define TA_CMD_POLYGON_TYPE_OPAQUE        0x00000000
+#define TA_CMD_MODIFIER_TYPE_OPAQUE       0x01000000
+#define TA_CMD_POLYGON_TYPE_TRANSPARENT   0x02000000
+#define TA_CMD_MODIFIER_TYPE_TRANSPARENT  0x03000000
+#define TA_CMD_POLYGON_TYPE_PUNCHTHRU     0x04000000
+
+// Defines for the next byte of the TA cmd.
 #define TA_CMD_POLYGON_SUBLIST            0x00800000
 #define TA_CMD_POLYGON_STRIPLENGTH_1      (0<<18)
 #define TA_CMD_POLYGON_STRIPLENGTH_2      (1<<18)
@@ -67,11 +76,12 @@ struct modifier_list
 #define TA_CMD_POLYGON_STRIPLENGTH_6      (3<<18)
 #define TA_CMD_POLYGON_USER_CLIP_INSIDE   0x00020000
 #define TA_CMD_POLYGON_USER_CLIP_OUTSIDE  0x00030000
-#define TA_CMD_POLYGON_AFFECTED_BY_MODIFIER  0x00000080
-#define TA_CMD_POLYGON_CHEAP_SHADOW_MODIFIER 0x00000000
-#define TA_CMD_POLYGON_NORMAL_MODIFIER       0x00000040
-#define TA_CMD_POLYGON_PACKED_COLOUR      (0<<4)
-#define TA_CMD_POLYGON_FLOAT_COLOUR       (1<<4)
+
+// Defines for the bottom two bytes of the TA cmd.
+#define TA_CMD_POLYGON_SHADOW_MODIFIER    0x00000080
+#define TA_CMD_POLYGON_VOLUME_MODIFIER    0x00000040
+#define TA_CMD_POLYGON_PACKED_COLOR       (0<<4)
+#define TA_CMD_POLYGON_FLOAT_COLOR        (1<<4)
 #define TA_CMD_POLYGON_INTENSITY          (2<<4)
 #define TA_CMD_POLYGON_PREVFACE_INTENSITY (3<<4)
 #define TA_CMD_POLYGON_TEXTURED           0x00000008
@@ -97,7 +107,7 @@ struct modifier_list
 #define TA_POLYMODE2_FOG_VERTEX     (1<<22)
 #define TA_POLYMODE2_FOG_DISABLED   (2<<22)
 #define TA_POLYMODE2_FOG_TABLE2     (3<<22)
-#define TA_POLYMODE2_CLAMP_COLOURS  0x00200000
+#define TA_POLYMODE2_CLAMP_COLORS   0x00200000
 #define TA_POLYMODE2_ENABLE_ALPHA   0x00100000
 #define TA_POLYMODE2_DISABLE_TEXTURE_TRANSPARENCY 0x00080000
 #define TA_POLYMODE2_TEXTURE_FLIP_U   0x00080000
@@ -154,11 +164,11 @@ struct modifier_list
 #define TA_TEXTUREMODE_CLUTBANK4(n) ((n)<<21) /* 0-63 */
 #define TA_TEXTUREMODE_TWIDDLED     0x00000000
 #define TA_TEXTUREMODE_NON_TWIDDLED 0x04000000
-#define TA_TEXTUREMODE_ADDRESS(a)   ((((unsigned long)(void*)(a))&0x7fffff)>>3)
+#define TA_TEXTUREMODE_ADDRESS(a)   ((((unsigned long)(void*)(a)) & 0xffffff) >> 3)
 
 /* Command: Vertex */
 
-struct packed_colour_vertex_list
+struct packed_color_vertex_list
 {
     unsigned int cmd;
     float x;
@@ -166,18 +176,12 @@ struct packed_colour_vertex_list
     float z;
     float u;
     float v;
-    unsigned int colour;
-    unsigned int ocolour;
+    unsigned int color;
+    unsigned int ocolor;
 };
 
-/* other vertex types are available... */
 
-
-#define TA_CMD_VERTEX     0xe0000000
-#define TA_CMD_VERTEX_EOS 0x10000000  /* end of strip */
-
-
-#define TA_OBJECT_BUFFER_SIZE 64
+#define TA_OBJECT_BUFFER_SIZE 1024
 
 extern unsigned int ta_set_target(void *cmdlist, void *tilebuf, int tile_width, int tile_height);
 extern void *ta_create_tile_descriptors(void *ptr, void *buf, int tile_width, int tile_height);
