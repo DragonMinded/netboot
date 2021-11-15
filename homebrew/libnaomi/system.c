@@ -49,6 +49,7 @@ extern void __set_fpscr (unsigned long);
 
 /* Global hardware access mutexes. */
 static mutex_t queue_mutex;
+static mutex_t stdio_mutex;
 
 /* Provide a weakref to a default test sub for autoconf-purposes. */
 int __test()
@@ -132,6 +133,7 @@ void _enter()
 
     // Initialize mutexes for hardware that needs exclusive access.
     mutex_init(&queue_mutex);
+    mutex_init(&stdio_mutex);
 
     // Execute main/test executable based on boot variable set in
     // sh-crt0.s which comes from the entrypoint used to start the code.
@@ -355,52 +357,78 @@ void enter_test_mode()
 }
 
 // Currently hooked stdio calls.
-static stdio_t stdio_hooks = { 0, 0, 0 };
+typedef struct stdio_registered_hooks
+{
+    stdio_t stdio_hooks;
+    struct stdio_registered_hooks *next;
+} stdio_registered_hooks_t;
 
-int hook_stdio_calls( stdio_t *stdio_calls )
+stdio_registered_hooks_t *stdio_hooks = 0;
+
+void * hook_stdio_calls( stdio_t *stdio_calls )
 {
     if( stdio_calls == NULL )
     {
         /* Failed to hook, bad input */
-        return -1;
+        return 0;
     }
 
     /* Safe to hook */
-    if (stdio_calls->stdin_read)
-    {
-        stdio_hooks.stdin_read = stdio_calls->stdin_read;
-    }
-    if (stdio_calls->stdout_write)
-    {
-        stdio_hooks.stdout_write = stdio_calls->stdout_write;
-    }
-    if (stdio_calls->stderr_write)
-    {
-        stdio_hooks.stderr_write = stdio_calls->stderr_write;
-    }
+    stdio_registered_hooks_t *new_hooks = malloc(sizeof(stdio_registered_hooks_t));
+    new_hooks->stdio_hooks.stdin_read = stdio_calls->stdin_read;
+    new_hooks->stdio_hooks.stdout_write = stdio_calls->stdout_write;
+    new_hooks->stdio_hooks.stderr_write = stdio_calls->stderr_write;
+
+    /* Make sure another thread doesn't try to access our structure
+     * while we're doing this. */
+    mutex_lock(&stdio_mutex);
+
+    /* Add it to the list. */
+    new_hooks->next = stdio_hooks;
+    stdio_hooks = new_hooks;
+
+    /* Safe to use again. */
+    mutex_unlock(&stdio_mutex);
 
     /* Success */
-    return 0;
+    return (void *)new_hooks;
 }
 
-int unhook_stdio_calls( stdio_t *stdio_calls )
+int unhook_stdio_calls( void *prevhook )
 {
-    /* Just wipe out internal variable */
-    if (stdio_calls->stdin_read == stdio_hooks.stdin_read)
+    int retval = -1;
+
+    mutex_lock(&stdio_mutex);
+    if (prevhook != NULL)
     {
-        stdio_hooks.stdin_read = 0;
-    }
-    if (stdio_calls->stdout_write == stdio_hooks.stdout_write)
-    {
-        stdio_hooks.stdout_write = 0;
-    }
-    if (stdio_calls->stderr_write == stdio_hooks.stderr_write)
-    {
-        stdio_hooks.stderr_write = 0;
+        if (stdio_hooks == prevhook)
+        {
+            stdio_hooks = stdio_hooks->next;
+            free(prevhook);
+            retval = 0;
+        }
+        else
+        {
+            stdio_registered_hooks_t *curhooks = stdio_hooks;
+            while(curhooks != 0)
+            {
+                if (curhooks->next == prevhook)
+                {
+                    curhooks->next = curhooks->next->next;
+                    free(prevhook);
+                    retval = 0;
+                    break;
+                }
+
+                /* Didn't find it, try the next one. */
+                curhooks = curhooks->next;
+            }
+        }
     }
 
-    /* Always successful for now */
-    return 0;
+    /* Return 0 if we succeeded, -1 if we couldn't find the hooks. */
+    mutex_unlock(&stdio_mutex);
+    return retval;
 }
 
 #define FS_PREFIX_LEN 28
@@ -869,15 +897,33 @@ _ssize_t _read_r(struct _reent *reent, int file, void *ptr, size_t len)
 {
     if( file == 0 )
     {
-        if( stdio_hooks.stdin_read )
+        /* If we don't get a valid hook, then this wasn't supported. */
+        int retval = -ENOTSUP;
+
+        /* Only read from the first valid hooks. */
+        mutex_lock(&stdio_mutex);
+        stdio_registered_hooks_t *curhook = stdio_hooks;
+        while (curhook != 0)
         {
-            return stdio_hooks.stdin_read( ptr, len );
+            if (curhook->stdio_hooks.stdin_read)
+            {
+                retval = curhook->stdio_hooks.stdin_read( ptr, len );
+                break;
+            }
+
+            curhook = curhook->next;
+        }
+
+        mutex_unlock(&stdio_mutex);
+
+        if (retval < 0)
+        {
+            reent->_errno = -retval;
+            return -1;
         }
         else
         {
-            /* No hook for this */
-            reent->_errno = EBADF;
-            return -1;
+            return retval;
         }
     }
     else if( file == 1 || file == 2 )
@@ -961,26 +1007,62 @@ _ssize_t _write_r(struct _reent *reent, int file, const void * ptr, size_t len)
     }
     else if( file == 1 )
     {
-        if( stdio_hooks.stdout_write )
+        /* If we don't get a valid hook, then this wasn't supported. */
+        int retval = -ENOTSUP;
+
+        /* Write to every single valid hook. Ignore returns. */
+        mutex_lock(&stdio_mutex);
+        stdio_registered_hooks_t *curhook = stdio_hooks;
+        while (curhook != 0)
         {
-            return stdio_hooks.stdout_write( ptr, len );
+            if (curhook->stdio_hooks.stdout_write)
+            {
+                curhook->stdio_hooks.stdout_write( ptr, len );
+                retval = len;
+            }
+
+            curhook = curhook->next;
+        }
+        mutex_unlock(&stdio_mutex);
+
+        if (retval < 0)
+        {
+            reent->_errno = -retval;
+            return -1;
         }
         else
         {
-            reent->_errno = EBADF;
-            return -1;
+            return retval;
         }
     }
     else if( file == 2 )
     {
-        if( stdio_hooks.stderr_write )
+        /* If we don't get a valid hook, then this wasn't supported. */
+        int retval = -ENOTSUP;
+
+        /* Write to every single valid hook. Ignore returns. */
+        mutex_lock(&stdio_mutex);
+        stdio_registered_hooks_t *curhook = stdio_hooks;
+        while (curhook != 0)
         {
-            return stdio_hooks.stderr_write( ptr, len );
+            if (curhook->stdio_hooks.stderr_write)
+            {
+                curhook->stdio_hooks.stderr_write( ptr, len );
+                retval = len;
+            }
+
+            curhook = curhook->next;
+        }
+        mutex_unlock(&stdio_mutex);
+
+        if (retval < 0)
+        {
+            reent->_errno = -retval;
+            return -1;
         }
         else
         {
-            reent->_errno = EBADF;
-            return -1;
+            return retval;
         }
     }
     else

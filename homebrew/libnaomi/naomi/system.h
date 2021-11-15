@@ -66,9 +66,12 @@ typedef struct
     int (*stderr_write)( const char * const data, unsigned int len );
 } stdio_t;
 
-// Allow stdin/stdout/stderr to be hooked by external functions.
-int hook_stdio_calls( stdio_t *stdio_calls );
-int unhook_stdio_calls( stdio_t *stdio_calls );
+// Allow stdin/stdout/stderr to be hooked by external functions. You can hook
+// scanf/printf/fprint(stderr) using this function. Only the most recently registered
+// stdin hook will be run, but all registered stdout/stderr handlers will be run
+// every time there is activity to stdout or stderr.
+void * hook_stdio_calls( stdio_t *stdio_calls );
+int unhook_stdio_calls( void *prevhook );
 
 // Filesystem redirect hook support so that code using standard file access
 // routines can be properly serviced. The below limits are for the number of

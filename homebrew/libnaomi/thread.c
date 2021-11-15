@@ -1518,9 +1518,45 @@ int mutex_try_lock(mutex_t *mutex)
 
 void mutex_lock(mutex_t * mutex)
 {
-    register mutex_t * syscall_param0 asm("r4") = mutex;
-    register unsigned int syscall_param1 asm("r5") = SEM_TYPE_MUTEX;
-    asm("trapa #10" : : "r" (syscall_param0), "r" (syscall_param1));
+    // Attempt to lock even without interrupts/threads running. If we succeed, then there
+    // was no problem. However, if we fail, since we can't use syscalls we need to throw
+    // up an invariant message instead.
+    uint32_t old_interrupts = irq_disable();
+    int irq_disabled = _irq_was_disabled(old_interrupts);
+    int acquired = 0;
+
+    if (mutex)
+    {
+        int slot = mutex->id % MAX_SEM_AND_MUTEX;
+        if (semaphores[slot] != 0 && semaphores[slot]->id == mutex->id && semaphores[slot]->type == SEM_TYPE_MUTEX)
+        {
+            // This is the right mutex. See if we can acquire it.
+            if (semaphores[slot]->current > 0)
+            {
+                acquired = 1;
+                semaphores[slot]->current --;
+
+                // Keep track of whether this was acquired with interrupts disabled or not.
+                // This is because if it was, the subsequent unlock must be done without
+                // syscalls as well.
+                semaphores[slot]->irq_disabled = irq_disabled;
+            }
+        }
+    }
+
+    irq_restore(old_interrupts);
+
+    if (!acquired)
+    {
+        if (irq_disabled)
+        {
+            _irq_display_invariant("mutex failure", "interrupts are disabled but we need to make a syscall to acquire mutex");
+        }
+
+        register mutex_t * syscall_param0 asm("r4") = mutex;
+        register unsigned int syscall_param1 asm("r5") = SEM_TYPE_MUTEX;
+        asm("trapa #10" : : "r" (syscall_param0), "r" (syscall_param1));
+    }
 }
 
 void mutex_unlock(mutex_t * mutex)

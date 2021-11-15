@@ -45,7 +45,9 @@ void semaphore_free(semaphore_t *semaphore);
 // try_lock safe to perform with interrupts disabled where any other semaphore or
 // mutex operation would cause a system failure. Note that if you call try_lock
 // while interrupts are disabled and you successfully acquire the lock, you must
-// not re-enable interrupts before calling mutex_unlock.
+// not re-enable interrupts before calling mutex_unlock. mutex_lock() and mutex_unlock()
+// will cooperate with the thread scheduler if you are operating in a normal threaded
+// context.
 #define MAX_MUTEXES 64
 
 typedef struct

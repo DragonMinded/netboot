@@ -13,6 +13,7 @@ static unsigned int console_width = 0;
 static unsigned int console_height = 0;
 static unsigned int console_overscan = 0;
 static unsigned int console_visible = 0;
+static void *curhooks = 0;
 
 #define TAB_WIDTH 4
 
@@ -104,7 +105,7 @@ void console_init(unsigned int overscan)
 
         /* Register ourselves with newlib */
         stdio_t console_calls = { 0, __console_write, 0 };
-        hook_stdio_calls( &console_calls );
+        curhooks = hook_stdio_calls( &console_calls );
     }
 }
 
@@ -120,8 +121,7 @@ void console_free()
         console_height = 0;
 
         /* Unregister ourselves from newlib */
-        stdio_t console_calls = { 0, __console_write, 0 };
-        unhook_stdio_calls( &console_calls );
+        unhook_stdio_calls( curhooks );
     }
 }
 

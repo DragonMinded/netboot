@@ -410,6 +410,8 @@ static int __stderr_write( const char * const buf, unsigned int len )
     return len;
 }
 
+static void *curhooks = 0;
+
 void message_stdio_redirect_init()
 {
     if (!stdout_buffer)
@@ -422,7 +424,7 @@ void message_stdio_redirect_init()
 
         /* Register ourselves with newlib */
         stdio_t message_calls = { 0, __stdout_write, __stderr_write };
-        hook_stdio_calls( &message_calls );
+        curhooks = hook_stdio_calls( &message_calls );
     }
 }
 
@@ -437,7 +439,6 @@ void message_stdio_redirect_free()
         stderr_buffer = 0;
 
         /* Unregister ourselves from newlib */
-        stdio_t message_calls = { 0, __stdout_write, __stderr_write };
-        unhook_stdio_calls( &message_calls );
+        unhook_stdio_calls( curhooks );
     }
 }
