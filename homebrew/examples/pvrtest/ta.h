@@ -89,6 +89,7 @@ struct modifier_list
 #define TA_CMD_POLYGON_GOURAUD_SHADING    0x00000002
 #define TA_CMD_POLYGON_16BIT_UV           0x00000001
 
+// Defines for the mode1 word of the TA cmd.
 #define TA_POLYMODE1_Z_NEVER        (0<<29)
 #define TA_POLYMODE1_Z_LESS         (1<<29)
 #define TA_POLYMODE1_Z_EQUAL        (2<<29)
@@ -97,11 +98,15 @@ struct modifier_list
 #define TA_POLYMODE1_Z_NOTEQUAL     (5<<29)
 #define TA_POLYMODE1_Z_GREATEREQUAL (6<<29)
 #define TA_POLYMODE1_Z_ALWAYS       (7<<29)
+#define TA_POLYMODE1_CULL_DISABLED  (0<<27)
 #define TA_POLYMODE1_CULL_SMALL     (1<<27)
 #define TA_POLYMODE1_CULL_CCW       (2<<27)
 #define TA_POLYMODE1_CULL_CW        (3<<27)
 #define TA_POLYMODE1_NO_Z_UPDATE    0x04000000
+#define TA_POLYMODE1_CACHE_BYPASS   0x00200000
+#define TA_POLYMODE1_DCALC_EXACT    0x00100000
 
+// Defines for the mode2 word of the TA cmd.
 #define TA_POLYMODE2_BLEND_DEFAULT  (0x20<<24)
 #define TA_POLYMODE2_FOG_TABLE      (0<<22)
 #define TA_POLYMODE2_FOG_VERTEX     (1<<22)
@@ -151,20 +156,22 @@ struct modifier_list
 #define TA_POLYMODE2_V_SIZE_512       (6<<0)
 #define TA_POLYMODE2_V_SIZE_1024      (7<<0)
 
-#define TA_TEXTUREMODE_MIPMAP       0x80000000
+/* Defines for the texture word of the TA cmd. Only applies if
+ * TA_CMD_POLYGON_TEXTURED is set on the cmd word. */
+#define TA_TEXTUREMODE_MIPMAP         0x80000000
 #define TA_TEXTUREMODE_VQ_COMPRESSION 0x40000000
-#define TA_TEXTUREMODE_ARGB1555     (0<<27)
-#define TA_TEXTUREMODE_RGB565       (1<<27)
-#define TA_TEXTUREMODE_ARGB4444     (2<<27)
-#define TA_TEXTUREMODE_YUV422       (3<<27)
-#define TA_TEXTUREMODE_BUMPMAP      (4<<27)
-#define TA_TEXTUREMODE_CLUT4        (5<<27)
-#define TA_TEXTUREMODE_CLUT8        (6<<27)
-#define TA_TEXTUREMODE_CLUTBANK8(n) ((n)<<25) /* 0-3  */
-#define TA_TEXTUREMODE_CLUTBANK4(n) ((n)<<21) /* 0-63 */
-#define TA_TEXTUREMODE_TWIDDLED     0x00000000
-#define TA_TEXTUREMODE_NON_TWIDDLED 0x04000000
-#define TA_TEXTUREMODE_ADDRESS(a)   ((((unsigned long)(void*)(a)) & 0xffffff) >> 3)
+#define TA_TEXTUREMODE_ARGB1555       (0<<27)
+#define TA_TEXTUREMODE_RGB565         (1<<27)
+#define TA_TEXTUREMODE_ARGB4444       (2<<27)
+#define TA_TEXTUREMODE_YUV422         (3<<27)
+#define TA_TEXTUREMODE_BUMPMAP        (4<<27)
+#define TA_TEXTUREMODE_CLUT4          (5<<27)
+#define TA_TEXTUREMODE_CLUT8          (6<<27)
+#define TA_TEXTUREMODE_CLUTBANK8(n)   (((n) & 0x3) << 25)  /* 0-3  */
+#define TA_TEXTUREMODE_CLUTBANK4(n)   (((n) & 0x3F) << 21) /* 0-63 */
+#define TA_TEXTUREMODE_NON_TWIDDLED   0x04000000
+#define TA_TEXTUREMODE_STRIDE         0x02000000
+#define TA_TEXTUREMODE_ADDRESS(a)     ((((unsigned long)(void*)(a)) >> 3) & 0x1FFFFF)
 
 /* Command: Vertex */
 
