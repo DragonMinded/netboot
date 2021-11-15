@@ -56,7 +56,7 @@ struct modifier_list
 #define TA_CMD_END_OF_LIST                0x00000000
 #define TA_CMD_USER_TILE_CLIP             0x20000000
 #define TA_CMD_OBJECT_LIST_SET            0x40000000
-#define TA_CMD_POLYGON_OR_MODIFIER        0x80000000
+#define TA_CMD_POLYGON                    0x80000000
 #define TA_CMD_SPRITE                     0xA0000000
 #define TA_CMD_VERTEX                     0xE0000000
 
@@ -222,9 +222,10 @@ struct packed_color_vertex_list
 #define TA_OBJECT_BUFFER_SIZE 1024
 
 extern unsigned int ta_set_target(void *cmdlist, void *tilebuf, int tile_width, int tile_height);
-extern void *ta_create_tile_descriptors(void *ptr, void *buf, int tile_width, int tile_height);
+extern void ta_set_background(void *background);
+extern void ta_create_tile_descriptors(void *ptr, void *buf, int tile_width, int tile_height);
 extern void ta_wait_render();
-extern void ta_begin_render(void *cmdlist, void *tiles, void *scrn, float zclip);
+extern void ta_begin_render(void *cmdlist, void *tiles, void *background, void *scrn, float zclip);
 
 
 #define TA_LIST_SHORT 32

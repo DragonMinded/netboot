@@ -153,10 +153,19 @@ void init_twiddletab()
 void init_palette()
 {
     unsigned int (*palette)[4][256] = (unsigned int (*)[4][256])0xa05f9000;
-    for(int n = 0; n<256; n++) {
+    for(int n = 0; n < 256; n++)
+    {
+        // Blue
         (*palette)[0][n] = 0xff000000 | (n & 0xFF);
+
+        // Green
         (*palette)[1][n] = 0xff000000 | ((n << 8) & 0xFF00);
+
+        // Purple
         (*palette)[2][n] = 0xff000000 | (((n << 16) | n) & 0xFF00FF);
+
+        // Yellow
+        (*palette)[3][n] = 0xff000000 | (((n << 16) | (n << 8)) & 0xFFFF00);
     }
 }
 
@@ -168,7 +177,7 @@ void draw_face(float *p1, float *p2, float *p3, float *p4, void *tex, int pal)
     struct packed_color_vertex_list myvertex;
 
     mypoly.cmd =
-        TA_CMD_POLYGON_OR_MODIFIER |
+        TA_CMD_POLYGON |
         TA_CMD_POLYGON_TYPE_OPAQUE |
         TA_CMD_POLYGON_SUBLIST |
         TA_CMD_POLYGON_STRIPLENGTH_2 |
@@ -229,7 +238,6 @@ void draw_face(float *p1, float *p2, float *p3, float *p4, void *tex, int pal)
     ta_commit_list(&myvertex, TA_LIST_SHORT);
 }
 
-
 /* Define space for the display command list, and the tile work area */
 
 #define MAX_H_TILE (640/32)
@@ -240,6 +248,9 @@ struct ta_buffers {
     char cmd_list[512 * 1024];
     /* TODO Is this enough room for translucent and opaque polygons? */
     char tile_buffer[2 * TA_OBJECT_BUFFER_SIZE * MAX_H_TILE * MAX_V_TILE];
+    /* The background vertex. */
+    int background_vertex[24];
+    /* The individual tile descriptors for the 32x32 tiles. */
     int tile_descriptor[24 + (6 * MAX_H_TILE * MAX_V_TILE)];
 };
 
@@ -252,7 +263,6 @@ void main()
 {
     struct ta_buffers *bufs = (struct ta_buffers *)(void *)0xa5400000;
     unsigned short *tex[2];
-    void *tiles;
 
     /* Set up PowerVR display and tile accelerator hardware */
     init_pvr();
@@ -263,7 +273,7 @@ void main()
     init_twiddletab();
 
     /* Just allocate space for the two 256x256x8 bit textures manually */
-    tex[0] = (unsigned short *)(void *)0xa4400000;
+    tex[0] = (unsigned short *)(void *)0xa4800000;
     tex[1] = (void*)(((char *)tex[0])+256*256);
 
     /* Create the textures.  Unfortunatly, it's not possible to do byte
@@ -294,11 +304,13 @@ void main()
     }
 
     /* Create two sets of tile descriptors, to do double buffering */
-    tiles = ta_create_tile_descriptors(bufs->tile_descriptor, bufs->tile_buffer, framebuffer_width / 32, framebuffer_height / 32);
+    ta_create_tile_descriptors(bufs->tile_descriptor, bufs->tile_buffer, framebuffer_width / 32, framebuffer_height / 32);
+    ta_set_background(bufs->background_vertex);
 
     int i = 0;
     int j = 0;
     int k = 0;
+
     int count = 0;
     while (1)
     {
@@ -371,7 +383,7 @@ void main()
         /* TODO: Set request to wait for TA render end here. */
 
         /* Start rendering the new command list to the screen */
-        ta_begin_render(bufs->cmd_list, tiles, video_framebuffer(), 0.2);
+        ta_begin_render(bufs->cmd_list, bufs->tile_descriptor, bufs->background_vertex, video_framebuffer(), 0.2);
 
         /* TODO: This should wait for the render pipeline to be clear but
          * that's an interrupt. Instead, just sleep for a bit. */

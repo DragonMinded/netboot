@@ -20,31 +20,12 @@ void ta_commit_end()
 }
 
 /* Set up buffers and descriptors for a tilespace */
-void *ta_create_tile_descriptors(void *tile_descriptor_base, void *tile_buffer_base, int tile_width, int tile_height)
+void ta_create_tile_descriptors(void *tile_descriptor_base, void *tile_buffer_base, int tile_width, int tile_height)
 {
-    /* each tile desriptor is 6 words. In addition, there's a 24 word header */
-    /* so, there are 24+6*w*h words stored at tile_descriptor_base. */
-
-    /* each tile uses 64 bytes of buffer space.  So buf must point to */
-    /* 64*w*h bytes of data */
+    /* Each tile uses 64 bytes of buffer space.  So buf must point to 64*w*h bytes of data */
     unsigned int *vr = tile_descriptor_base;
     unsigned int opaquebase = ((unsigned int)tile_buffer_base) & 0x00ffffff;
     unsigned int transbase = opaquebase + ((tile_width * tile_height) * TA_OBJECT_BUFFER_SIZE);
-
-    /* This seems to be here as a buffer for potential overflow from the tile buffer base.
-     * The amount we set here appears to need to match the amount we set in ta_begin_render() */
-    for (int x = 0; x < 18; x++)
-    {
-        *vr++ = 0;
-    }
-
-    /* Set up some more unknown stuff. */
-    *vr++ = 0x10000000;
-    *vr++ = 0x80000000;
-    *vr++ = 0x80000000;
-    *vr++ = 0x80000000;
-    *vr++ = 0x80000000;
-    *vr++ = 0x80000000;
 
     /* Set up individual tiles. */
     for (int x = 0; x < tile_width; x++)
@@ -73,10 +54,6 @@ void *ta_create_tile_descriptors(void *tile_descriptor_base, void *tile_buffer_b
             *vr++ = 0x80000000;
         }
     }
-
-    /* Pass this to ta_begin_render() tiles parameter. The value we skip here should match
-     * the value we put in the above clearing loop, to skip it. */
-    return ((char *)tile_descriptor_base) + (18 * 4);
 }
 
 /* Tell the command list compiler where to store the command list,
@@ -101,8 +78,18 @@ unsigned int ta_set_target(void *cmd_list_base, void *tile_buffer_base, int tile
     return regs[0x144/4];
 }
 
+void ta_set_background(void *background)
+{
+    /* TODO: We need to be able to specify a background plane. */
+    uint32_t *bgpointer = (uint32_t *)background;
+    for (int i = 0; i < 24; i++)
+    {
+        bgpointer[i] = 0;
+    }
+}
+
 /* Launch a new render pass */
-void ta_begin_render(void *cmd_list_base, void *tiles, void *scrn, float zclip)
+void ta_begin_render(void *cmd_list_base, void *tiles, void *background, void *scrn, float zclip)
 {
     volatile unsigned int *regs = (volatile unsigned int *)0xa05f8000;
 
@@ -110,13 +97,6 @@ void ta_begin_render(void *cmd_list_base, void *tiles, void *scrn, float zclip)
     unsigned int tls = ((unsigned int)tiles) & 0x00ffffff;
     unsigned int scn = ((unsigned int)scrn) & 0x00ffffff;
     uint32_t zclipint = ((uint32_t)zclip) & 0xFFFFFFF0;
-
-    unsigned int *taend = (unsigned int *)(void *)(0xa5000000 | regs[0x138/4]);
-
-    for (int i = 0; i < 18; i++)
-    {
-        taend[i] = 0;
-    }
 
     int framebuffer_width;
     if (video_is_vertical())
@@ -132,7 +112,7 @@ void ta_begin_render(void *cmd_list_base, void *tiles, void *scrn, float zclip)
     regs[0x020/4] = cmdl;
     regs[0x060/4] = scn;
     regs[0x064/4] = ((uint32_t)scn) + framebuffer_width * video_depth();
-    regs[0x08c/4] = 0x01000000 | ((((char *)taend) - ((char *)cmd_list_base)) << 1);
+    regs[0x08c/4] = 0x01000000 | ((((uint32_t)background) & 0xFFFFFFFC) << 1);
     regs[0x088/4] = zclipint;
     regs[0x014/4] = 0xffffffff; /* Launch! */
 }
