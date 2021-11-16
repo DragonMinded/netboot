@@ -3,10 +3,9 @@
 #include <naomi/timer.h>
 #include <naomi/maple.h>
 #include <naomi/interrupt.h>
-#include <math.h>
+#include <naomi/matrix.h>
 #include "video.h"
 #include "ta.h"
-#include "matrix.h"
 
 
 /*
@@ -78,47 +77,6 @@ float translation_matrix[4][4] = {
     { 0.0,   0.0,    1.0,   0.0 },
     { 0.0,   0.0,  ZOFFS,   1.0 },
 };
-
-/* rotation functions */
-
-void rotate_x(float n)
-{
-    static float matrix[4][4] = {
-        { 1.0, 0.0, 0.0, 0.0 },
-        { 0.0, 1.0, 0.0, 0.0 },
-        { 0.0, 0.0, 1.0, 0.0 },
-        { 0.0, 0.0, 0.0, 1.0 },
-    };
-    matrix[1][1] = matrix[2][2] = cos((n / 180.0) * M_PI);
-    matrix[1][2] = -(matrix[2][1] = sin((n / 180.0) * M_PI));
-    apply_matrix(&matrix);
-}
-
-void rotate_y(float n)
-{
-    static float matrix[4][4] = {
-        { 1.0, 0.0, 0.0, 0.0 },
-        { 0.0, 1.0, 0.0, 0.0 },
-        { 0.0, 0.0, 1.0, 0.0 },
-        { 0.0, 0.0, 0.0, 1.0 },
-    };
-    matrix[0][0] = matrix[2][2] = cos((n / 180.0) * M_PI);
-    matrix[2][0] = -(matrix[0][2] = sin((n / 180.0) * M_PI));
-    apply_matrix(&matrix);
-}
-
-void rotate_z(float n)
-{
-    static float matrix[4][4] = {
-        { 1.0, 0.0, 0.0, 0.0 },
-        { 0.0, 1.0, 0.0, 0.0 },
-        { 0.0, 0.0, 1.0, 0.0 },
-        { 0.0, 0.0, 0.0, 1.0 },
-    };
-    matrix[0][0] = matrix[1][1] = cos((n / 180.0) * M_PI);
-    matrix[0][1] = -(matrix[1][0] = sin((n / 180.0) * M_PI));
-    apply_matrix(&matrix);
-}
 
 
 /** Texture operations **/
@@ -341,17 +299,17 @@ void main()
 
         /* Set up the hardware transformation in the
            SH4 with the transformations we need to do */
-        clear_matrix();
-        apply_matrix(&screenview_matrix);
-        apply_matrix(&projection_matrix);
-        apply_matrix(&translation_matrix);
-        rotate_x(i);
-        rotate_y(j);
-        rotate_z(k);
+        matrix_init_identity();
+        matrix_apply(&screenview_matrix);
+        matrix_apply(&projection_matrix);
+        matrix_apply(&translation_matrix);
+        matrix_rotate_x(i);
+        matrix_rotate_y(j);
+        matrix_rotate_z(k);
 
         /* Apply the transformation to all the coordinates, and normalize the
            resulting homogenous coordinates into normal 3D coordinates again. */
-        transform_coords(coords, trans_coords, 8);
+        matrix_transform_coords(coords, trans_coords, 8);
 
         /* Clear section of screen in case the TA isn't running */
         video_fill_box(0, 0, video_width(), 64, rgb(0, 0, 0));

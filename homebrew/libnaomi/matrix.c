@@ -1,7 +1,8 @@
-#include <naomi/interrupt.h>
-#include "matrix.h"
+#include "naomi/interrupt.h"
+#include "naomi/matrix.h"
+#include <math.h>
 
-void clear_matrix()
+void matrix_init_identity()
 {
     uint32_t old_irq = irq_disable();
 
@@ -43,7 +44,7 @@ void clear_matrix()
     irq_restore(old_irq);
 }
 
-void apply_matrix(float (*matrix)[4][4])
+void matrix_apply(float (*matrix)[4][4])
 {
     uint32_t old_irq = irq_disable();
 
@@ -89,7 +90,7 @@ void apply_matrix(float (*matrix)[4][4])
     irq_restore(old_irq);
 }
 
-void transform_coords(float (*src)[3], float (*dest)[3], int n)
+void matrix_transform_coords(float (*src)[3], float (*dest)[3], int n)
 {
     // Let's do some bounds checking!
     if (n <= 0) { return; }
@@ -128,4 +129,43 @@ void transform_coords(float (*src)[3], float (*dest)[3], int n)
     );
 
     irq_restore(old_irq);
+}
+
+void matrix_rotate_x(float degrees)
+{
+    static float matrix[4][4] = {
+        { 1.0, 0.0, 0.0, 0.0 },
+        { 0.0, 1.0, 0.0, 0.0 },
+        { 0.0, 0.0, 1.0, 0.0 },
+        { 0.0, 0.0, 0.0, 1.0 },
+    };
+    matrix[1][1] = matrix[2][2] = cos((degrees / 180.0) * M_PI);
+    matrix[1][2] = -(matrix[2][1] = sin((degrees / 180.0) * M_PI));
+    matrix_apply(&matrix);
+}
+
+void matrix_rotate_y(float degrees)
+{
+    static float matrix[4][4] = {
+        { 1.0, 0.0, 0.0, 0.0 },
+        { 0.0, 1.0, 0.0, 0.0 },
+        { 0.0, 0.0, 1.0, 0.0 },
+        { 0.0, 0.0, 0.0, 1.0 },
+    };
+    matrix[0][0] = matrix[2][2] = cos((degrees / 180.0) * M_PI);
+    matrix[2][0] = -(matrix[0][2] = sin((degrees / 180.0) * M_PI));
+    matrix_apply(&matrix);
+}
+
+void matrix_rotate_z(float degrees)
+{
+    static float matrix[4][4] = {
+        { 1.0, 0.0, 0.0, 0.0 },
+        { 0.0, 1.0, 0.0, 0.0 },
+        { 0.0, 0.0, 1.0, 0.0 },
+        { 0.0, 0.0, 0.0, 1.0 },
+    };
+    matrix[0][0] = matrix[1][1] = cos((degrees / 180.0) * M_PI);
+    matrix[0][1] = -(matrix[1][0] = sin((degrees / 180.0) * M_PI));
+    matrix_apply(&matrix);
 }

@@ -19,6 +19,7 @@ SRCS += console.c
 SRCS += rtc.c
 SRCS += cart.c
 SRCS += romfs.c
+SRCS += matrix.c
 
 # Pick up base makefile rules common to all examples.
 include ../Makefile.base
