@@ -25,7 +25,6 @@ void ta_create_tile_descriptors(void *tile_descriptor_base, void *tile_buffer_ba
     /* Each tile uses 64 bytes of buffer space.  So buf must point to 64*w*h bytes of data */
     unsigned int *vr = tile_descriptor_base;
     unsigned int opaquebase = ((unsigned int)tile_buffer_base) & 0x00ffffff;
-    unsigned int transbase = opaquebase + ((tile_width * tile_height) * TA_OBJECT_BUFFER_SIZE);
 
     /* Set up individual tiles. */
     for (int x = 0; x < tile_width; x++)
@@ -45,7 +44,7 @@ void ta_create_tile_descriptors(void *tile_descriptor_base, void *tile_buffer_ba
             *vr++ = 0x80000000;
 
             // Translucent polygons.
-            *vr++ = transbase + ((x + (y * tile_width)) * TA_OBJECT_BUFFER_SIZE);
+            *vr++ = 0x80000000;
 
             // We don't suppport translucent modifiers, so nothing here.
             *vr++ = 0x80000000;

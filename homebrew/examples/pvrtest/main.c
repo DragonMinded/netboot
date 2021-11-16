@@ -244,8 +244,8 @@ void draw_face(float *p1, float *p2, float *p3, float *p4, void *tex, int pal)
 struct ta_buffers {
     /* TODO Is this enough room for command lists? */
     char cmd_list[512 * 1024];
-    /* TODO Is this enough room for translucent and opaque polygons? */
-    char tile_buffer[2 * TA_OBJECT_BUFFER_SIZE * MAX_H_TILE * MAX_V_TILE];
+    /* TODO Is this enough room for opaque polygons? */
+    char tile_buffer[TA_OBJECT_BUFFER_SIZE * MAX_H_TILE * MAX_V_TILE];
     /* The background vertex. */
     int background_vertex[24];
     /* The individual tile descriptors for the 32x32 tiles. */

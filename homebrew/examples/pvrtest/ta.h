@@ -220,7 +220,7 @@ struct packed_color_vertex_list
 #define TA_TEXTUREMODE_ADDRESS(a)     ((((unsigned long)(void*)(a)) >> 3) & 0x1FFFFF)
 
 
-#define TA_OBJECT_BUFFER_SIZE 1024
+#define TA_OBJECT_BUFFER_SIZE 64
 
 extern unsigned int ta_set_target(void *cmdlist, void *tilebuf, int tile_width, int tile_height);
 extern void ta_set_background(void *background);
