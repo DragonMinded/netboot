@@ -210,20 +210,20 @@ void draw_face(float *p1, float *p2, float *p3, float *p4, void *tex, int pal)
     myvertex.y = p1[1];
     myvertex.z = p1[2];
     myvertex.u = 1.0;
-    myvertex.v = 0.0;
+    myvertex.v = 1.0;
     ta_commit_list(&myvertex, TA_LIST_SHORT);
 
     myvertex.x = p2[0];
     myvertex.y = p2[1];
     myvertex.z = p2[2];
-    myvertex.u = 0.0;
+    myvertex.u = 1.0;
     myvertex.v = 0.0;
     ta_commit_list(&myvertex, TA_LIST_SHORT);
 
     myvertex.x = p3[0];
     myvertex.y = p3[1];
     myvertex.z = p3[2];
-    myvertex.u = 1.0;
+    myvertex.u = 0.0;
     myvertex.v = 1.0;
     ta_commit_list(&myvertex, TA_LIST_SHORT);
 
@@ -231,7 +231,7 @@ void draw_face(float *p1, float *p2, float *p3, float *p4, void *tex, int pal)
     myvertex.y = p4[1];
     myvertex.z = p4[2];
     myvertex.u = 0.0;
-    myvertex.v = 1.0;
+    myvertex.v = 0.0;
     myvertex.cmd |= TA_CMD_VERTEX_END_OF_STRIP;
     ta_commit_list(&myvertex, TA_LIST_SHORT);
 }
@@ -341,19 +341,17 @@ void main()
 
         /* Set up the hardware transformation in the
            SH4 with the transformations we need to do */
-        uint32_t oldirq = irq_disable();
         clear_matrix();
         apply_matrix(&screenview_matrix);
         apply_matrix(&projection_matrix);
         apply_matrix(&translation_matrix);
-        rotate_x(i / 180.0);
-        rotate_y(j / 180.0);
-        rotate_z(k / 180.0);
+        rotate_x(i);
+        rotate_y(j);
+        rotate_z(k);
 
         /* Apply the transformation to all the coordinates, and normalize the
            resulting homogenous coordinates into normal 3D coordinates again. */
         transform_coords(coords, trans_coords, 8);
-        irq_restore(oldirq);
 
         /* Clear section of screen in case the TA isn't running */
         video_fill_box(0, 0, video_width(), 64, rgb(0, 0, 0));
@@ -367,7 +365,7 @@ void main()
         draw_face(trans_coords[0], trans_coords[1], trans_coords[2], trans_coords[3], tex[0], 0);
         draw_face(trans_coords[1], trans_coords[5], trans_coords[3], trans_coords[7], tex[0], 1);
         draw_face(trans_coords[4], trans_coords[5], trans_coords[0], trans_coords[1], tex[0], 2);
-        draw_face(trans_coords[5], trans_coords[4], trans_coords[7], trans_coords[6], tex[1], 0);
+        draw_face(trans_coords[5], trans_coords[4], trans_coords[7], trans_coords[6], tex[1], 3);
         draw_face(trans_coords[4], trans_coords[0], trans_coords[6], trans_coords[2], tex[1], 1);
         draw_face(trans_coords[2], trans_coords[3], trans_coords[6], trans_coords[7], tex[1], 2);
 

@@ -11,7 +11,7 @@ all: pvrtest.bin
 SRCS += main.c
 SRCS += ta.c
 SRCS += video.c
-SRCS += matrix.s
+SRCS += matrix.c
 SRCS += build/tex1.o
 SRCS += build/tex2.o
 
