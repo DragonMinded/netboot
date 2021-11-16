@@ -12,6 +12,7 @@ SRCS += thread.c
 SRCS += dimmcomms.c
 SRCS += video.c
 SRCS += video-freetype.c
+SRCS += ta.c
 SRCS += maple.c
 SRCS += eeprom.c
 SRCS += audio.c

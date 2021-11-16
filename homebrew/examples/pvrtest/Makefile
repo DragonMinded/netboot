@@ -9,7 +9,6 @@ all: pvrtest.bin
 # missing missing `build/naomi.bin' target, so make sure all of
 # these files exist.
 SRCS += main.c
-SRCS += ta.c
 SRCS += build/tex1.o
 SRCS += build/tex2.o
 

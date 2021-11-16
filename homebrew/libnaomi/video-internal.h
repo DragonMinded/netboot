@@ -37,4 +37,8 @@
     a = ((color) & 0x8000) ? 255 : 0; \
 } while (0)
 
+void _ta_init();
+void _ta_free();
+void _ta_init_buffers();
+
 #endif

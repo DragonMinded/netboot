@@ -4,7 +4,7 @@
 #include <naomi/maple.h>
 #include <naomi/interrupt.h>
 #include <naomi/matrix.h>
-#include "ta.h"
+#include <naomi/ta.h>
 
 
 /*
@@ -193,35 +193,17 @@ void draw_face(float *p1, float *p2, float *p3, float *p4, void *tex, int pal)
     ta_commit_list(&myvertex, TA_LIST_SHORT);
 }
 
-/* Define space for the display command list, and the tile work area */
-
-#define MAX_H_TILE (640/32)
-#define MAX_V_TILE (480/32)
-
-struct ta_buffers {
-    /* TODO Is this enough room for command lists? */
-    char cmd_list[512 * 1024];
-    /* TODO Is this enough room for opaque polygons? */
-    char tile_buffer[TA_OBJECT_BUFFER_SIZE * MAX_H_TILE * MAX_V_TILE];
-    /* The background vertex. */
-    int background_vertex[24];
-    /* The individual tile descriptors for the 32x32 tiles. */
-    int tile_descriptor[24 + (6 * MAX_H_TILE * MAX_V_TILE)];
-};
-
-
 extern uint8_t *tex1_png_data;
 extern uint8_t *tex2_png_data;
 
 
 void main()
 {
-    struct ta_buffers *bufs = (struct ta_buffers *)(void *)0xa5400000;
     unsigned short *tex[2];
 
     /* Set up PowerVR display and tile accelerator hardware */
-    ta_init();
     video_init_simple();
+    video_set_background_color(rgb(48, 48, 48));
 
     /* Create palettes and twidding table for textures */
     init_palette();
@@ -244,23 +226,6 @@ void main()
             tex[1][twiddletab[i]|(twiddletab[j]>>1)] = (tex2_png_data[j + 1 + (i * 256)] << 8) | tex2_png_data[j + (i * 256)];
         }
     }
-
-    int framebuffer_width;
-    int framebuffer_height;
-    if (video_is_vertical())
-    {
-        framebuffer_width = video_height();
-        framebuffer_height = video_width();
-    }
-    else
-    {
-        framebuffer_width = video_width();
-        framebuffer_height = video_height();
-    }
-
-    /* Create two sets of tile descriptors, to do double buffering */
-    ta_create_tile_descriptors(bufs->tile_descriptor, bufs->tile_buffer, framebuffer_width / 32, framebuffer_height / 32);
-    ta_set_background(bufs->background_vertex);
 
     int i = 0;
     int j = 0;
@@ -310,13 +275,8 @@ void main()
            resulting homogenous coordinates into normal 3D coordinates again. */
         matrix_transform_coords(coords, trans_coords, 8);
 
-        /* Clear section of screen in case the TA isn't running */
-        video_fill_box(0, 0, video_width(), 64, rgb(0, 0, 0));
-
-        /* TODO: Set request to wait for TA commit end here. */
-
-        /* Set up the command list compiler to use the right set of buffers */
-        ta_set_target(bufs->cmd_list, bufs->tile_buffer, framebuffer_width / 32, framebuffer_height / 32);
+        /* Begin sending commands to the TA to draw stuff */
+        ta_commit_begin();
 
         /* Draw the 6 faces of the cube */
         draw_face(trans_coords[0], trans_coords[1], trans_coords[2], trans_coords[3], tex[0], 0);
@@ -329,19 +289,10 @@ void main()
         /* Mark the end of the command list */
         ta_commit_end();
 
-        /* TODO: This should wait for the render pipeline to be filled but
-         * that's an interrupt. Instead, just sleep for a bit. */
-        timer_wait(2500);
+        /* Now, request to render it */
+        ta_render();
 
-        /* TODO: Set request to wait for TA render end here. */
-
-        /* Start rendering the new command list to the screen */
-        ta_begin_render(bufs->cmd_list, bufs->tile_descriptor, bufs->background_vertex, video_framebuffer(), 0.2);
-
-        /* TODO: This should wait for the render pipeline to be clear but
-         * that's an interrupt. Instead, just sleep for a bit. */
-        timer_wait(10000);
-
+        /* Now, display some debugging on top of the TA. */
         video_draw_debug_text(32, 32, rgb(255, 255, 255), "Rendering with TA...\nLiveness counter: %d", count++);
         video_display_on_vblank();
     }

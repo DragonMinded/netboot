@@ -90,7 +90,7 @@ unsigned int global_video_vertical = 0;
 void *buffer_base = 0;
 
 // Our current framebuffer location, for double buffering.
-static unsigned int buffer_loc = 0;
+unsigned int buffer_loc = 0;
 #define current_buffer_loc ((buffer_loc) ? 1 : 0)
 #define next_buffer_loc ((buffer_loc) ? 0 : 1)
 
@@ -265,6 +265,9 @@ void video_init_simple()
         cached_actual_height = global_video_height;
     }
 
+    // Now, initialize the tile accelerator so it can be used for drawing.
+    _ta_init();
+
     // Now, zero out the screen so there's no garbage if we never display.
     void *zero_base = (void *)(VRAM_BASE | 0xA0000000);
     if (!hw_memset(zero_base, 0, global_video_width * global_video_height * global_video_depth * 2))
@@ -363,6 +366,11 @@ void video_init_simple()
     // Wait for vblank like games do.
     uint32_t vblank_in_position = videobase[POWERVR2_VBLANK_INTERRUPT] & 0x1FF;
     while((videobase[POWERVR2_SYNC_STAT] & 0x1FF) != vblank_in_position) { ; }
+
+    // Now, ask the TA to set up its buffers since we have working video now.
+    _ta_init_buffers();
+
+    // Finally, its safe to enable interrupts and move on.
     irq_restore(old_interrupts);
 }
 
@@ -388,6 +396,9 @@ void video_free()
 
     // Kill our vblank interrupt.
     _vblank_free();
+
+    // Kill the tile accelerator.
+    _ta_free();
 
     // De-init our globals.
     global_video_width = 0;

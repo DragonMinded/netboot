@@ -1,22 +1,13 @@
+#ifndef __TA_H
+#define __TA_H
 
-/* Pixel formats for ta_begin_render() (should be same as the screens) */
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-#define TA_PIXFMT_RGB555   0
-#define TA_PIXFMT_RGB565   1
-#define TA_PIXFMT_ARGB4444 2
-#define TA_PIXFMT_ARGB1555 3
-#define TA_PIXFMT_RGB888   5
-#define TA_PIXFMT_ARGB8888 6
-
-#define TA_PIXFMT_DITHER   8
-
-
-
-/* TA commands... */
-
+#include <stdint.h>
 
 /* Command: User clip */
-
 struct user_clip_list
 {
     unsigned int cmd;
@@ -27,11 +18,7 @@ struct user_clip_list
     float ymax;
 };
 
-#define TA_CMD_USERCLIP 0x20000000
-
-
 /* Command: Polygon / Modifier volume */
-
 struct polygon_list
 {
   unsigned int cmd;
@@ -45,6 +32,7 @@ struct polygon_list
   float blue;
 };
 		    
+/* Command: Modifier list */
 struct modifier_list
 {
     unsigned int cmd;
@@ -53,7 +41,6 @@ struct modifier_list
 };
 
 /* Command: Vertex */
-
 struct packed_color_vertex_list
 {
     unsigned int cmd;
@@ -65,7 +52,6 @@ struct packed_color_vertex_list
     unsigned int color;
     unsigned int ocolor;
 };
-
 
 // Defines for the high byte of the TA cmd.
 #define TA_CMD_END_OF_LIST                0x00000000
@@ -219,20 +205,31 @@ struct packed_color_vertex_list
 #define TA_TEXTUREMODE_STRIDE         0x02000000
 #define TA_TEXTUREMODE_ADDRESS(a)     ((((unsigned long)(void*)(a)) >> 3) & 0x1FFFFF)
 
-
+// The size of each individual object buffer inside the TA. */
 #define TA_OBJECT_BUFFER_SIZE 64
 
-extern void ta_init();
-extern unsigned int ta_set_target(void *cmdlist, void *tilebuf, int tile_width, int tile_height);
-extern void ta_set_background(void *background);
-extern void ta_create_tile_descriptors(void *ptr, void *buf, int tile_width, int tile_height);
-extern void ta_wait_render();
-extern void ta_begin_render(void *cmdlist, void *tiles, void *background, void *scrn, float zclip);
+// Function for requesting that a set of commands be rendered to the current framebuffer.
+// This is just a convenience function that calls ta_render_begin() and then ta_render_wait().
+void ta_render();
 
+// Function for starting rendering, call this if you want to do other things while waiting
+// for the render to finish.
+void ta_render_begin();
 
+// Function for finishing rendering and waiting for it to be done.
+void ta_render_wait();
+
+// Functions for sending list data to the TA to be rendered upon calling ta_render();
+void ta_commit_begin();
+void ta_commit_list(void *list, int size);
+void ta_commit_end();
+
+// Defines for the size of a ta_commit_list() call.
 #define TA_LIST_SHORT 32
 #define TA_LIST_LONG 64
 
+#ifdef __cplusplus
+}
+#endif
 
-extern void ta_commit_list(void *list, int size);
-extern void ta_commit_end();
+#endif
