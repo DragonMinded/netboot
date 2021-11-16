@@ -52,6 +52,21 @@ struct modifier_list
     int not_used[6];
 };
 
+/* Command: Vertex */
+
+struct packed_color_vertex_list
+{
+    unsigned int cmd;
+    float x;
+    float y;
+    float z;
+    float u;
+    float v;
+    unsigned int color;
+    unsigned int ocolor;
+};
+
+
 // Defines for the high byte of the TA cmd.
 #define TA_CMD_END_OF_LIST                0x00000000
 #define TA_CMD_USER_TILE_CLIP             0x20000000
@@ -111,10 +126,10 @@ struct modifier_list
 #define TA_POLYMODE2_SRC_BLEND_ONE           (1 << 29)
 #define TA_POLYMODE2_SRC_BLEND_DST_COLOR     (2 << 29)
 #define TA_POLYMODE2_SRC_BLEND_INV_DST_COLOR (3 << 29)
-#define TA_POLYMODE2_SRC_BLEND_DST_ALPHA     (4 << 29)
-#define TA_POLYMODE2_SRC_BLEND_INV_DST_ALPHA (5 << 29)
-#define TA_POLYMODE2_SRC_BLEND_SRC_ALPHA     (6 << 29)
-#define TA_POLYMODE2_SRC_BLEND_INV_SRC_ALPHA (7 << 29)
+#define TA_POLYMODE2_SRC_BLEND_SRC_ALPHA     (4 << 29)
+#define TA_POLYMODE2_SRC_BLEND_INV_SRC_ALPHA (5 << 29)
+#define TA_POLYMODE2_SRC_BLEND_DST_ALPHA     (6 << 29)
+#define TA_POLYMODE2_SRC_BLEND_INV_DST_ALPHA (7 << 29)
 
 #define TA_POLYMODE2_DST_BLEND_ZERO          (0 << 26)
 #define TA_POLYMODE2_DST_BLEND_ONE           (1 << 26)
@@ -125,8 +140,8 @@ struct modifier_list
 #define TA_POLYMODE2_DST_BLEND_DST_ALPHA     (6 << 26)
 #define TA_POLYMODE2_DST_BLEND_INV_DST_ALPHA (7 << 26)
 
-#define TA_POLYMODE2_ENABLE_SRC_BLEND 0x02000000
-#define TA_POLYMODE2_ENABLE_DST_BLEND 0x01000000
+#define TA_POLYMODE2_ENABLE_SRC_SECONDARY_BUFFER 0x02000000
+#define TA_POLYMODE2_ENABLE_DST_SECONDARY_BUFFER 0x01000000
 
 #define TA_POLYMODE2_FOG_TABLE      (0<<22)
 #define TA_POLYMODE2_FOG_VERTEX     (1<<22)
@@ -203,20 +218,6 @@ struct modifier_list
 #define TA_TEXTUREMODE_NON_TWIDDLED   0x04000000
 #define TA_TEXTUREMODE_STRIDE         0x02000000
 #define TA_TEXTUREMODE_ADDRESS(a)     ((((unsigned long)(void*)(a)) >> 3) & 0x1FFFFF)
-
-/* Command: Vertex */
-
-struct packed_color_vertex_list
-{
-    unsigned int cmd;
-    float x;
-    float y;
-    float z;
-    float u;
-    float v;
-    unsigned int color;
-    unsigned int ocolor;
-};
 
 
 #define TA_OBJECT_BUFFER_SIZE 1024

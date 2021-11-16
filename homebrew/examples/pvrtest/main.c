@@ -193,8 +193,6 @@ void draw_face(float *p1, float *p2, float *p3, float *p4, void *tex, int pal)
         TA_POLYMODE2_TEXTURE_CLAMP_U |
         TA_POLYMODE2_TEXTURE_CLAMP_V |
         TA_POLYMODE2_FOG_DISABLED |
-        TA_POLYMODE2_ENABLE_SRC_BLEND |
-        TA_POLYMODE2_ENABLE_DST_BLEND |
         TA_POLYMODE2_SRC_BLEND_ONE |
         TA_POLYMODE2_DST_BLEND_ZERO;
     mypoly.texture =
@@ -273,7 +271,7 @@ void main()
     init_twiddletab();
 
     /* Just allocate space for the two 256x256x8 bit textures manually */
-    tex[0] = (unsigned short *)(void *)0xa4800000;
+    tex[0] = (unsigned short *)(void *)0xa4400000;
     tex[1] = (void*)(((char *)tex[0])+256*256);
 
     /* Create the textures.  Unfortunatly, it's not possible to do byte

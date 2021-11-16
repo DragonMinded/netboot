@@ -82,6 +82,10 @@ void ta_set_background(void *background)
 {
     /* TODO: We need to be able to specify a background plane. */
     uint32_t *bgpointer = (uint32_t *)background;
+
+    /* First 3 words of this are a mode1/mode2/texture word, followed by
+     * 3 7-word x/y/z/u/v/base color/offset color chunks specifying the
+     * bottom left, top left and bottom right of the background quad. */
     for (int i = 0; i < 24; i++)
     {
         bgpointer[i] = 0;
