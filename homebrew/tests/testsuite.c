@@ -155,9 +155,23 @@ void run_suite()
         logbuffer[0] = 0;
         reasonbuffer[0] = 0;
 
-        int profile = profile_start();
-        tests[testno].main(&context);
-        uint32_t nsec = profile_end(profile);
+        uint32_t nsec;
+        if (tests[testno].duration > 0)
+        {
+            /* Timing-critical test */
+            uint32_t irq = irq_disable();
+            int profile = profile_start();
+            tests[testno].main(&context);
+            nsec = profile_end(profile);
+            irq_restore(irq);
+        }
+        else
+        {
+            /* Regular test */
+            int profile = profile_start();
+            tests[testno].main(&context);
+            nsec = profile_end(profile);
+        }
         total_duration += nsec;
 
         if (context.result == TEST_PASSED && tests[testno].duration >= 0)
