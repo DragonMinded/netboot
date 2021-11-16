@@ -208,6 +208,27 @@ static unsigned int three_d_params[] = {
 	0x8108, 0x00000003  /* 32bit palette (0x0 = ARGB1555, 0x1 = RGB565, 0x2 = ARGB4444, 0x3 = ARGB8888  */
 };
 
+static int twiddletab[1024];
+
+void _ta_init_twiddletab()
+{
+    for(int x=0; x<1024; x++)
+    {
+        twiddletab[x] = (
+            (x & 1) |
+            ((x & 2) << 1) |
+            ((x & 4) << 2) |
+            ((x & 8) << 3) |
+            ((x & 16) << 4) |
+            ((x & 32) << 5) |
+            ((x & 64) << 6) |
+            ((x & 128) << 7) |
+            ((x & 256) << 8) |
+            ((x & 512) << 9)
+        );
+    }
+}
+
 void _ta_init()
 {
     volatile unsigned char *regs = (volatile unsigned char *)(void *)0xa05f0000;
@@ -226,9 +247,57 @@ void _ta_init()
 
     while (!(*vbl & 0x01ff));
     while (*vbl & 0x01ff);
+
+    // Initialize twiddle table for texture load operations.
+    _ta_init_twiddletab();
 }
 
 void _ta_free()
 {
     // Nothing for now.
+}
+
+void *ta_palette_bank(int size, int banknum)
+{
+    if (size == TA_PALETTE_CLUT4)
+    {
+        if (banknum < 0 || banknum > 63) { return 0; }
+
+        uint32_t *palette = (uint32_t *)0xa05f9000;
+        return &palette[16 * banknum];
+    }
+    if (size == TA_PALETTE_CLUT8)
+    {
+        if (banknum < 0 || banknum > 3) { return 0; }
+
+        uint32_t *palette = (uint32_t *)0xa05f9000;
+        return &palette[256 * banknum];
+    }
+
+    return 0;
+}
+
+int ta_texture_load(void *offset, int size, void *data)
+{
+    if (size != 8 && size != 16 && size != 32 && size != 64 && size != 128 && size != 256 && size != 512 && size != 1024)
+    {
+        return -1;
+    }
+    if (offset == 0 || data == 0)
+    {
+        return -1;
+    }
+
+    uint16_t *tex = (uint16_t *)(((uint32_t)offset) | UNCACHED_MIRROR);
+    uint16_t *src = (uint16_t *)data;
+
+    for(int i = 0; i < 256; i++)
+    {
+        for(int j = 0; j < 256; j += 2)
+        {
+            tex[twiddletab[i] | (twiddletab[j] >> 1)] = src[(j + (i * 256)) >> 1];
+        }
+    }
+
+    return 0;
 }

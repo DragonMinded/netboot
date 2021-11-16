@@ -6,46 +6,9 @@
 #include <naomi/matrix.h>
 #include <naomi/ta.h>
 
+// PVR/TA example based heavily off of the Hardware 3D example by marcus.
 
-/*
- *    Hardware 3D example by marcus
- *
- *  This example creates a texture mapped cube
- *  using the tile accelerator hardware and the
- *  built in matrix multiplication feature of
- *  the SH4.  It was inspired by Dan's 3dtest
- *  program of course, but this one is more
- *  "clean", and does real 3D.  :-)
- *
- *  <URL:http://mc.pp.se/dc/>
- */
-
-
-/** 3D operations **/
-
-
-/* coordinates for the cube */
-
-float coords[8][3] = {
-    { -1.0, -1.0, -1.0 },
-    {  1.0, -1.0, -1.0 },
-    { -1.0,  1.0, -1.0 },
-    {  1.0,  1.0, -1.0 },
-    { -1.0, -1.0,  1.0 },
-    {  1.0, -1.0,  1.0 },
-    { -1.0,  1.0,  1.0 },
-    {  1.0,  1.0,  1.0 },
-};
-
-
-/* transformed coordinates */
-
-float trans_coords[8][3];
-
-
-/* matrices for transforming world coordinates to
-   screen coordinates (with perspective)        */
-
+// Definitions for matrixes that convert from worldview to screenview.
 #define XCENTER 320.0
 #define YCENTER 240.0
 
@@ -54,7 +17,6 @@ float trans_coords[8][3];
 #define ZFAR  100.0
 
 #define ZOFFS 5.0
-
 
 float screenview_matrix[4][4] = {
     { YCENTER,     0.0,   0.0,   0.0 },
@@ -77,57 +39,32 @@ float translation_matrix[4][4] = {
     { 0.0,   0.0,  ZOFFS,   1.0 },
 };
 
-
-/** Texture operations **/
-
-
-/* setup a table for easy twiddling of texures.
-   (palette based textures can't be non-twiddled) */
-
-int twiddletab[1024];
-
-void init_twiddletab()
-{
-    for(int x=0; x<1024; x++)
-    {
-        twiddletab[x] = (
-            (x&1) |
-            ((x&2)<<1) |
-            ((x&4)<<2) |
-            ((x&8)<<3) |
-            ((x&16)<<4) |
-            ((x&32)<<5) |
-            ((x&64)<<6) |
-            ((x&128)<<7) |
-            ((x&256)<<8) |
-            ((x&512)<<9)
-        );
-    }
-}
-
-/** Palette operations **/
-
 void init_palette()
 {
-    unsigned int (*palette)[4][256] = (unsigned int (*)[4][256])0xa05f9000;
+    uint32_t *palette[4] = {
+        ta_palette_bank(TA_PALETTE_CLUT8, 0),
+        ta_palette_bank(TA_PALETTE_CLUT8, 1),
+        ta_palette_bank(TA_PALETTE_CLUT8, 2),
+        ta_palette_bank(TA_PALETTE_CLUT8, 3),
+    };
+
     for(int n = 0; n < 256; n++)
     {
         // Blue
-        (*palette)[0][n] = 0xff000000 | (n & 0xFF);
+        palette[0][n] = 0xff000000 | (n & 0xFF);
 
         // Green
-        (*palette)[1][n] = 0xff000000 | ((n << 8) & 0xFF00);
+        palette[1][n] = 0xff000000 | ((n << 8) & 0xFF00);
 
         // Purple
-        (*palette)[2][n] = 0xff000000 | (((n << 16) | n) & 0xFF00FF);
+        palette[2][n] = 0xff000000 | (((n << 16) | n) & 0xFF00FF);
 
         // Yellow
-        (*palette)[3][n] = 0xff000000 | (((n << 16) | (n << 8)) & 0xFFFF00);
+        palette[3][n] = 0xff000000 | (((n << 16) | (n << 8)) & 0xFFFF00);
     }
 }
 
 /* Draw a textured polygon for one of the faces of the cube */
-
 void draw_face(float *p1, float *p2, float *p3, float *p4, void *tex, int pal)
 {
     struct polygon_list mypoly;
@@ -193,40 +130,40 @@ void draw_face(float *p1, float *p2, float *p3, float *p4, void *tex, int pal)
     ta_commit_list(&myvertex, TA_LIST_SHORT);
 }
 
+// 8-bit textures that we're loading per side.
 extern uint8_t *tex1_png_data;
 extern uint8_t *tex2_png_data;
 
-
 void main()
 {
-    unsigned short *tex[2];
-
     /* Set up PowerVR display and tile accelerator hardware */
     video_init_simple();
     video_set_background_color(rgb(48, 48, 48));
 
-    /* Create palettes and twidding table for textures */
+    /* Create palettes for our grayscale (indexed) textures */
     init_palette();
-    init_twiddletab();
 
-    /* Just allocate space for the two 256x256x8 bit textures manually */
+    /* TODO: We should really be able to ask the TA driver for a texture slot.
+     * For now, just allocate space for the two 256x256x8 bit textures manually. */
+    uint16_t *tex[2];
     tex[0] = (unsigned short *)(void *)0xa4400000;
     tex[1] = (void*)(((char *)tex[0])+256*256);
+    ta_texture_load(tex[0], 256, tex1_png_data);
+    ta_texture_load(tex[1], 256, tex2_png_data);
 
-    /* Create the textures.  Unfortunatly, it's not possible to do byte
-       writes to the texture memory.  So for these 8bpp textures, we have
-       to write two pixels at a time.  Fortunatelty, the twiddling algorithm
-       (palette based textures can not be non-twiddled) keeps horizontally
-       adjacent pixel pairs together, so it's not a real problem. */
-    for(int i=0; i<256; i++)
-    {
-        for(int j=0; j<256; j+=2)
-        {
-            tex[0][twiddletab[i]|(twiddletab[j]>>1)] = (tex1_png_data[j + 1 + (i * 256)] << 8) | tex1_png_data[j + (i * 256)];
-            tex[1][twiddletab[i]|(twiddletab[j]>>1)] = (tex2_png_data[j + 1 + (i * 256)] << 8) | tex2_png_data[j + (i * 256)];
-        }
-    }
+    /* Set up our cube. */
+    float coords[8][3] = {
+        { -1.0, -1.0, -1.0 },
+        {  1.0, -1.0, -1.0 },
+        { -1.0,  1.0, -1.0 },
+        {  1.0,  1.0, -1.0 },
+        { -1.0, -1.0,  1.0 },
+        {  1.0, -1.0,  1.0 },
+        { -1.0,  1.0,  1.0 },
+        {  1.0,  1.0,  1.0 },
+    };
 
+    /* x/y/z rotation amount in degrees */
     int i = 0;
     int j = 0;
     int k = 0;
@@ -234,6 +171,7 @@ void main()
     int count = 0;
     while (1)
     {
+        /* Check buttons, rotate cube based on inputs. */
         maple_poll_buttons();
         jvs_buttons_t buttons = maple_buttons_held();
         if (buttons.player1.button1)
@@ -261,8 +199,7 @@ void main()
             k--;
         }
 
-        /* Set up the hardware transformation in the
-           SH4 with the transformations we need to do */
+        /* Set up the hardware transformation in the SH4 with the transformations we need to do */
         matrix_init_identity();
         matrix_apply(&screenview_matrix);
         matrix_apply(&projection_matrix);
@@ -273,6 +210,7 @@ void main()
 
         /* Apply the transformation to all the coordinates, and normalize the
            resulting homogenous coordinates into normal 3D coordinates again. */
+        float trans_coords[8][3];
         matrix_transform_coords(coords, trans_coords, 8);
 
         /* Begin sending commands to the TA to draw stuff */

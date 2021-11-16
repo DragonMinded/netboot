@@ -228,6 +228,18 @@ void ta_commit_end();
 #define TA_LIST_SHORT 32
 #define TA_LIST_LONG 64
 
+// Given a particular palette lookup size and a bank, return the palette RAM pointer.
+void *ta_palette_bank(int size, int banknum);
+
+#define TA_PALETTE_CLUT4 1
+#define TA_PALETTE_CLUT8 2
+
+// Given a raw offset into texture RAM and a texture size, load the texture into texture
+// RAM in twiddled format required by several video modes. Note that the texture size is
+// the size in pixels of one side. The only allowed sizes are 8, 16, 32, 64, 128, 256, 512
+// and 1024.
+int ta_texture_load(void *offset, int size, void *data);
+
 #ifdef __cplusplus
 }
 #endif
