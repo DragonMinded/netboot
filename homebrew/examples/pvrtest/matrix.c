@@ -1,9 +1,6 @@
 #include <naomi/interrupt.h>
 #include "matrix.h"
 
-// TODO: Its probably safe to run all of these in a threaded context. Try removing the IRQ
-// stuff on actual hardware.
-
 void clear_matrix()
 {
     uint32_t old_irq = irq_disable();
@@ -123,6 +120,7 @@ void transform_coords(float (*src)[3], float (*dest)[3], int n)
         fmov.s fr2,@r5\n \
         add #4,r5\n \
         bf/s .loop\n \
+        nop\n \
         " :
         /* No outputs */ :
         "r" (src_param), "r" (dst_param), "r" (n_param) :
