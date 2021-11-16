@@ -10,7 +10,6 @@ all: pvrtest.bin
 # these files exist.
 SRCS += main.c
 SRCS += ta.c
-SRCS += video.c
 SRCS += build/tex1.o
 SRCS += build/tex2.o
 

@@ -222,6 +222,7 @@ struct packed_color_vertex_list
 
 #define TA_OBJECT_BUFFER_SIZE 64
 
+extern void ta_init();
 extern unsigned int ta_set_target(void *cmdlist, void *tilebuf, int tile_width, int tile_height);
 extern void ta_set_background(void *background);
 extern void ta_create_tile_descriptors(void *ptr, void *buf, int tile_width, int tile_height);

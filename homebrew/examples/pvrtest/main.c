@@ -4,7 +4,6 @@
 #include <naomi/maple.h>
 #include <naomi/interrupt.h>
 #include <naomi/matrix.h>
-#include "video.h"
 #include "ta.h"
 
 
@@ -221,7 +220,7 @@ void main()
     unsigned short *tex[2];
 
     /* Set up PowerVR display and tile accelerator hardware */
-    init_pvr();
+    ta_init();
     video_init_simple();
 
     /* Create palettes and twidding table for textures */
