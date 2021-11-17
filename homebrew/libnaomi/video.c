@@ -382,8 +382,8 @@ uint32_t rgb(unsigned int r, unsigned int g, unsigned int b)
     }
     else if(global_video_depth == 4)
     {
-        // TODO: 32-bit video modes.
-        return 0;
+        // Make a 8888 color that is non-transparent.
+        return RGB0888(r, g, b);
     }
     else
     {
@@ -400,8 +400,8 @@ uint32_t rgba(unsigned int r, unsigned int g, unsigned int b, unsigned int a)
     }
     else if(global_video_depth == 4)
     {
-        // TODO: 32-bit video modes.
-        return 0;
+        // Make a 8888 color that is transparent based on alpha.
+        return RGB8888(r, g, b, a);
     }
     else
     {

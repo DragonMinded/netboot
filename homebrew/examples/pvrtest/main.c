@@ -45,16 +45,16 @@ void init_palette()
     for(int n = 0; n < 256; n++)
     {
         // Blue
-        palette[0][n] = 0xff000000 | (n & 0xFF);
+        palette[0][n] = rgb(0, 0, n);
 
         // Green
-        palette[1][n] = 0xff000000 | ((n << 8) & 0xFF00);
+        palette[1][n] = rgb(0, n, 0);
 
         // Purple
-        palette[2][n] = 0xff000000 | (((n << 16) | n) & 0xFF00FF);
+        palette[2][n] = rgb(n, 0, n);
 
         // Yellow
-        palette[3][n] = 0xff000000 | (((n << 16) | (n << 8)) & 0xFFFF00);
+        palette[3][n] = rgb(n, n, 0);
     }
 }
 

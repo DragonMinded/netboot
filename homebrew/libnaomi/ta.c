@@ -254,37 +254,59 @@ void _ta_init_twiddletab()
 
 void _ta_init()
 {
-    /* TODO: This entire below section needs to be cleaned up */
-    static unsigned int three_d_params[] = {
-        0x098, 0x00800408,	/* Polygon sorting and cache sizes */
-        0x078, 0x3f800000,	/* Polygon culling (1.0f) */
-        0x084, 0x00000000,	/* Perpendicular triangle compare (0.0f) */
-        0x030, 0x00000101,	/* Span sorting enable */
-        0x0b0, 0x007f7f7f,	/* Fog table color (ARGB, A is ignored) */
-        0x0b4, 0x007f7f7f,	/* Fog vertex color (ARGB, A is ignored) */
-        0x0c0, 0x00000000,	/* Color clamp min (ARGB) */
-        0x0bc, 0xffffffff,	/* Color clamp max (ARGB) */
-        0x080, 0x00000007,	/* Pixel sampling position, everything set at (0.5, 0.5) */
-        0x074, 0x00000000,	/* Shadow scaling */
-        0x07c, 0x0027df77,	/* FPU params? */
-        0x008, 0x00000001,	/* TA reset */
-        0x008, 0x00000000,	/* TA out of reset */
-        0x0e4, 0x00000000,	/* stride width (TSP_CFG) */
-        0x0b8, 0x0000ff07,	/* fog density */
-        0x0b4, 0x007f7f7f,	/* fog vertex color */
-        0x0b0, 0x007f7f7f,	/* fog table color */
-        0x108, 0x00000003  /* 32bit palette (0x0 = ARGB1555, 0x1 = RGB565, 0x2 = ARGB4444, 0x3 = ARGB8888  */
-    };
     volatile unsigned int *videobase = (volatile unsigned int *)POWERVR2_BASE;
-    int cnt = (sizeof(three_d_params) / sizeof(three_d_params[0])) / 2;
-    unsigned int *values = three_d_params;
 
-    while(cnt--)
-    {
-        unsigned int r = *values++;
-        unsigned int v = *values++;
-        videobase[r >> 2] = v;
-    }
+    // Set up sorting, culling and comparison configuration.
+    videobase[POWERVR2_TA_CACHE_SIZES] = (
+        (0x200 << 14) |  // Translucent cache size.
+        (0x200 << 4) |   // Punch-through cache size.
+        (1 << 3) |       // Enable polygon discard.
+        (0 << 0)         // Auto-sort translucent triangles.
+    );
+
+    // Culling set at 1.0f
+    videobase[POWERVR2_TA_POLYGON_CULL] = 0x3f800000;
+
+    // Perpendicular triangle compare set at 0.0f
+    videobase[POWERVR2_TA_PERPENDICULAR_TRI] = 0x0;
+
+    // Enable span and offset sorting
+    videobase[POWERVR2_TA_SPANSORT] = (
+        (1 << 8) |  // Offset sort enabled.
+        (1 << 0)    // Span sort enabled.
+    );
+
+    // Set up fog registers
+    videobase[POWERVR2_FOG_TABLE_COLOR] = RGB0888(127, 127, 127);
+    videobase[POWERVR2_FOG_VERTEX_COLOR] = RGB0888(127, 127, 127);
+
+    // Set up color clamping registers
+    videobase[POWERVR2_COLOR_CLAMP_MIN] = RGB8888(0, 0, 0, 0);
+    videobase[POWERVR2_COLOR_CLAMP_MAX] = RGB8888(255, 255, 255, 255);
+
+    // Place pixel sampling position at (0.5, 0.5) instead of (0.0, 0.0)
+    videobase[POWERVR2_PIXEL_SAMPLE] = 0x7;
+
+    // Disable shadow scaling
+    videobase[POWERVR2_SHADOW_SCALING] = 0x0;
+
+    // Set up unknown FPU parameters
+    videobase[POWERVR2_TA_FPU_PARAMS] = 0x0027df77;
+
+    // Reset the TA
+    videobase[POWERVR2_RESET] = 1;
+    videobase[POWERVR2_RESET] = 0;
+
+    // Set stride width to zero for stride-based textures
+    videobase[POWERVR2_TSP_CFG] = 0x0;
+
+    // Set up fog registers (again?)
+    videobase[POWERVR2_FOG_DENSITY] = 0xFF07;
+    videobase[POWERVR2_FOG_VERTEX_COLOR] = RGB0888(127, 127, 127);
+    videobase[POWERVR2_FOG_TABLE_COLOR] = RGB0888(127, 127, 127);
+
+    // Set up palettes to match videomode so that we can use rgb()/rgba() to fill palettes
+    videobase[POWERVR2_PALETTE_MODE] = global_video_depth == 2 ? PALETTE_CFG_ARGB1555 : PALETTE_CFG_ARGB8888;
 
     // Wait for vblank.
     while(!(videobase[POWERVR2_SYNC_STAT] & 0x1FF)) { ; }
