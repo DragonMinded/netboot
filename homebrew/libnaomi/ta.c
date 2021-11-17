@@ -10,21 +10,19 @@
 
 #define MAX_H_TILE (640/32)
 #define MAX_V_TILE (480/32)
-#define TA_OPAQUE_OBJECT_BUFFER_SIZE 128
+#define TA_OPAQUE_OBJECT_BUFFER_SIZE 64
 #define TA_CMDLIST_SIZE (512 * 1024)
 #define TA_EXTRA_BUFFER_SIZE (MAX_H_TILE * MAX_V_TILE * 1024)
 
 struct ta_buffers {
     /* Command lists. */
-    char cmd_list[2][TA_CMDLIST_SIZE];
+    char cmd_list[TA_CMDLIST_SIZE];
     /* Opaque polygons */
-    char opaque_object_buffer[2][TA_OPAQUE_OBJECT_BUFFER_SIZE * MAX_H_TILE * MAX_V_TILE];
-    /* Extra space for additional object buffers */
-    char extra_object_buffer[2][TA_EXTRA_BUFFER_SIZE];
+    char opaque_object_buffer[TA_OPAQUE_OBJECT_BUFFER_SIZE * MAX_H_TILE * MAX_V_TILE];
     /* The background vertex. */
-    int background_vertex[2][24];
+    int background_vertex[24];
     /* The individual tile descriptors for the 32x32 tiles. */
-    int tile_descriptor[2][6 * MAX_H_TILE * MAX_V_TILE];
+    int tile_descriptor[6 * ((MAX_H_TILE * MAX_V_TILE) + 1)];
 };
 
 static struct ta_buffers *ta_working_buffers = (struct ta_buffers *)0xa5400000;
@@ -84,16 +82,23 @@ void _ta_create_tile_descriptors(void *tile_descriptor_base, void *opaque_buffer
     unsigned int *vr = tile_descriptor_base;
     unsigned int opaquebase = ((unsigned int)opaque_buffer_base) & 0x00ffffff;
 
+    /* It seems the hardware needs a dummy tile or it renders the first tile weird. */
+    *vr++ = 0x10000000;
+    *vr++ = 0x80000000;
+    *vr++ = 0x80000000;
+    *vr++ = 0x80000000;
+    *vr++ = 0x80000000;
+    *vr++ = 0x80000000;
+
     /* Set up individual tiles. */
     for (int x = 0; x < tile_width; x++)
     {
         for (int y = 0; y < tile_height; y++)
         {
-            int sob = (x == 0 && y == 0) ? 0x10000000 : 0x00000000;
             int eob = (x == (tile_width - 1) && y == (tile_height - 1)) ? 0x80000000 : 0x00000000;
 
             // Set start of buffer/end of buffer, set autosorted translucent polygons, set tile position
-            *vr++ = sob | eob | 0x20000000 | (y << 8) | (x << 2);
+            *vr++ = eob | 0x20000000 | (y << 8) | (x << 2);
 
             // Opaque polygons.
             *vr++ = opaquebase + ((x + (y * tile_width)) * TA_OPAQUE_OBJECT_BUFFER_SIZE);
@@ -114,12 +119,11 @@ void _ta_create_tile_descriptors(void *tile_descriptor_base, void *opaque_buffer
 }
 
 /* Tell the command list compiler where to store the command list, and which tilespace to use */
-void _ta_set_target(void *cmd_list_base, void *object_buffer_base, void *extra_buffer_base, int tile_width, int tile_height)
+void _ta_set_target(void *cmd_list_base, void *object_buffer_base, int tile_width, int tile_height)
 {
     volatile unsigned int *videobase = (volatile unsigned int *)POWERVR2_BASE;
     unsigned int cmdl = ((unsigned int)cmd_list_base) & 0x00ffffff;
     unsigned int objbuf = ((unsigned int)object_buffer_base) & 0x00ffffff;
-    unsigned int extrabuf = ((unsigned int)extra_buffer_base) & 0x00ffffff;
 
     /* Reset TA */
     videobase[POWERVR2_RESET] = 1;
@@ -127,17 +131,17 @@ void _ta_set_target(void *cmd_list_base, void *object_buffer_base, void *extra_b
 
     /* Set the tile buffer base in the TA */
     videobase[POWERVR2_OBJBUF_BASE] = objbuf;
-    videobase[POWERVR2_OBJBUF_LIMIT] = extrabuf + TA_EXTRA_BUFFER_SIZE;
+    videobase[POWERVR2_OBJBUF_LIMIT] = 0;
 
     /* Set the command list base in the TA */
     videobase[POWERVR2_CMDLIST_BASE] = cmdl;
-    videobase[POWERVR2_CMDLIST_LIMIT] = cmdl + TA_CMDLIST_SIZE;
+    videobase[POWERVR2_CMDLIST_LIMIT] = 0;
 
     /* Set the number of tiles we have in the tile descriptor. */
     videobase[POWERVR2_TILE_CLIP] = ((tile_height - 1) << 16) | (tile_width - 1);
 
-    /* Set the location for extra object buffers if we run out in our tile descriptors. */
-    videobase[POWERVR2_ADDITIONAL_OBJBUF] = extrabuf;
+    /* Set the location for object buffers if we run out in our tile descriptors. */
+    videobase[POWERVR2_ADDITIONAL_OBJBUF] = objbuf;
 
     /* Set up object block sizes and such. */
     videobase[POWERVR2_TA_BLOCKSIZE] = (
@@ -172,35 +176,27 @@ extern unsigned int global_video_depth;
 extern unsigned int global_video_width;
 extern unsigned int global_video_height;
 
-// Which framebuffer we're on.
-extern unsigned int buffer_loc;
-#define next_buffer_loc ((buffer_loc) ? 0 : 1)
-
 // Actual framebuffer address.
 extern void *buffer_base;
 
 void _ta_init_buffers()
 {
-    for (int i = 0; i < 2; i++)
-    {
-        _ta_create_tile_descriptors(
-            ta_working_buffers->tile_descriptor[i],
-            ta_working_buffers->opaque_object_buffer[i],
-            global_video_width / 32,
-            global_video_height / 32
-        );
-        _ta_clear_background(ta_working_buffers->background_vertex[i]);
-    }
+    _ta_create_tile_descriptors(
+        ta_working_buffers->tile_descriptor,
+        ta_working_buffers->opaque_object_buffer,
+        global_video_width / 32,
+        global_video_height / 32
+    );
+    _ta_clear_background(ta_working_buffers->background_vertex);
 }
 
 void ta_commit_begin()
 {
     // Set the target of our TA commands based on the current framebuffer position.
     _ta_set_target(
-        ta_working_buffers->cmd_list[next_buffer_loc],
+        ta_working_buffers->cmd_list,
         /* We give the TA the opaque object buffer since its the lowest one in memory. */
-        ta_working_buffers->opaque_object_buffer[next_buffer_loc],
-        ta_working_buffers->extra_object_buffer[next_buffer_loc],
+        ta_working_buffers->opaque_object_buffer,
         global_video_width / 32,
         global_video_height / 32
     );
@@ -222,14 +218,18 @@ void ta_commit_end()
         if (waiting_lists && WAITING_LIST_OPAQUE)
         {
             while (!(HOLLY_INTERNAL_IRQ_STATUS & HOLLY_INTERNAL_INTERRUPT_TRANSFER_OPAQUE_FINISHED)) { ; }
+            HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_TRANSFER_OPAQUE_FINISHED;
         }
+
         if (waiting_lists && WAITING_LIST_TRANSPARENT)
         {
             while (!(HOLLY_INTERNAL_IRQ_STATUS & HOLLY_INTERNAL_INTERRUPT_TRANSFER_TRANSPARENT_FINISHED)) { ; }
+            HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_TRANSFER_TRANSPARENT_FINISHED;
         }
         if (waiting_lists && WAITING_LIST_PUNCHTHRU)
         {
             while (!(HOLLY_INTERNAL_IRQ_STATUS & HOLLY_INTERNAL_INTERRUPT_TRANSFER_PUNCHTHRU_FINISHED)) { ; }
+            HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_TRANSFER_PUNCHTHRU_FINISHED;
         }
     }
     else
@@ -287,9 +287,9 @@ void ta_render_begin()
 
     /* Start rendering the new command list to the screen */
     _ta_begin_render(
-        ta_working_buffers->cmd_list[next_buffer_loc],
-        ta_working_buffers->tile_descriptor[next_buffer_loc],
-        ta_working_buffers->background_vertex[next_buffer_loc],
+        ta_working_buffers->cmd_list,
+        ta_working_buffers->tile_descriptor,
+        ta_working_buffers->background_vertex,
         buffer_base,
         /* TODO: Better background clipping distance here. */
         0.2
@@ -302,6 +302,7 @@ void ta_render_wait()
     {
         /* Just spinloop waiting for the interrupt to happen. */
         while (!(HOLLY_INTERNAL_IRQ_STATUS & HOLLY_INTERNAL_INTERRUPT_TSP_RENDER_FINISHED)) { ; }
+        HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_TSP_RENDER_FINISHED;
     }
     else
     {
