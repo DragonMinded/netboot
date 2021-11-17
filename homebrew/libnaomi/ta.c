@@ -51,7 +51,7 @@ void _ta_create_tile_descriptors(void *tile_descriptor_base, void *tile_buffer_b
             // We don't support opaque modifiers, so nothing here.
             *vr++ = 0x80000000;
 
-            // Translucent polygons.
+            // TODO: Translucent polygons.
             *vr++ = 0x80000000;
 
             // We don't suppport translucent modifiers, so nothing here.
