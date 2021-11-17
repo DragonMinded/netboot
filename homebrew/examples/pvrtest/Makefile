@@ -11,6 +11,10 @@ all: pvrtest.bin
 SRCS += main.c
 SRCS += build/tex1.o
 SRCS += build/tex2.o
+SRCS += build/tex3.o
+SRCS += build/tex4.o
+SRCS += build/tex5.o
+SRCS += build/tex6.o
 
 # Pick up base makefile rules common to all examples.
 include ../../Makefile.base

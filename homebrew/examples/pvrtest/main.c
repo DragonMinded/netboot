@@ -5,6 +5,7 @@
 #include <naomi/interrupt.h>
 #include <naomi/matrix.h>
 #include <naomi/ta.h>
+#include <math.h>
 
 // PVR/TA example based heavily off of the Hardware 3D example by marcus.
 
@@ -30,13 +31,6 @@ float projection_matrix[4][4] = {
     {        0.0,  COT_FOVY_2,                        0.0,   0.0 },
     {        0.0,         0.0,  (ZFAR+ZNEAR)/(ZNEAR-ZFAR),  -1.0 },
     {        0.0,         0.0,  2*ZFAR*ZNEAR/(ZNEAR-ZFAR),   1.0 },
-};
-
-float translation_matrix[4][4] = {
-    { 1.0,   0.0,    0.0,   0.0 },
-    { 0.0,   1.0,    0.0,   0.0 },
-    { 0.0,   0.0,    1.0,   0.0 },
-    { 0.0,   0.0,  ZOFFS,   1.0 },
 };
 
 void init_palette()
@@ -133,6 +127,10 @@ void draw_face(float *p1, float *p2, float *p3, float *p4, void *tex, int pal)
 // 8-bit textures that we're loading per side.
 extern uint8_t *tex1_png_data;
 extern uint8_t *tex2_png_data;
+extern uint8_t *tex3_png_data;
+extern uint8_t *tex4_png_data;
+extern uint8_t *tex5_png_data;
+extern uint8_t *tex6_png_data;
 
 void main()
 {
@@ -144,28 +142,24 @@ void main()
     init_palette();
 
     /* TODO: We should really be able to ask the TA driver for a texture slot.
-     * For now, just allocate space for the two 256x256x8 bit textures manually. */
-    uint16_t *tex[2];
+     * For now, just allocate space for the 6 256x256x8 bit textures manually. */
+    uint16_t *tex[6];
     tex[0] = (unsigned short *)(void *)0xa4400000;
     tex[1] = (void*)(((char *)tex[0])+256*256);
+    tex[2] = (void*)(((char *)tex[1])+256*256);
+    tex[3] = (void*)(((char *)tex[2])+256*256);
+    tex[4] = (void*)(((char *)tex[3])+256*256);
+    tex[5] = (void*)(((char *)tex[4])+256*256);
     ta_texture_load(tex[0], 256, tex1_png_data);
     ta_texture_load(tex[1], 256, tex2_png_data);
-
-    /* Set up our cube. */
-    float coords[8][3] = {
-        { -1.0, -1.0, -1.0 },
-        {  1.0, -1.0, -1.0 },
-        { -1.0,  1.0, -1.0 },
-        {  1.0,  1.0, -1.0 },
-        { -1.0, -1.0,  1.0 },
-        {  1.0, -1.0,  1.0 },
-        { -1.0,  1.0,  1.0 },
-        {  1.0,  1.0,  1.0 },
-    };
+    ta_texture_load(tex[2], 256, tex3_png_data);
+    ta_texture_load(tex[3], 256, tex4_png_data);
+    ta_texture_load(tex[4], 256, tex5_png_data);
+    ta_texture_load(tex[5], 256, tex6_png_data);
 
     /* x/y/z rotation amount in degrees */
-    int i = 0;
-    int j = 0;
+    int i = 45;
+    int j = 45;
     int k = 0;
 
     int count = 0;
@@ -199,11 +193,28 @@ void main()
             k--;
         }
 
+        /* Set up our cube. */
+        float val = 1.0 + (sin((count / 30.0) * M_PI) / 32.0);
+        float coords[8][3] = {
+            { -val, -val, -val },
+            {  val, -val, -val },
+            { -val,  val, -val },
+            {  val,  val, -val },
+            { -val, -val,  val },
+            {  val, -val,  val },
+            { -val,  val,  val },
+            {  val,  val,  val },
+        };
+
         /* Set up the hardware transformation in the SH4 with the transformations we need to do */
         matrix_init_identity();
+
+        /* TODO: These should be moved into the TA library and also take into account the screen rotation. */
         matrix_apply(&screenview_matrix);
         matrix_apply(&projection_matrix);
-        matrix_apply(&translation_matrix);
+        matrix_translate_z(ZOFFS);
+
+        /* Rotate the camera about the cube. */
         matrix_rotate_x(i);
         matrix_rotate_y(j);
         matrix_rotate_z(k);
@@ -218,11 +229,11 @@ void main()
 
         /* Draw the 6 faces of the cube */
         draw_face(trans_coords[0], trans_coords[1], trans_coords[2], trans_coords[3], tex[0], 0);
-        draw_face(trans_coords[1], trans_coords[5], trans_coords[3], trans_coords[7], tex[0], 1);
-        draw_face(trans_coords[4], trans_coords[5], trans_coords[0], trans_coords[1], tex[0], 2);
-        draw_face(trans_coords[5], trans_coords[4], trans_coords[7], trans_coords[6], tex[1], 3);
-        draw_face(trans_coords[4], trans_coords[0], trans_coords[6], trans_coords[2], tex[1], 1);
-        draw_face(trans_coords[2], trans_coords[3], trans_coords[6], trans_coords[7], tex[1], 2);
+        draw_face(trans_coords[1], trans_coords[5], trans_coords[3], trans_coords[7], tex[1], 1);
+        draw_face(trans_coords[4], trans_coords[5], trans_coords[0], trans_coords[1], tex[2], 2);
+        draw_face(trans_coords[5], trans_coords[4], trans_coords[7], trans_coords[6], tex[3], 3);
+        draw_face(trans_coords[4], trans_coords[0], trans_coords[6], trans_coords[2], tex[4], 1);
+        draw_face(trans_coords[2], trans_coords[3], trans_coords[6], trans_coords[7], tex[5], 2);
 
         /* Mark the end of the command list */
         ta_commit_end();

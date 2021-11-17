@@ -169,3 +169,75 @@ void matrix_rotate_z(float degrees)
     matrix[0][1] = -(matrix[1][0] = sin((degrees / 180.0) * M_PI));
     matrix_apply(&matrix);
 }
+
+void matrix_scale_x(float amount)
+{
+    static float matrix[4][4] = {
+        { 1.0, 0.0, 0.0, 0.0 },
+        { 0.0, 1.0, 0.0, 0.0 },
+        { 0.0, 0.0, 1.0, 0.0 },
+        { 0.0, 0.0, 0.0, 1.0 },
+    };
+    matrix[0][0] = amount;
+    matrix_apply(&matrix);
+}
+
+void matrix_scale_y(float amount)
+{
+    static float matrix[4][4] = {
+        { 1.0, 0.0, 0.0, 0.0 },
+        { 0.0, 1.0, 0.0, 0.0 },
+        { 0.0, 0.0, 1.0, 0.0 },
+        { 0.0, 0.0, 0.0, 1.0 },
+    };
+    matrix[1][1] = amount;
+    matrix_apply(&matrix);
+}
+
+void matrix_scale_z(float amount)
+{
+    static float matrix[4][4] = {
+        { 1.0, 0.0, 0.0, 0.0 },
+        { 0.0, 1.0, 0.0, 0.0 },
+        { 0.0, 0.0, 1.0, 0.0 },
+        { 0.0, 0.0, 0.0, 1.0 },
+    };
+    matrix[2][2] = amount;
+    matrix_apply(&matrix);
+}
+
+void matrix_translate_x(float amount)
+{
+    static float matrix[4][4] = {
+        { 1.0, 0.0, 0.0, 0.0 },
+        { 0.0, 1.0, 0.0, 0.0 },
+        { 0.0, 0.0, 1.0, 0.0 },
+        { 0.0, 0.0, 0.0, 1.0 },
+    };
+    matrix[3][0] = amount;
+    matrix_apply(&matrix);
+}
+
+void matrix_translate_y(float amount)
+{
+    static float matrix[4][4] = {
+        { 1.0, 0.0, 0.0, 0.0 },
+        { 0.0, 1.0, 0.0, 0.0 },
+        { 0.0, 0.0, 1.0, 0.0 },
+        { 0.0, 0.0, 0.0, 1.0 },
+    };
+    matrix[3][1] = amount;
+    matrix_apply(&matrix);
+}
+
+void matrix_translate_z(float amount)
+{
+    static float matrix[4][4] = {
+        { 1.0, 0.0, 0.0, 0.0 },
+        { 0.0, 1.0, 0.0, 0.0 },
+        { 0.0, 0.0, 1.0, 0.0 },
+        { 0.0, 0.0, 0.0, 1.0 },
+    };
+    matrix[3][2] = amount;
+    matrix_apply(&matrix);
+}
