@@ -15,55 +15,12 @@
 #include "holly.h"
 #include "font.h"
 
-#define POWERVR2_BASE 0xA05F8000
-
-#define POWERVR2_ID (0x000 >> 2)
-#define POWERVR2_REVISION (0x004 >> 2)
-#define POWERVR2_RESET (0x008 >> 2)
-#define POWERVR2_BORDER_COL (0x040 >> 2)
-#define POWERVR2_FB_DISPLAY_CFG (0x044 >> 2)
-#define POWERVR2_FB_RENDER_CFG (0x048 >> 2)
-#define POWERVR2_FB_RENDER_MODULO (0x04C >> 2)
-#define POWERVR2_FB_DISPLAY_ADDR_1 (0x050 >> 2)
-#define POWERVR2_FB_DISPLAY_ADDR_2 (0x054 >> 2)
-#define POWERVR2_FB_DISPLAY_SIZE (0x05C >> 2)
-#define POWERVR2_FB_CLIP_X (0x068 >> 2)
-#define POWERVR2_FB_CLIP_Y (0x06C >> 2)
-#define POWERVR2_VRAM_CFG1 (0x0A0 >> 2)
-#define POWERVR2_VRAM_CFG2 (0x0A4 >> 2)
-#define POWERVR2_VRAM_CFG3 (0x0A8 >> 2)
-#define POWERVR2_VBLANK_INTERRUPT (0x0CC >> 2)
-#define POWERVR2_SYNC_CFG (0x0D0 >> 2)
-#define POWERVR2_HBLANK (0x0D4 >> 4)
-#define POWERVR2_SYNC_LOAD (0x0D8 >> 2)
-#define POWERVR2_VBORDER (0x0DC >> 2)
-#define POWERVR2_TSP_CFG (0x0E4 >> 2)
-#define POWERVR2_VIDEO_CFG (0x0E8 >> 2)
-#define POWERVR2_HPOS (0x0EC >> 2)
-#define POWERVR2_VPOS (0x0F0 >> 2)
-#define POWERVR2_SYNC_STAT (0x10C >> 2)
-
-#define DISPLAY_CFG_RGB1555 0
-#define DISPLAY_CFG_RGB565 1
-#define DISPLAY_CFG_RGB888 2
-#define DISPLAY_CFG_RGB0888 3
-
-#define RENDER_CFG_RGB0555 0
-#define RENDER_CFG_RGB565 1
-#define RENDER_CFG_ARGB4444 2
-#define RENDER_CFG_ARGB1555 3
-#define RENDER_CFG_RGB888 4
-#define RENDER_CFG_RGB0888 5
-#define RENDER_CFG_ARGB8888 6
-// Mode 7 appears to be a redefinition of mode 2.
-
 #ifndef min
 #define min(a,b) (((a) < (b)) ? (a) : (b))
 #endif
 
 // TODO: Need to support more than 640x480 framebuffer mode.
 // TODO: Need to support more than RGB1555 color.
-
 
 // Static members that don't need to be accessed anywhere else.
 static uint32_t global_background_color = 0;
@@ -80,7 +37,7 @@ static uint32_t global_buffer_offset[3] = { 0, 0, 0 };
 static uint32_t saved_hvint = 0;
 static uint32_t initialized = 0;
 
-// Nonstatic so that other video modules can use it as well.
+// Nonstatic so that other video modules can use them as well.
 unsigned int global_video_width = 0;
 unsigned int global_video_height = 0;
 unsigned int cached_actual_width = 0;
@@ -89,7 +46,9 @@ unsigned int global_video_depth = 0;
 unsigned int global_video_vertical = 0;
 void *buffer_base = 0;
 
-// Our current framebuffer location, for double buffering.
+// Our current framebuffer location, for double buffering. The current_buffer_loc
+// is the one currently displayed to the screen, and the next_buffer_loc is the
+// one we are drawing on and will flip to on the next vblank.
 unsigned int buffer_loc = 0;
 #define current_buffer_loc ((buffer_loc) ? 1 : 0)
 #define next_buffer_loc ((buffer_loc) ? 0 : 1)

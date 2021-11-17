@@ -205,9 +205,6 @@ struct packed_color_vertex_list
 #define TA_TEXTUREMODE_STRIDE         0x02000000
 #define TA_TEXTUREMODE_ADDRESS(a)     ((((unsigned long)(void*)(a)) >> 3) & 0x1FFFFF)
 
-// The size of each individual object buffer inside the TA. */
-#define TA_OBJECT_BUFFER_SIZE 64
-
 // Function for requesting that a set of commands be rendered to the current framebuffer.
 // This is just a convenience function that calls ta_render_begin() and then ta_render_wait().
 void ta_render();
