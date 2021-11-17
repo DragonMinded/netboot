@@ -165,7 +165,7 @@ void _ta_clear_background(void *background)
     /* First 3 words of this are a mode1/mode2/texture word, followed by
      * 3 7-word x/y/z/u/v/base color/offset color chunks specifying the
      * bottom left, top left and bottom right of the background quad. */
-    for (int i = 0; i < 24; i++)
+    for (int i = 0; i < 24; i ++)
     {
         bgpointer[i] = 0;
     }
@@ -257,7 +257,7 @@ void _ta_begin_render(void *cmd_list_base, void *tiles, void *background, void *
     unsigned int cmdl = ((unsigned int)cmd_list_base) & 0x00ffffff;
     unsigned int tls = ((unsigned int)tiles) & 0x00ffffff;
     unsigned int scn = ((unsigned int)scrn) & 0x00ffffff;
-    unsigned int bg = ((unsigned int)background) & 0x00fffffc;
+    unsigned int bg = ((unsigned int)background - (unsigned int)cmd_list_base) & 0x00fffffc;
     uint32_t zclipint = ((uint32_t)zclip) & 0xFFFFFFF0;
 
     /* Set up current render tiledescriptions, commandlist and framebuffer to render to. */
