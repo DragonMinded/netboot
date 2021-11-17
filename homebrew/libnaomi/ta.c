@@ -29,10 +29,51 @@ struct ta_buffers {
 
 static struct ta_buffers *ta_working_buffers = (struct ta_buffers *)0xa5400000;
 
+#define WAITING_LIST_OPAQUE 0x1
+#define WAITING_LIST_TRANSPARENT 0x2
+#define WAITING_LIST_PUNCHTHRU 0x4
+
+static unsigned int waiting_lists = 0;
+
 /* Send a command, with len equal to either TA_LIST_SHORT or TA_LIST_LONG
  * for either 32 or 64 byte TA commands. */
 void ta_commit_list(void *src, int len)
 {
+    /* Figure out what kind of command this is so we can set up to wait for
+     * it to be finished loading properly. */
+    if (!_irq_is_disabled(_irq_get_sr()))
+    {
+        uint32_t command = ((uint32_t *)src)[0];
+
+        if ((command & TA_CMD_POLYGON) != 0)
+        {
+            if ((command & TA_CMD_POLYGON_TYPE_OPAQUE) != 0)
+            {
+                if ((waiting_lists & WAITING_LIST_OPAQUE) == 0)
+                {
+                    waiting_lists |= WAITING_LIST_OPAQUE;
+                    thread_notify_wait_ta_load_opaque();
+                }
+            }
+            if ((command & TA_CMD_POLYGON_TYPE_TRANSPARENT) != 0)
+            {
+                if ((waiting_lists & WAITING_LIST_TRANSPARENT) == 0)
+                {
+                    waiting_lists |= WAITING_LIST_TRANSPARENT;
+                    thread_notify_wait_ta_load_transparent();
+                }
+            }
+            if ((command & TA_CMD_POLYGON_TYPE_PUNCHTHRU) != 0)
+            {
+                if ((waiting_lists & WAITING_LIST_PUNCHTHRU) == 0)
+                {
+                    waiting_lists |= WAITING_LIST_PUNCHTHRU;
+                    thread_notify_wait_ta_load_punchthru();
+                }
+            }
+        }
+    }
+
     hw_memcpy((void *)0xB0000000, src, len);
 }
 
@@ -164,19 +205,48 @@ void ta_commit_begin()
         global_video_height / 32
     );
 
-    // TODO: Need to inform thread system that we will be waiting for the TA to finish loading. */
+    waiting_lists = 0;
 }
 
 /* Send the special end of list command to signify done sending display
  * commands to TA. Also wait for the TA to be finished processing our data. */
 void ta_commit_end()
 {
+    /* Avoid going through the TA command lookup */
     unsigned int words[8] = { 0 };
-    ta_commit_list(words, TA_LIST_SHORT);
+    hw_memcpy((void *)0xB0000000, words, TA_LIST_SHORT);
 
-    /* TODO: This should wait for the render pipeline to be filled but
-     * that's an interrupt. Instead, just sleep for a bit. */
-    timer_wait(2500);
+    if (_irq_is_disabled(_irq_get_sr()))
+    {
+        /* Just spinloop waiting for the interrupt to happen. */
+        if (waiting_lists && WAITING_LIST_OPAQUE)
+        {
+            while (!(HOLLY_INTERNAL_IRQ_STATUS & HOLLY_INTERNAL_INTERRUPT_TRANSFER_OPAQUE_FINISHED)) { ; }
+        }
+        if (waiting_lists && WAITING_LIST_TRANSPARENT)
+        {
+            while (!(HOLLY_INTERNAL_IRQ_STATUS & HOLLY_INTERNAL_INTERRUPT_TRANSFER_TRANSPARENT_FINISHED)) { ; }
+        }
+        if (waiting_lists && WAITING_LIST_PUNCHTHRU)
+        {
+            while (!(HOLLY_INTERNAL_IRQ_STATUS & HOLLY_INTERNAL_INTERRUPT_TRANSFER_PUNCHTHRU_FINISHED)) { ; }
+        }
+    }
+    else
+    {
+        if (waiting_lists && WAITING_LIST_OPAQUE)
+        {
+            thread_wait_ta_load_opaque();
+        }
+        if (waiting_lists && WAITING_LIST_TRANSPARENT)
+        {
+            thread_wait_ta_load_transparent();
+        }
+        if (waiting_lists && WAITING_LIST_PUNCHTHRU)
+        {
+            thread_wait_ta_load_punchthru();
+        }
+    }
 }
 
 /* Launch a new render pass */
@@ -328,10 +398,22 @@ void _ta_init()
     while(!(videobase[POWERVR2_SYNC_STAT] & 0x1FF)) { ; }
     while((videobase[POWERVR2_SYNC_STAT] & 0x1FF)) { ; }
 
-    // Enable TA finished rendering interrupt.
+    // Enable TA finished loading and rendering interrupts.
     if ((HOLLY_INTERNAL_IRQ_2_MASK & HOLLY_INTERNAL_INTERRUPT_TSP_RENDER_FINISHED) == 0)
     {
         HOLLY_INTERNAL_IRQ_2_MASK = HOLLY_INTERNAL_IRQ_2_MASK | HOLLY_INTERNAL_INTERRUPT_TSP_RENDER_FINISHED;
+    }
+    if ((HOLLY_INTERNAL_IRQ_2_MASK & HOLLY_INTERNAL_INTERRUPT_TRANSFER_OPAQUE_FINISHED) == 0)
+    {
+        HOLLY_INTERNAL_IRQ_2_MASK = HOLLY_INTERNAL_IRQ_2_MASK | HOLLY_INTERNAL_INTERRUPT_TRANSFER_OPAQUE_FINISHED;
+    }
+    if ((HOLLY_INTERNAL_IRQ_2_MASK & HOLLY_INTERNAL_INTERRUPT_TRANSFER_TRANSPARENT_FINISHED) == 0)
+    {
+        HOLLY_INTERNAL_IRQ_2_MASK = HOLLY_INTERNAL_IRQ_2_MASK | HOLLY_INTERNAL_INTERRUPT_TRANSFER_TRANSPARENT_FINISHED;
+    }
+    if ((HOLLY_INTERNAL_IRQ_2_MASK & HOLLY_INTERNAL_INTERRUPT_TRANSFER_PUNCHTHRU_FINISHED) == 0)
+    {
+        HOLLY_INTERNAL_IRQ_2_MASK = HOLLY_INTERNAL_IRQ_2_MASK | HOLLY_INTERNAL_INTERRUPT_TRANSFER_PUNCHTHRU_FINISHED;
     }
 
     // Initialize twiddle table for texture load operations.
@@ -346,6 +428,18 @@ void _ta_free()
     if ((HOLLY_INTERNAL_IRQ_2_MASK & HOLLY_INTERNAL_INTERRUPT_TSP_RENDER_FINISHED) != 0)
     {
         HOLLY_INTERNAL_IRQ_2_MASK = HOLLY_INTERNAL_IRQ_2_MASK & (~HOLLY_INTERNAL_INTERRUPT_TSP_RENDER_FINISHED);
+    }
+    if ((HOLLY_INTERNAL_IRQ_2_MASK & HOLLY_INTERNAL_INTERRUPT_TRANSFER_OPAQUE_FINISHED) != 0)
+    {
+        HOLLY_INTERNAL_IRQ_2_MASK = HOLLY_INTERNAL_IRQ_2_MASK & (~HOLLY_INTERNAL_INTERRUPT_TRANSFER_OPAQUE_FINISHED);
+    }
+    if ((HOLLY_INTERNAL_IRQ_2_MASK & HOLLY_INTERNAL_INTERRUPT_TRANSFER_TRANSPARENT_FINISHED) != 0)
+    {
+        HOLLY_INTERNAL_IRQ_2_MASK = HOLLY_INTERNAL_IRQ_2_MASK & (~HOLLY_INTERNAL_INTERRUPT_TRANSFER_TRANSPARENT_FINISHED);
+    }
+    if ((HOLLY_INTERNAL_IRQ_2_MASK & HOLLY_INTERNAL_INTERRUPT_TRANSFER_PUNCHTHRU_FINISHED) != 0)
+    {
+        HOLLY_INTERNAL_IRQ_2_MASK = HOLLY_INTERNAL_IRQ_2_MASK & (~HOLLY_INTERNAL_INTERRUPT_TRANSFER_PUNCHTHRU_FINISHED);
     }
     irq_restore(old_interrupts);
 }

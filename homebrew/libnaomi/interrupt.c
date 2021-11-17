@@ -196,6 +196,19 @@ uint32_t _holly_interrupt()
         }
         if (requested & HOLLY_INTERNAL_INTERRUPT_TRANSFER_FINISHED)
         {
+            if (requested & HOLLY_INTERNAL_INTERRUPT_TRANSFER_OPAQUE_FINISHED)
+            {
+                serviced |= HOLLY_SERVICED_TA_LOAD_OPAQUE_FINISHED;
+            }
+            if (requested & HOLLY_INTERNAL_INTERRUPT_TRANSFER_TRANSPARENT_FINISHED)
+            {
+                serviced |= HOLLY_SERVICED_TA_LOAD_TRANSPARENT_FINISHED;
+            }
+            if (requested & HOLLY_INTERNAL_INTERRUPT_TRANSFER_PUNCHTHRU_FINISHED)
+            {
+                serviced |= HOLLY_SERVICED_TA_LOAD_PUNCHTHRU_FINISHED;
+            }
+
             // Request to clear the interrupt.
             HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_TRANSFER_FINISHED;
             handled |= HOLLY_INTERNAL_INTERRUPT_TRANSFER_FINISHED;

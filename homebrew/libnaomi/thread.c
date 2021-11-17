@@ -67,7 +67,10 @@ semaphore_internal_t *_semaphore_find(void * semaphore, unsigned int type)
 
 // Waiting TA interrupt values.
 #define WAITING_TA_RENDER_FINISHED 0
-#define WAITING_TA_MAX 1
+#define WAITING_TA_LOAD_OPAQUE_FINISHED 1
+#define WAITING_TA_LOAD_TRANSPARENT_FINISHED 2
+#define WAITING_TA_LOAD_PUNCHTHRU_FINISHED 3
+#define WAITING_TA_MAX 4
 
 typedef struct
 {
@@ -994,6 +997,21 @@ irq_state_t *_syscall_holly(irq_state_t *current, uint32_t serviced_holly_interr
         // Wake any threads waiting for TSP to finish.
         should_schedule = should_schedule | _thread_wake_waiting_ta(WAITING_TA_RENDER_FINISHED);
     }
+    if (serviced_holly_interrupts & HOLLY_SERVICED_TA_LOAD_OPAQUE_FINISHED)
+    {
+        // Wake any threads waiting for TA lists to finish.
+        should_schedule = should_schedule | _thread_wake_waiting_ta(WAITING_TA_LOAD_OPAQUE_FINISHED);
+    }
+    if (serviced_holly_interrupts & HOLLY_SERVICED_TA_LOAD_TRANSPARENT_FINISHED)
+    {
+        // Wake any threads waiting for TA lists to finish.
+        should_schedule = should_schedule | _thread_wake_waiting_ta(WAITING_TA_LOAD_TRANSPARENT_FINISHED);
+    }
+    if (serviced_holly_interrupts & HOLLY_SERVICED_TA_LOAD_PUNCHTHRU_FINISHED)
+    {
+        // Wake any threads waiting for TA lists to finish.
+        should_schedule = should_schedule | _thread_wake_waiting_ta(WAITING_TA_LOAD_PUNCHTHRU_FINISHED);
+    }
 
     if (should_schedule)
     {
@@ -1325,7 +1343,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
         }
         case 14:
         {
-            // thread_notify_wait_ta_render_finished.
+            // thread_notify_wait_ta_*.
             thread_t *thread = (thread_t *)current->threadptr;
             if (thread)
             {
@@ -1349,7 +1367,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
         }
         case 15:
         {
-            // thread_wait_ta_render_finished.
+            // thread_wait_ta_*.
             thread_t *thread = (thread_t *)current->threadptr;
             if (thread)
             {
@@ -1896,8 +1914,44 @@ void thread_notify_wait_ta_render_finished()
     asm("trapa #14" : : "r" (syscall_param0));
 }
 
+void thread_notify_wait_ta_load_opaque()
+{
+    register uint32_t syscall_param0 asm("r4") = WAITING_TA_LOAD_OPAQUE_FINISHED;
+    asm("trapa #14" : : "r" (syscall_param0));
+}
+
+void thread_notify_wait_ta_load_transparent()
+{
+    register uint32_t syscall_param0 asm("r4") = WAITING_TA_LOAD_TRANSPARENT_FINISHED;
+    asm("trapa #14" : : "r" (syscall_param0));
+}
+
+void thread_notify_wait_ta_load_punchthru()
+{
+    register uint32_t syscall_param0 asm("r4") = WAITING_TA_LOAD_PUNCHTHRU_FINISHED;
+    asm("trapa #14" : : "r" (syscall_param0));
+}
+
 void thread_wait_ta_render_finished()
 {
     register uint32_t syscall_param0 asm("r4") = WAITING_TA_RENDER_FINISHED;
+    asm("trapa #15" : : "r" (syscall_param0));
+}
+
+void thread_wait_ta_load_opaque()
+{
+    register uint32_t syscall_param0 asm("r4") = WAITING_TA_LOAD_OPAQUE_FINISHED;
+    asm("trapa #15" : : "r" (syscall_param0));
+}
+
+void thread_wait_ta_load_transparent()
+{
+    register uint32_t syscall_param0 asm("r4") = WAITING_TA_LOAD_TRANSPARENT_FINISHED;
+    asm("trapa #15" : : "r" (syscall_param0));
+}
+
+void thread_wait_ta_load_punchthru()
+{
+    register uint32_t syscall_param0 asm("r4") = WAITING_TA_LOAD_PUNCHTHRU_FINISHED;
     asm("trapa #15" : : "r" (syscall_param0));
 }
