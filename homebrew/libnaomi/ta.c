@@ -1,7 +1,11 @@
 #include "naomi/video.h"
 #include "naomi/system.h"
 #include "naomi/timer.h"
+#include "naomi/thread.h"
+#include "naomi/interrupt.h"
 #include "naomi/ta.h"
+#include "irqinternal.h"
+#include "holly.h"
 #include "video-internal.h"
 
 #define MAX_H_TILE (640/32)
@@ -205,7 +209,11 @@ void _ta_begin_render(void *cmd_list_base, void *tiles, void *background, void *
 
 void ta_render_begin()
 {
-    /* TODO: Set request to wait for TA render end here. */
+    if (!_irq_is_disabled(_irq_get_sr()))
+    {
+        /* Notify thread/interrupt system that we will want to wait for the TA to finish rendering. */
+        thread_notify_wait_ta_render_finished();
+    }
 
     /* Start rendering the new command list to the screen */
     _ta_begin_render(
@@ -220,9 +228,16 @@ void ta_render_begin()
 
 void ta_render_wait()
 {
-    /* TODO: This should wait for the render pipeline to be clear but
-     * that's an interrupt. Instead, just sleep for a bit. */
-    timer_wait(10000);
+    if (_irq_is_disabled(_irq_get_sr()))
+    {
+        /* Just spinloop waiting for the interrupt to happen. */
+        while (!(HOLLY_INTERNAL_IRQ_STATUS & HOLLY_INTERNAL_INTERRUPT_TSP_RENDER_FINISHED)) { ; }
+    }
+    else
+    {
+        /* Now, park the thread until the renderer is finished. */
+        thread_wait_ta_render_finished();
+    }
 }
 
 void ta_render()
@@ -254,6 +269,7 @@ void _ta_init_twiddletab()
 
 void _ta_init()
 {
+    uint32_t old_interrupts = irq_disable();
     volatile unsigned int *videobase = (volatile unsigned int *)POWERVR2_BASE;
 
     // Set up sorting, culling and comparison configuration.
@@ -312,13 +328,26 @@ void _ta_init()
     while(!(videobase[POWERVR2_SYNC_STAT] & 0x1FF)) { ; }
     while((videobase[POWERVR2_SYNC_STAT] & 0x1FF)) { ; }
 
+    // Enable TA finished rendering interrupt.
+    if ((HOLLY_INTERNAL_IRQ_2_MASK & HOLLY_INTERNAL_INTERRUPT_TSP_RENDER_FINISHED) == 0)
+    {
+        HOLLY_INTERNAL_IRQ_2_MASK = HOLLY_INTERNAL_IRQ_2_MASK | HOLLY_INTERNAL_INTERRUPT_TSP_RENDER_FINISHED;
+    }
+
     // Initialize twiddle table for texture load operations.
     _ta_init_twiddletab();
+
+    irq_restore(old_interrupts);
 }
 
 void _ta_free()
 {
-    // Nothing for now.
+    uint32_t old_interrupts = irq_disable();
+    if ((HOLLY_INTERNAL_IRQ_2_MASK & HOLLY_INTERNAL_INTERRUPT_TSP_RENDER_FINISHED) != 0)
+    {
+        HOLLY_INTERNAL_IRQ_2_MASK = HOLLY_INTERNAL_IRQ_2_MASK & (~HOLLY_INTERNAL_INTERRUPT_TSP_RENDER_FINISHED);
+    }
+    irq_restore(old_interrupts);
 }
 
 void *ta_palette_bank(int size, int banknum)

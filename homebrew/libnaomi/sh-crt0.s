@@ -106,7 +106,16 @@ sr_disable:
     .long 0x500000F0
 
     .align 4
-    .globl  _irq_restore
+    .globl __irq_get_sr
+
+__irq_get_sr:
+    # Just grab the SR and stick it in R0 to return it.
+    stc sr,r0
+    rts
+    nop
+
+    .align 4
+    .globl _irq_restore
 
 _irq_restore:
     # Load the first parameter into the SR directly. The parameter

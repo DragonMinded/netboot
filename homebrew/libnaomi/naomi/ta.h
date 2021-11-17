@@ -207,16 +207,24 @@ struct packed_color_vertex_list
 
 // Function for requesting that a set of commands be rendered to the current framebuffer.
 // This is just a convenience function that calls ta_render_begin() and then ta_render_wait().
+// Note that if you call this with threads enabled, your thread will be parked and other
+// threads can run until the TA is done. When it is done, your thread will be woken up with
+// critical priority. If you run this with threads disabled, it will instead spinloop until
+// the TA is done and no other work can get done.
 void ta_render();
 
 // Function for starting rendering, call this if you want to do other things while waiting
-// for the render to finish.
+// for the render to finish. If you call this function with threads disabled, you should also
+// leave them disabled until after you exit the ta_render_wait() call below.
 void ta_render_begin();
 
-// Function for finishing rendering and waiting for it to be done.
+// Function for finishing rendering and waiting for it to be done. If you call this with
+// threads disabled, instead of parking the thread until the TA is done it will spinloop.
 void ta_render_wait();
 
-// Functions for sending list data to the TA to be rendered upon calling ta_render();
+// Functions for sending list data to the TA to be rendered upon calling ta_render().
+// Note that you should send something to the TA using these functions before calling ta_render()
+// as these set up the TA to be able to render a frame.
 void ta_commit_begin();
 void ta_commit_list(void *list, int size);
 void ta_commit_end();

@@ -51,6 +51,7 @@ void _irq_free_state(irq_state_t *state);
 #define HOLLY_SERVICED_VBLANK_IN 0x00000002
 #define HOLLY_SERVICED_VBLANK_OUT 0x00000004
 #define HOLLY_SERVICED_HBLANK 0x00000008
+#define HOLLY_SERVICED_TSP_FINISHED 0x00000010
 
 irq_state_t *_syscall_trapa(irq_state_t *state, unsigned int which);
 irq_state_t *_syscall_timer(irq_state_t *state, int timer);

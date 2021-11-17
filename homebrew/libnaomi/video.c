@@ -74,11 +74,7 @@ void video_display_on_vblank()
 
     // First, figure out if we're running with disabled interrupts. If so, we can't use
     // the hardware to wait for VBLANK.
-    uint32_t old_interrupts = irq_disable();
-    unsigned int irqs_disabled = _irq_was_disabled(old_interrupts);
-    irq_restore(old_interrupts);
-
-    if (irqs_disabled)
+    if (_irq_is_disabled(_irq_get_sr()))
     {
         // Wait for us to enter the VBLANK portion of the frame scan. This is the same
         // spot that we would get a VBLANK interrupt if we were using threads.

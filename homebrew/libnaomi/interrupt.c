@@ -184,6 +184,12 @@ uint32_t _holly_interrupt()
         }
         if (requested & HOLLY_INTERNAL_INTERRUPT_RENDER_FINISHED)
         {
+            // Mark down which of the bits we actually got.
+            if (requested & HOLLY_INTERNAL_INTERRUPT_TSP_RENDER_FINISHED)
+            {
+                serviced |= HOLLY_SERVICED_TSP_FINISHED;
+            }
+
             // Request to clear the interrupt.
             HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_RENDER_FINISHED;
             handled |= HOLLY_INTERNAL_INTERRUPT_RENDER_FINISHED;
@@ -507,7 +513,7 @@ irq_stats_t irq_stats()
     return statscopy;
 }
 
-int _irq_was_disabled(uint32_t sr)
+int _irq_is_disabled(uint32_t sr)
 {
     return (sr & 0x10000000) != 0 ? 1 : 0;
 }

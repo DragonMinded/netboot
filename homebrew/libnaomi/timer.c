@@ -387,7 +387,7 @@ void timer_wait(uint32_t microseconds)
     // First, figure out if interrupts are disabled (have to manually increment
     // the profiler in this case).
     uint32_t old_interrupts = irq_disable();
-    unsigned int irq_disabled = _irq_was_disabled(old_interrupts);
+    unsigned int irq_disabled = _irq_is_disabled(old_interrupts);
     int timer = profile_timer;
     irq_restore(old_interrupts);
 
@@ -452,7 +452,7 @@ void _user_timer_free()
 int timer_start(uint32_t microseconds)
 {
     uint32_t old_interrupts = irq_disable();
-    unsigned int irq_disabled = _irq_was_disabled(old_interrupts);
+    unsigned int irq_disabled = _irq_is_disabled(old_interrupts);
     int timer = -1;
 
     for (unsigned int i = 0; i < MAX_TIMERS; i++)

@@ -65,6 +65,10 @@ semaphore_internal_t *_semaphore_find(void * semaphore, unsigned int type)
 // Thread is waiting for a resource.
 #define THREAD_STATE_WAITING 4
 
+// Waiting TA interrupt values.
+#define WAITING_TA_RENDER_FINISHED 0
+#define WAITING_TA_MAX 1
+
 typedef struct
 {
     // Basic thread stuff.
@@ -90,6 +94,9 @@ typedef struct
     uint32_t waiting_timer;
     unsigned int waiting_interrupt;
 
+    // Counters for TA resources this thread is waiting on.
+    int waiting_irq[WAITING_TA_MAX];
+
     // The actual context of the thread, including all of the registers and such.
     irq_state_t *context;
     uint8_t *stack;
@@ -97,9 +104,9 @@ typedef struct
 } thread_t;
 
 // Waiting interupt values.
-#define WAITING_FOR_VBLANK_IN 1
-#define WAITING_FOR_VBLANK_OUT 2
-#define WAITING_FOR_HBLANK 3
+#define WAITING_IRQ_VBLANK_IN 1
+#define WAITING_IRQ_VBLANK_OUT 2
+#define WAITING_IRQ_HBLANK 3
 
 // Priority for the idle thread. This is chosen to always be lower than the lowest
 // priority possible to request, and never possible to bump past the minimum priority
@@ -211,6 +218,11 @@ thread_t *_thread_create(char *name, int priority)
             thread->priority = priority;
             thread->state = THREAD_STATE_STOPPED;
             strncpy(thread->name, name, 63);
+
+            for (int i = 0; i < WAITING_TA_MAX; i++)
+            {
+                thread->waiting_irq[i] = -1;
+            }
 
             threads[slot] = thread;
             highest_thread = (slot + 1) > highest_thread ? (slot + 1) : highest_thread;
@@ -826,6 +838,49 @@ int _thread_wake_waiting_irq(unsigned int which)
     return scheduled;
 }
 
+int _thread_wake_waiting_ta(unsigned int which)
+{
+    if (which < 0 || which >= WAITING_TA_MAX)
+    {
+        // Nothing to do here!
+        return 0;
+    }
+
+    int scheduled = 0;
+    for (unsigned int i = 0; i < highest_thread; i++)
+    {
+        if (threads[i] == 0)
+        {
+            // Not a real thread.
+            continue;
+        }
+
+        // Must keep track of this event happening for all threads, just in case
+        // a thread asks to wait after the event passed.
+        if (threads[i]->waiting_irq[which] != -1)
+        {
+            threads[i]->waiting_irq[which] ++;
+        }
+
+        if (threads[i]->state != THREAD_STATE_WAITING)
+        {
+            // Not waiting on any resources.
+            continue;
+        }
+
+        if (threads[i]->waiting_irq[which] > 0)
+        {
+            // This thread is waiting on the resource that just became available!
+            threads[i]->waiting_irq[which] = -1;
+            threads[i]->state = THREAD_STATE_RUNNING;
+            _thread_enable_critical(threads[i]);
+            scheduled = 1;
+        }
+    }
+
+    return scheduled;
+}
+
 void _thread_calc_stats(irq_state_t *current, uint32_t elapsed, uint32_t overhead)
 {
     if (elapsed == 0)
@@ -922,17 +977,22 @@ irq_state_t *_syscall_holly(irq_state_t *current, uint32_t serviced_holly_interr
     if (serviced_holly_interrupts & HOLLY_SERVICED_VBLANK_IN)
     {
         // Wake any threads waiting for vblank in interrupt.
-        should_schedule = should_schedule | _thread_wake_waiting_irq(WAITING_FOR_VBLANK_IN);
+        should_schedule = should_schedule | _thread_wake_waiting_irq(WAITING_IRQ_VBLANK_IN);
     }
     if (serviced_holly_interrupts & HOLLY_SERVICED_VBLANK_OUT)
     {
         // Wake any threads waiting for vblank out interrupt.
-        should_schedule = should_schedule | _thread_wake_waiting_irq(WAITING_FOR_VBLANK_OUT);
+        should_schedule = should_schedule | _thread_wake_waiting_irq(WAITING_IRQ_VBLANK_OUT);
     }
     if (serviced_holly_interrupts & HOLLY_SERVICED_HBLANK)
     {
         // Wake any threads waiting for hblank interrupt.
-        should_schedule = should_schedule | _thread_wake_waiting_irq(WAITING_FOR_HBLANK);
+        should_schedule = should_schedule | _thread_wake_waiting_irq(WAITING_IRQ_HBLANK);
+    }
+    if (serviced_holly_interrupts & HOLLY_SERVICED_TSP_FINISHED)
+    {
+        // Wake any threads waiting for TSP to finish.
+        should_schedule = should_schedule | _thread_wake_waiting_ta(WAITING_TA_RENDER_FINISHED);
     }
 
     if (should_schedule)
@@ -1263,6 +1323,67 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
             }
             break;
         }
+        case 14:
+        {
+            // thread_notify_wait_ta_render_finished.
+            thread_t *thread = (thread_t *)current->threadptr;
+            if (thread)
+            {
+                // Set the thread up to wake up on TA finished.
+                int waiting_irq = current->gp_regs[4];
+                if (waiting_irq >= 0 && waiting_irq < WAITING_TA_MAX)
+                {
+                    thread->waiting_irq[waiting_irq] = 0;
+                }
+                else
+                {
+                    _irq_display_exception(current, "unrecognized IRQ wait value %d", waiting_irq);
+                }
+            }
+            else
+            {
+                // Should never happen.
+                _irq_display_exception(current, "cannot locate thread object", which);
+            }
+            break;
+        }
+        case 15:
+        {
+            // thread_wait_ta_render_finished.
+            thread_t *thread = (thread_t *)current->threadptr;
+            if (thread)
+            {
+                int waiting_irq = current->gp_regs[4];
+
+                if (waiting_irq >= 0 && waiting_irq < WAITING_TA_MAX)
+                {
+                    // See if they requested us to wait. If not, return immediately.
+                    // If so but the event happened, also return immediately.
+                    if (thread->waiting_irq[waiting_irq] > 0)
+                    {
+                        // Wait never needs to happen.
+                        thread->waiting_irq[waiting_irq] = -1;
+                    }
+                    else if (thread->waiting_irq[waiting_irq] == 0)
+                    {
+                        // Put the thread to sleep, waiting for the specific interrupt.
+                        _thread_check_waiting(thread);
+                        thread->state = THREAD_STATE_WAITING;
+                        schedule = THREAD_SCHEDULE_OTHER;
+                    }
+                }
+                else
+                {
+                    _irq_display_exception(current, "unrecognized IRQ wait value %d", waiting_irq);
+                }
+            }
+            else
+            {
+                // Should never happen.
+                _irq_display_exception(current, "cannot locate thread object", which);
+            }
+            break;
+        }
         default:
         {
             _irq_display_exception(current, "unrecognized syscall", which);
@@ -1507,7 +1628,7 @@ int mutex_try_lock(mutex_t *mutex)
                 // Keep track of whether this was acquired with interrupts disabled or not.
                 // This is because if it was, the subsequent unlock must be done without
                 // syscalls as well.
-                semaphores[slot]->irq_disabled = _irq_was_disabled(old_interrupts);
+                semaphores[slot]->irq_disabled = _irq_is_disabled(old_interrupts);
             }
         }
     }
@@ -1522,7 +1643,7 @@ void mutex_lock(mutex_t * mutex)
     // was no problem. However, if we fail, since we can't use syscalls we need to throw
     // up an invariant message instead.
     uint32_t old_interrupts = irq_disable();
-    int irq_disabled = _irq_was_disabled(old_interrupts);
+    int irq_disabled = _irq_is_disabled(old_interrupts);
     int acquired = 0;
 
     if (mutex)
@@ -1753,18 +1874,30 @@ void thread_sleep(uint32_t us)
 
 void thread_wait_vblank_in()
 {
-    register uint32_t syscall_param0 asm("r4") = WAITING_FOR_VBLANK_IN;
+    register uint32_t syscall_param0 asm("r4") = WAITING_IRQ_VBLANK_IN;
     asm("trapa #13" : : "r" (syscall_param0));
 }
 
 void thread_wait_vblank_out()
 {
-    register uint32_t syscall_param0 asm("r4") = WAITING_FOR_VBLANK_OUT;
+    register uint32_t syscall_param0 asm("r4") = WAITING_IRQ_VBLANK_OUT;
     asm("trapa #13" : : "r" (syscall_param0));
 }
 
 void thread_wait_hblank()
 {
-    register uint32_t syscall_param0 asm("r4") = WAITING_FOR_HBLANK;
+    register uint32_t syscall_param0 asm("r4") = WAITING_IRQ_HBLANK;
     asm("trapa #13" : : "r" (syscall_param0));
+}
+
+void thread_notify_wait_ta_render_finished()
+{
+    register uint32_t syscall_param0 asm("r4") = WAITING_TA_RENDER_FINISHED;
+    asm("trapa #14" : : "r" (syscall_param0));
+}
+
+void thread_wait_ta_render_finished()
+{
+    register uint32_t syscall_param0 asm("r4") = WAITING_TA_RENDER_FINISHED;
+    asm("trapa #15" : : "r" (syscall_param0));
 }
