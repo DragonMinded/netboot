@@ -65,6 +65,9 @@ struct ta_buffers {
     /* Command lists. */
     void *cmd_list;
     int cmd_list_size;
+    /* Additional object buffers for overflow. */
+    void *overflow_buffer;
+    int overflow_buffer_size;
     /* Opaque polygons */
     void *opaque_object_buffer;
     int opaque_object_buffer_size;
@@ -74,8 +77,6 @@ struct ta_buffers {
     /* Punch-Thru polygons */
     void *punchthru_object_buffer;
     int punchthru_object_buffer_size;
-    /* The background vertex. */
-    void *background_vertex;
     /* The individual tile descriptors for the 32x32 tiles. */
     void *tile_descriptors;
     /* The safe spot to start storing texxtures in RAM. */
@@ -152,17 +153,17 @@ void _ta_set_target(struct ta_buffers *buffers, int tile_width, int tile_height)
 {
     volatile unsigned int *videobase = (volatile unsigned int *)POWERVR2_BASE;
     unsigned int cmdl = ((unsigned int)buffers->cmd_list) & 0x00ffffff;
-    unsigned int objbuf = ((unsigned int)buffers->opaque_object_buffer) & 0x00ffffff;
+    unsigned int objbuf = ((unsigned int)buffers->overflow_buffer) & 0x00ffffff;
 
     /* Reset TA */
     videobase[POWERVR2_RESET] = 1;
     videobase[POWERVR2_RESET] = 0;
 
-    /* Set the tile buffer base in the TA */
-    videobase[POWERVR2_OBJBUF_BASE] = objbuf;
-    videobase[POWERVR2_OBJBUF_LIMIT] = 0;
+    /* Set the tile buffer base in the TA, grows downward. */
+    videobase[POWERVR2_OBJBUF_BASE] = objbuf + buffers->overflow_buffer_size;
+    videobase[POWERVR2_OBJBUF_LIMIT] = objbuf;
 
-    /* Set the command list base in the TA */
+    /* Set the command list base in the TA, grows upward. */
     videobase[POWERVR2_CMDLIST_BASE] = cmdl;
     videobase[POWERVR2_CMDLIST_LIMIT] = cmdl + buffers->cmd_list_size;
 
@@ -170,7 +171,7 @@ void _ta_set_target(struct ta_buffers *buffers, int tile_width, int tile_height)
     videobase[POWERVR2_TILE_CLIP] = ((tile_height - 1) << 16) | (tile_width - 1);
 
     /* Set the location for object buffers if we run out in our tile descriptors. */
-    videobase[POWERVR2_ADDITIONAL_OBJBUF] = objbuf;
+    videobase[POWERVR2_ADDITIONAL_OBJBUF] = objbuf + buffers->overflow_buffer_size;
 
     /* Figure out blocksizes for below. */
     int opaque_blocksize = BLOCKSIZE_NOT_USED;
@@ -230,7 +231,7 @@ void _ta_set_target(struct ta_buffers *buffers, int tile_width, int tile_height)
 }
 
 #define BACKGROUND_Z_PLANE 0.000001
-#define BACKGROUND_CULL (BACKGROUND_Z_PLANE / 2.0)
+#define BACKGROUND_SIZE_BYTES (24 * 4)
 
 // Video parameters from video.c
 extern unsigned int global_video_depth;
@@ -239,44 +240,45 @@ extern unsigned int global_video_height;
 
 void _ta_set_background_color(struct ta_buffers *buffers, uint32_t rgba)
 {
-    if (buffers->background_vertex == 0)
+    if (buffers->cmd_list == 0)
     {
         // We aren't initialized!
         return;
     }
 
-    uint32_t *bgintpointer = (uint32_t *)buffers->background_vertex;
-    float *bgfltpointer = (float *)buffers->background_vertex;
+    uint32_t *bgintpointer = (uint32_t *)(((uint32_t)buffers->cmd_list + buffers->cmd_list_size) - BACKGROUND_SIZE_BYTES);
+    float *bgfltpointer = (float *)bgintpointer;
 
     /* First 3 words of this are a mode1/mode2/texture word, followed by
      * 3 7-word x/y/z/u/v/base color/offset color chunks specifying the
      * first three vertexes of the quad. */
-    bgintpointer[0] =
+    int loc = 0;
+    bgintpointer[loc++] =
         TA_POLYMODE1_Z_GREATER |
         TA_POLYMODE1_GOURAD_SHADED;
-    bgintpointer[1] =
+    bgintpointer[loc++] =
         TA_POLYMODE2_SRC_BLEND_ONE |
         TA_POLYMODE2_DST_BLEND_ZERO |
         TA_POLYMODE2_FOG_DISABLED |
         TA_POLYMODE2_DISABLE_TEX_ALPHA |
         TA_POLYMODE2_MIPMAP_D_1_00 |
         TA_POLYMODE2_TEXTURE_MODULATE;
-    bgintpointer[2] = 0;
+    bgintpointer[loc++] = 0;
 
-    bgfltpointer[3] = 0.0;
-    bgfltpointer[4] = 0.0;
-    bgfltpointer[5] = BACKGROUND_Z_PLANE;
-    bgintpointer[6] = rgba;
+    bgfltpointer[loc++] = 0.0;
+    bgfltpointer[loc++] = 0.0;
+    bgfltpointer[loc++] = BACKGROUND_Z_PLANE;
+    bgintpointer[loc++] = rgba;
 
-    bgfltpointer[7] = (float)global_video_width;
-    bgfltpointer[8] = 0.0;
-    bgfltpointer[9] = BACKGROUND_Z_PLANE;
-    bgintpointer[10] = rgba;
+    bgfltpointer[loc++] = (float)global_video_width;
+    bgfltpointer[loc++] = 0.0;
+    bgfltpointer[loc++] = BACKGROUND_Z_PLANE;
+    bgintpointer[loc++] = rgba;
 
-    bgfltpointer[11] = 0.0;
-    bgfltpointer[12] = (float)global_video_height;
-    bgfltpointer[13] = BACKGROUND_Z_PLANE;
-    bgintpointer[14] = rgba;
+    bgfltpointer[loc++] = 0.0;
+    bgfltpointer[loc++] = (float)global_video_height;
+    bgfltpointer[loc++] = BACKGROUND_Z_PLANE;
+    bgintpointer[loc++] = rgba;
 }
 
 static struct ta_buffers ta_working_buffers;
@@ -304,6 +306,8 @@ extern void *buffer_base;
 #define TA_TRANSPARENT_OBJECT_BUFFER_SIZE 64
 #define TA_PUNCHTHRU_OBJECT_BUFFER_SIZE 64
 #define TA_CMDLIST_SIZE (512 * 1024)
+#define TA_CMDLIST_PADDING 256
+#define TA_OVERFLOW_SIZE (256 * 1024)
 #define TA_BACKGROUND_SIZE (24 * 4)
 
 // Alignment required for various buffers.
@@ -319,7 +323,18 @@ void _ta_init_buffers()
     // Clear our structure out.
     memset(&ta_working_buffers, 0, sizeof(ta_working_buffers));
 
-    // First, allocate space for the polygon object buffers.
+    // First, allocate space for the command buffer. Give it some padding so that the
+    // extra object buffer limit is not the same as our command buffer limit.
+    ta_working_buffers.cmd_list = (void *)curbufloc;
+    ta_working_buffers.cmd_list_size = TA_CMDLIST_SIZE;
+    curbufloc = ENSURE_ALIGNMENT(curbufloc + TA_CMDLIST_SIZE + TA_CMDLIST_PADDING);
+
+    // Now, allocate space for extra object buffer overflow.
+    ta_working_buffers.overflow_buffer = (void *)curbufloc;
+    ta_working_buffers.overflow_buffer_size = TA_OVERFLOW_SIZE;
+    curbufloc = ENSURE_ALIGNMENT(curbufloc + TA_OVERFLOW_SIZE);
+
+    // Now, allocate space for the polygon object buffers.
     ta_working_buffers.opaque_object_buffer = (void *)curbufloc;
     ta_working_buffers.opaque_object_buffer_size = TA_OPAQUE_OBJECT_BUFFER_SIZE;
     curbufloc = ENSURE_ALIGNMENT(curbufloc + (TA_OPAQUE_OBJECT_BUFFER_SIZE * MAX_H_TILE * MAX_V_TILE));
@@ -335,29 +350,23 @@ void _ta_init_buffers()
     curbufloc = ENSURE_ALIGNMENT(curbufloc + (TA_PUNCHTHRU_OBJECT_BUFFER_SIZE * MAX_H_TILE * MAX_V_TILE));
 #endif
 
-    // Now, allocate space for the command buffer.
-    ta_working_buffers.cmd_list = (void *)curbufloc;
-    ta_working_buffers.cmd_list_size = TA_CMDLIST_SIZE;
-    curbufloc = ENSURE_ALIGNMENT(curbufloc + TA_CMDLIST_SIZE);
-
-    // Now, grab some space for the background buffer instruction.
-    ta_working_buffers.background_vertex = (void *)curbufloc;
-    curbufloc = ENSURE_ALIGNMENT(curbufloc + TA_BACKGROUND_SIZE);
-
-    // Finally, grab space for the tile descriptors.
+    // Finally, grab space for the tile descriptors themselves.
     ta_working_buffers.tile_descriptors = (void *)curbufloc;
     curbufloc = ENSURE_ALIGNMENT(curbufloc + (4 * (6 * ((MAX_H_TILE * MAX_V_TILE) + 1))));
 
     // Now, the remaining space can be used for texture RAM.
     ta_working_buffers.texture_ram = (void *)((curbufloc & 0x00FFFFFF) | 0xA4000000);
 
-    // Finally, clear the memory so we don't get artifacts.
+    // Clear the above memory so we don't get artifacts.
     if (hw_memset((void *)BUFLOC, 0, curbufloc - BUFLOC) == 0)
     {
         memset((void *)BUFLOC, 0, curbufloc - BUFLOC);
     }
 
+    // Now, populate the tile descriptors themselves, pointing at the object buffers we just allocated.
     _ta_create_tile_descriptors(&ta_working_buffers, global_video_width / 32, global_video_height / 32);
+
+    // Finally, add a command to the command buffer that we will point at for the background polygon.
     _ta_set_background_color(&ta_working_buffers, ta_background_color);
 }
 
@@ -413,16 +422,30 @@ void ta_commit_end()
     }
 }
 
+union intfloat
+{
+    float f;
+    uint32_t i;
+};
+
 /* Launch a new render pass */
-void _ta_begin_render(void *cmd_list_base, void *tiles, void *background, void *scrn, float zclip)
+void _ta_begin_render(struct ta_buffers *buffers, void *scrn, float zclip)
 {
     volatile unsigned int *videobase = (volatile unsigned int *)POWERVR2_BASE;
 
-    unsigned int cmdl = ((unsigned int)cmd_list_base) & 0x00ffffff;
-    unsigned int tls = ((unsigned int)tiles) & 0x00ffffff;
-    unsigned int scn = ((unsigned int)scrn) & 0x00ffffff;
-    unsigned int bg = ((unsigned int)background - (unsigned int)cmd_list_base) & 0x00fffffc;
-    uint32_t zclipint = ((uint32_t)zclip) & 0xFFFFFFF0;
+    unsigned int cmdl = ((unsigned int)buffers->cmd_list) & 0x00FFFFFF;
+    unsigned int tls = ((unsigned int)buffers->tile_descriptors) & 0x00FFFFFF;
+    unsigned int scn = ((unsigned int)scrn) & 0x00FFFFFF;
+
+    /* This is an offset from cmdl where the background instructions are. We always
+     * stick them at the end of the command list, so we can set this to the same
+     * location every time. */
+    unsigned int bgl = buffers->cmd_list_size - BACKGROUND_SIZE_BYTES;
+
+    /* Convert the bits from float to int so we can cap off the bottom 4 bits. */
+    union intfloat f2i;
+    f2i.f = zclip;
+    uint32_t zclipint = (f2i.i) & 0xFFFFFFF0;
 
     /* Set up current render tiledescriptions, commandlist and framebuffer to render to. */
     videobase[POWERVR2_TILES_ADDR] = tls;
@@ -432,9 +455,8 @@ void _ta_begin_render(void *cmd_list_base, void *tiles, void *background, void *
 
     /* Set up background plane for where there aren't triangles/quads to draw. */
     videobase[POWERVR2_BACKGROUND_INSTRUCTIONS] = (
-        (1 << 28) |  // Unsure what this does, Naomi BIOS does this.
-        (0 << 24) |  // Some sort of span for the background plane vertexes?
-        (bg << 1)    // Background plane instructions pointer.
+        (1 << 24) |                // Span for the background plane vertexes? Appears to be (this number + 3) words per vertex.
+        ((bgl & 0xfffffc) << 1)    // Background plane instructions pointer, we stick it at the beginning of the command buffer.
     );
     videobase[POWERVR2_BACKGROUND_CLIP] = zclipint;
 
@@ -451,13 +473,7 @@ void ta_render_begin()
     }
 
     /* Start rendering the new command list to the screen */
-    _ta_begin_render(
-        ta_working_buffers.cmd_list,
-        ta_working_buffers.tile_descriptors,
-        ta_working_buffers.background_vertex,
-        buffer_base,
-        BACKGROUND_CULL
-    );
+    _ta_begin_render(&ta_working_buffers, buffer_base, BACKGROUND_Z_PLANE);
 }
 
 void ta_render_wait()
