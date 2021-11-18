@@ -136,7 +136,6 @@ void main()
 {
     /* Set up PowerVR display and tile accelerator hardware */
     video_init_simple();
-    video_set_background_color(rgb(48, 48, 48));
 
     /* Create palettes for our grayscale (indexed) textures */
     init_palette();
