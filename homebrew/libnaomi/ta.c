@@ -1,3 +1,4 @@
+#include <string.h>
 #include "naomi/video.h"
 #include "naomi/system.h"
 #include "naomi/timer.h"
@@ -63,6 +64,12 @@ struct ta_buffers {
     /* Opaque polygons */
     void *opaque_object_buffer;
     int opaque_object_buffer_size;
+    /* Transparent polygons */
+    void *transparent_object_buffer;
+    int transparent_object_buffer_size;
+    /* Punch-Thru polygons */
+    void *punchthru_object_buffer;
+    int punchthru_object_buffer_size;
     /* The background vertex. */
     void *background_vertex;
     /* The individual tile descriptors for the 32x32 tiles. */
@@ -77,6 +84,8 @@ void _ta_create_tile_descriptors(struct ta_buffers *buffers, int tile_width, int
     /* Each tile uses 64 bytes of buffer space.  So buf must point to 64*w*h bytes of data */
     unsigned int *vr = buffers->tile_descriptors;
     unsigned int opaquebase = ((unsigned int)buffers->opaque_object_buffer) & 0x00ffffff;
+    unsigned int transparentbase = ((unsigned int)buffers->transparent_object_buffer) & 0x00ffffff;
+    unsigned int punchthrubase = ((unsigned int)buffers->punchthru_object_buffer) & 0x00ffffff;
 
     /* It seems the hardware needs a dummy tile or it renders the first tile weird. */
     *vr++ = 0x10000000;
@@ -91,25 +100,45 @@ void _ta_create_tile_descriptors(struct ta_buffers *buffers, int tile_width, int
     {
         for (int y = 0; y < tile_height; y++)
         {
+            // Set end of buffer, set autosorted translucent polygons, set tile position
             int eob = (x == (tile_width - 1) && y == (tile_height - 1)) ? 0x80000000 : 0x00000000;
-
-            // Set start of buffer/end of buffer, set autosorted translucent polygons, set tile position
             *vr++ = eob | 0x20000000 | (y << 8) | (x << 2);
 
             // Opaque polygons.
-            *vr++ = opaquebase + ((x + (y * tile_width)) * buffers->opaque_object_buffer_size);
+            if (buffers->opaque_object_buffer_size)
+            {
+                *vr++ = opaquebase + ((x + (y * tile_width)) * buffers->opaque_object_buffer_size);
+            }
+            else
+            {
+                *vr++ = 0x80000000;
+            }
 
             // We don't support opaque modifiers, so nothing here.
             *vr++ = 0x80000000;
 
-            // TODO: Translucent polygons.
-            *vr++ = 0x80000000;
+            // Translucent polygons.
+            if (buffers->transparent_object_buffer_size)
+            {
+                *vr++ = transparentbase + ((x + (y * tile_width)) * buffers->transparent_object_buffer_size);
+            }
+            else
+            {
+                *vr++ = 0x80000000;
+            }
 
             // We don't suppport translucent modifiers, so nothing here.
             *vr++ = 0x80000000;
 
-            // TODO: Punch-through (or solid/transparent-only) polygons.
-            *vr++ = 0x80000000;
+            // Punch-through (or solid/transparent-only) polygons.
+            if (buffers->punchthru_object_buffer_size)
+            {
+                *vr++ = punchthrubase + ((x + (y * tile_width)) * buffers->punchthru_object_buffer_size);
+            }
+            else
+            {
+                *vr++ = 0x80000000;
+            }
         }
     }
 }
@@ -154,14 +183,42 @@ void _ta_set_target(struct ta_buffers *buffers, int tile_width, int tile_height)
         opaque_blocksize = BLOCKSIZE_128;
     }
 
+    int transparent_blocksize = BLOCKSIZE_NOT_USED;
+    if (buffers->transparent_object_buffer_size == 32)
+    {
+        transparent_blocksize = BLOCKSIZE_32;
+    }
+    else if (buffers->transparent_object_buffer_size == 64)
+    {
+        transparent_blocksize = BLOCKSIZE_64;
+    }
+    else if (buffers->transparent_object_buffer_size == 128)
+    {
+        transparent_blocksize = BLOCKSIZE_128;
+    }
+
+    int punchthru_blocksize = BLOCKSIZE_NOT_USED;
+    if (buffers->punchthru_object_buffer_size == 32)
+    {
+        punchthru_blocksize = BLOCKSIZE_32;
+    }
+    else if (buffers->punchthru_object_buffer_size == 64)
+    {
+        punchthru_blocksize = BLOCKSIZE_64;
+    }
+    else if (buffers->punchthru_object_buffer_size == 128)
+    {
+        punchthru_blocksize = BLOCKSIZE_128;
+    }
+
     /* Set up object block sizes and such. */
     videobase[POWERVR2_TA_BLOCKSIZE] = (
-        (1 << 20) |                   // Grow downward in memory
-        (BLOCKSIZE_NOT_USED << 16) |  // Punch-through polygon blocksize
-        (BLOCKSIZE_NOT_USED << 12) |  // Translucent polygon modifier blocksize
-        (BLOCKSIZE_NOT_USED << 8)  |  // Translucent polygon blocksize
-        (BLOCKSIZE_NOT_USED << 4)  |  // Opaque polygon modifier blocksize
-        (opaque_blocksize << 0)       // Opaque polygon blocksize
+        (1 << 20) |                     // Grow downward in memory
+        (punchthru_blocksize << 16) |   // Punch-through polygon blocksize
+        (BLOCKSIZE_NOT_USED << 12) |    // Translucent polygon modifier blocksize
+        (transparent_blocksize << 8) |  // Translucent polygon blocksize
+        (BLOCKSIZE_NOT_USED << 4) |     // Opaque polygon modifier blocksize
+        (opaque_blocksize << 0)         // Opaque polygon blocksize
     );
 
     /* Confirm the above settings. */
@@ -193,6 +250,8 @@ extern void *buffer_base;
 #define MAX_H_TILE (640/32)
 #define MAX_V_TILE (480/32)
 #define TA_OPAQUE_OBJECT_BUFFER_SIZE 64
+#define TA_TRANSPARENT_OBJECT_BUFFER_SIZE 64
+#define TA_PUNCHTHRU_OBJECT_BUFFER_SIZE 64
 #define TA_CMDLIST_SIZE (512 * 1024)
 #define TA_BACKGROUND_SIZE (24 * 4)
 
@@ -200,16 +259,31 @@ static struct ta_buffers ta_working_buffers;
 // Alignment required for various buffers.
 #define BUFFER_ALIGNMENT 128
 #define ENSURE_ALIGNMENT(x) (((x) + (BUFFER_ALIGNMENT - 1)) & (~(BUFFER_ALIGNMENT - 1)))
+#define BUFLOC 0xA5400000
 
 void _ta_init_buffers()
 {
     // Where we start with our buffers.
-    uint32_t curbufloc = 0xA5200000;
+    uint32_t curbufloc = BUFLOC;
+
+    // Clear our structure out.
+    memset(&ta_working_buffers, 0, sizeof(ta_working_buffers));
 
     // First, allocate space for the polygon object buffers.
     ta_working_buffers.opaque_object_buffer = (void *)curbufloc;
     ta_working_buffers.opaque_object_buffer_size = TA_OPAQUE_OBJECT_BUFFER_SIZE;
     curbufloc = ENSURE_ALIGNMENT(curbufloc + (TA_OPAQUE_OBJECT_BUFFER_SIZE * MAX_H_TILE * MAX_V_TILE));
+
+    // TODO: For some reason enabling these causes the renderer to go in super slow motion
+#if 0
+    ta_working_buffers.transparent_object_buffer = (void *)curbufloc;
+    ta_working_buffers.transparent_object_buffer_size = TA_TRANSPARENT_OBJECT_BUFFER_SIZE;
+    curbufloc = ENSURE_ALIGNMENT(curbufloc + (TA_TRANSPARENT_OBJECT_BUFFER_SIZE * MAX_H_TILE * MAX_V_TILE));
+
+    ta_working_buffers.punchthru_object_buffer = (void *)curbufloc;
+    ta_working_buffers.punchthru_object_buffer_size = TA_PUNCHTHRU_OBJECT_BUFFER_SIZE;
+    curbufloc = ENSURE_ALIGNMENT(curbufloc + (TA_PUNCHTHRU_OBJECT_BUFFER_SIZE * MAX_H_TILE * MAX_V_TILE));
+#endif
 
     // Now, allocate space for the command buffer.
     ta_working_buffers.cmd_list = (void *)curbufloc;
@@ -226,6 +300,12 @@ void _ta_init_buffers()
 
     // Now, the remaining space can be used for texture RAM.
     ta_working_buffers.texture_ram = (void *)((curbufloc & 0x00FFFFFF) | 0xA4000000);
+
+    // Finally, clear the memory so we don't get artifacts.
+    if (hw_memset((void *)BUFLOC, 0, curbufloc - BUFLOC) == 0)
+    {
+        memset((void *)BUFLOC, 0, curbufloc - BUFLOC);
+    }
 
     _ta_create_tile_descriptors(&ta_working_buffers, global_video_width / 32, global_video_height / 32);
     _ta_clear_background(&ta_working_buffers);
@@ -325,8 +405,7 @@ void ta_render_begin()
         ta_working_buffers.tile_descriptors,
         ta_working_buffers.background_vertex,
         buffer_base,
-        /* TODO: Better background clipping distance here. */
-        0.2
+        0.001
     );
 }
 
