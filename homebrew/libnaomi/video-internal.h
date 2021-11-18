@@ -121,8 +121,8 @@ void _ta_init_buffers();
 #define PALETTE_CFG_ARGB8888 3
 
 #define BLOCKSIZE_NOT_USED 0
-#define BLOCKSIZE_64 1
-#define BLOCKSIZE_128 2
-#define BLOCKSIZE_256 3
+#define BLOCKSIZE_32 1
+#define BLOCKSIZE_64 2
+#define BLOCKSIZE_128 3
 
 #endif

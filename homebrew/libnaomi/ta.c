@@ -8,25 +8,6 @@
 #include "holly.h"
 #include "video-internal.h"
 
-#define MAX_H_TILE (640/32)
-#define MAX_V_TILE (480/32)
-#define TA_OPAQUE_OBJECT_BUFFER_SIZE 64
-#define TA_CMDLIST_SIZE (512 * 1024)
-#define TA_EXTRA_BUFFER_SIZE (MAX_H_TILE * MAX_V_TILE * 1024)
-
-struct ta_buffers {
-    /* Command lists. */
-    char cmd_list[TA_CMDLIST_SIZE];
-    /* Opaque polygons */
-    char opaque_object_buffer[TA_OPAQUE_OBJECT_BUFFER_SIZE * MAX_H_TILE * MAX_V_TILE];
-    /* The background vertex. */
-    int background_vertex[24];
-    /* The individual tile descriptors for the 32x32 tiles. */
-    int tile_descriptor[6 * ((MAX_H_TILE * MAX_V_TILE) + 1)];
-};
-
-static struct ta_buffers *ta_working_buffers = (struct ta_buffers *)0xa5400000;
-
 #define WAITING_LIST_OPAQUE 0x1
 #define WAITING_LIST_TRANSPARENT 0x2
 #define WAITING_LIST_PUNCHTHRU 0x4
@@ -75,12 +56,27 @@ void ta_commit_list(void *src, int len)
     hw_memcpy((void *)0xB0000000, src, len);
 }
 
+struct ta_buffers {
+    /* Command lists. */
+    void *cmd_list;
+    int cmd_list_size;
+    /* Opaque polygons */
+    void *opaque_object_buffer;
+    int opaque_object_buffer_size;
+    /* The background vertex. */
+    void *background_vertex;
+    /* The individual tile descriptors for the 32x32 tiles. */
+    void *tile_descriptors;
+    /* The safe spot to start storing texxtures in RAM. */
+    void *texture_ram;
+};
+
 /* Set up buffers and descriptors for a tilespace */
-void _ta_create_tile_descriptors(void *tile_descriptor_base, void *opaque_buffer_base, int tile_width, int tile_height)
+void _ta_create_tile_descriptors(struct ta_buffers *buffers, int tile_width, int tile_height)
 {
     /* Each tile uses 64 bytes of buffer space.  So buf must point to 64*w*h bytes of data */
-    unsigned int *vr = tile_descriptor_base;
-    unsigned int opaquebase = ((unsigned int)opaque_buffer_base) & 0x00ffffff;
+    unsigned int *vr = buffers->tile_descriptors;
+    unsigned int opaquebase = ((unsigned int)buffers->opaque_object_buffer) & 0x00ffffff;
 
     /* It seems the hardware needs a dummy tile or it renders the first tile weird. */
     *vr++ = 0x10000000;
@@ -101,7 +97,7 @@ void _ta_create_tile_descriptors(void *tile_descriptor_base, void *opaque_buffer
             *vr++ = eob | 0x20000000 | (y << 8) | (x << 2);
 
             // Opaque polygons.
-            *vr++ = opaquebase + ((x + (y * tile_width)) * TA_OPAQUE_OBJECT_BUFFER_SIZE);
+            *vr++ = opaquebase + ((x + (y * tile_width)) * buffers->opaque_object_buffer_size);
 
             // We don't support opaque modifiers, so nothing here.
             *vr++ = 0x80000000;
@@ -119,11 +115,11 @@ void _ta_create_tile_descriptors(void *tile_descriptor_base, void *opaque_buffer
 }
 
 /* Tell the command list compiler where to store the command list, and which tilespace to use */
-void _ta_set_target(void *cmd_list_base, void *object_buffer_base, int tile_width, int tile_height)
+void _ta_set_target(struct ta_buffers *buffers, int tile_width, int tile_height)
 {
     volatile unsigned int *videobase = (volatile unsigned int *)POWERVR2_BASE;
-    unsigned int cmdl = ((unsigned int)cmd_list_base) & 0x00ffffff;
-    unsigned int objbuf = ((unsigned int)object_buffer_base) & 0x00ffffff;
+    unsigned int cmdl = ((unsigned int)buffers->cmd_list) & 0x00ffffff;
+    unsigned int objbuf = ((unsigned int)buffers->opaque_object_buffer) & 0x00ffffff;
 
     /* Reset TA */
     videobase[POWERVR2_RESET] = 1;
@@ -135,13 +131,28 @@ void _ta_set_target(void *cmd_list_base, void *object_buffer_base, int tile_widt
 
     /* Set the command list base in the TA */
     videobase[POWERVR2_CMDLIST_BASE] = cmdl;
-    videobase[POWERVR2_CMDLIST_LIMIT] = 0;
+    videobase[POWERVR2_CMDLIST_LIMIT] = cmdl + buffers->cmd_list_size;
 
     /* Set the number of tiles we have in the tile descriptor. */
     videobase[POWERVR2_TILE_CLIP] = ((tile_height - 1) << 16) | (tile_width - 1);
 
     /* Set the location for object buffers if we run out in our tile descriptors. */
     videobase[POWERVR2_ADDITIONAL_OBJBUF] = objbuf;
+
+    /* Figure out blocksizes for below. */
+    int opaque_blocksize = BLOCKSIZE_NOT_USED;
+    if (buffers->opaque_object_buffer_size == 32)
+    {
+        opaque_blocksize = BLOCKSIZE_32;
+    }
+    else if (buffers->opaque_object_buffer_size == 64)
+    {
+        opaque_blocksize = BLOCKSIZE_64;
+    }
+    else if (buffers->opaque_object_buffer_size == 128)
+    {
+        opaque_blocksize = BLOCKSIZE_128;
+    }
 
     /* Set up object block sizes and such. */
     videobase[POWERVR2_TA_BLOCKSIZE] = (
@@ -150,17 +161,17 @@ void _ta_set_target(void *cmd_list_base, void *object_buffer_base, int tile_widt
         (BLOCKSIZE_NOT_USED << 12) |  // Translucent polygon modifier blocksize
         (BLOCKSIZE_NOT_USED << 8)  |  // Translucent polygon blocksize
         (BLOCKSIZE_NOT_USED << 4)  |  // Opaque polygon modifier blocksize
-        (BLOCKSIZE_128 << 0)          // Opaque polygon blocksize
+        (opaque_blocksize << 0)       // Opaque polygon blocksize
     );
 
     /* Confirm the above settings. */
     videobase[POWERVR2_TA_CONFIRM] = 0x80000000;
 }
 
-void _ta_clear_background(void *background)
+void _ta_clear_background(struct ta_buffers *buffers)
 {
     /* TODO: We need to be able to specify a background plane with a solid color or image. */
-    uint32_t *bgpointer = (uint32_t *)background;
+    uint32_t *bgpointer = (uint32_t *)buffers->background_vertex;
 
     /* First 3 words of this are a mode1/mode2/texture word, followed by
      * 3 7-word x/y/z/u/v/base color/offset color chunks specifying the
@@ -179,28 +190,51 @@ extern unsigned int global_video_height;
 // Actual framebuffer address.
 extern void *buffer_base;
 
+#define MAX_H_TILE (640/32)
+#define MAX_V_TILE (480/32)
+#define TA_OPAQUE_OBJECT_BUFFER_SIZE 64
+#define TA_CMDLIST_SIZE (512 * 1024)
+#define TA_BACKGROUND_SIZE (24 * 4)
+
+static struct ta_buffers ta_working_buffers;
+// Alignment required for various buffers.
+#define BUFFER_ALIGNMENT 128
+#define ENSURE_ALIGNMENT(x) (((x) + (BUFFER_ALIGNMENT - 1)) & (~(BUFFER_ALIGNMENT - 1)))
+
 void _ta_init_buffers()
 {
-    _ta_create_tile_descriptors(
-        ta_working_buffers->tile_descriptor,
-        ta_working_buffers->opaque_object_buffer,
-        global_video_width / 32,
-        global_video_height / 32
-    );
-    _ta_clear_background(ta_working_buffers->background_vertex);
+    // Where we start with our buffers.
+    uint32_t curbufloc = 0xA5200000;
+
+    // First, allocate space for the polygon object buffers.
+    ta_working_buffers.opaque_object_buffer = (void *)curbufloc;
+    ta_working_buffers.opaque_object_buffer_size = TA_OPAQUE_OBJECT_BUFFER_SIZE;
+    curbufloc = ENSURE_ALIGNMENT(curbufloc + (TA_OPAQUE_OBJECT_BUFFER_SIZE * MAX_H_TILE * MAX_V_TILE));
+
+    // Now, allocate space for the command buffer.
+    ta_working_buffers.cmd_list = (void *)curbufloc;
+    ta_working_buffers.cmd_list_size = TA_CMDLIST_SIZE;
+    curbufloc = ENSURE_ALIGNMENT(curbufloc + TA_CMDLIST_SIZE);
+
+    // Now, grab some space for the background buffer instruction.
+    ta_working_buffers.background_vertex = (void *)curbufloc;
+    curbufloc = ENSURE_ALIGNMENT(curbufloc + TA_BACKGROUND_SIZE);
+
+    // Finally, grab space for the tile descriptors.
+    ta_working_buffers.tile_descriptors = (void *)curbufloc;
+    curbufloc = ENSURE_ALIGNMENT(curbufloc + (4 * (6 * ((MAX_H_TILE * MAX_V_TILE) + 1))));
+
+    // Now, the remaining space can be used for texture RAM.
+    ta_working_buffers.texture_ram = (void *)((curbufloc & 0x00FFFFFF) | 0xA4000000);
+
+    _ta_create_tile_descriptors(&ta_working_buffers, global_video_width / 32, global_video_height / 32);
+    _ta_clear_background(&ta_working_buffers);
 }
 
 void ta_commit_begin()
 {
     // Set the target of our TA commands based on the current framebuffer position.
-    _ta_set_target(
-        ta_working_buffers->cmd_list,
-        /* We give the TA the opaque object buffer since its the lowest one in memory. */
-        ta_working_buffers->opaque_object_buffer,
-        global_video_width / 32,
-        global_video_height / 32
-    );
-
+    _ta_set_target(&ta_working_buffers, global_video_width / 32, global_video_height / 32);
     waiting_lists = 0;
 }
 
@@ -287,9 +321,9 @@ void ta_render_begin()
 
     /* Start rendering the new command list to the screen */
     _ta_begin_render(
-        ta_working_buffers->cmd_list,
-        ta_working_buffers->tile_descriptor,
-        ta_working_buffers->background_vertex,
+        ta_working_buffers.cmd_list,
+        ta_working_buffers.tile_descriptors,
+        ta_working_buffers.background_vertex,
         buffer_base,
         /* TODO: Better background clipping distance here. */
         0.2
@@ -463,6 +497,11 @@ void *ta_palette_bank(int size, int banknum)
     }
 
     return 0;
+}
+
+void *ta_texture_base()
+{
+    return ta_working_buffers.texture_ram;
 }
 
 int ta_texture_load(void *offset, int size, void *data)

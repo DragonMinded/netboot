@@ -239,6 +239,9 @@ void *ta_palette_bank(int size, int banknum);
 #define TA_PALETTE_CLUT4 1
 #define TA_PALETTE_CLUT8 2
 
+// Get a pointer to the base texture RAM that is safe to use.
+void *ta_texture_base();
+
 // Given a raw offset into texture RAM and a texture size, load the texture into texture
 // RAM in twiddled format required by several video modes. Note that the texture size is
 // the size in pixels of one side. The only allowed sizes are 8, 16, 32, 64, 128, 256, 512

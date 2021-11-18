@@ -144,7 +144,7 @@ void main()
     /* TODO: We should really be able to ask the TA driver for a texture slot.
      * For now, just allocate space for the 6 256x256x8 bit textures manually. */
     uint16_t *tex[6];
-    tex[0] = (unsigned short *)(void *)0xa4400000;
+    tex[0] = (unsigned short *)ta_texture_base();
     tex[1] = (void*)(((char *)tex[0])+256*256);
     tex[2] = (void*)(((char *)tex[1])+256*256);
     tex[3] = (void*)(((char *)tex[2])+256*256);
