@@ -10,6 +10,7 @@
 #include "naomi/console.h"
 #include "naomi/interrupt.h"
 #include "naomi/thread.h"
+#include "naomi/ta.h"
 #include "video-internal.h"
 #include "irqinternal.h"
 #include "holly.h"
@@ -413,7 +414,10 @@ void explodergb(uint32_t color, unsigned int *r, unsigned int *g, unsigned int *
     }
     else if(global_video_depth == 4)
     {
-        // TODO: 32-bit video modes.
+        EXPLODE0888(color, *r, *g, *b);
+    }
+    else
+    {
         *r = 0;
         *g = 0;
         *b = 0;
@@ -428,11 +432,13 @@ void explodergba(uint32_t color, unsigned int *r, unsigned int *g, unsigned int 
     }
     else if(global_video_depth == 4)
     {
-        // TODO: 32-bit video modes.
+        EXPLODE8888(color, *r, *g, *b, *a);
+    }
+    else
+    {
         *r = 0;
         *g = 0;
         *b = 0;
-        *a = 0;
     }
 }
 
@@ -457,6 +463,7 @@ void video_fill_screen(uint32_t color)
 void video_set_background_color(uint32_t color)
 {
     video_fill_screen(color);
+    ta_set_background_color(color);
     global_background_set = 1;
 
     if(global_video_depth == 2)

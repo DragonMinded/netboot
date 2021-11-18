@@ -104,6 +104,10 @@ struct packed_color_vertex_list
 #define TA_POLYMODE1_CULL_CCW       (2<<27)
 #define TA_POLYMODE1_CULL_CW        (3<<27)
 #define TA_POLYMODE1_NO_Z_UPDATE    0x04000000
+#define TA_POLYMODE1_TEXTURED       0x02000000
+#define TA_POLYMODE1_OFFSET_COLOR   0x01000000
+#define TA_POLYMODE1_GOURAD_SHADED  0x00800000
+#define TA_POLYMODE1_16BIT_UV       0x00400000
 #define TA_POLYMODE1_CACHE_BYPASS   0x00200000
 #define TA_POLYMODE1_DCALC_EXACT    0x00100000
 
@@ -228,6 +232,13 @@ void ta_render_wait();
 void ta_commit_begin();
 void ta_commit_list(void *list, int size);
 void ta_commit_end();
+
+// Set the background color for TA renders, specifically for areas where there is not any
+// polygon to draw. Note that you can also accomplish this with video_set_background_color()
+// but that function call is slower as it also instructs the raw framebuffer code to manaully
+// clear the screen as well. So if you are using the TA to draw, its recommended to only use
+// this function.
+void ta_set_background_color(uint32_t color);
 
 // Defines for the size of a ta_commit_list() call.
 #define TA_LIST_SHORT 32

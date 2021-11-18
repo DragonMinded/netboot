@@ -13,7 +13,11 @@
 #define WAITING_LIST_TRANSPARENT 0x2
 #define WAITING_LIST_PUNCHTHRU 0x4
 
+/* What lists we populated and need to wait to finish filling. */
 static unsigned int waiting_lists = 0;
+
+/* The background color as set by a user when requesting a different background. */
+static uint32_t ta_background_color = 0;
 
 /* Send a command, with len equal to either TA_LIST_SHORT or TA_LIST_LONG
  * for either 32 or 64 byte TA commands. */
@@ -225,24 +229,71 @@ void _ta_set_target(struct ta_buffers *buffers, int tile_width, int tile_height)
     videobase[POWERVR2_TA_CONFIRM] = 0x80000000;
 }
 
-void _ta_clear_background(struct ta_buffers *buffers)
-{
-    /* TODO: We need to be able to specify a background plane with a solid color or image. */
-    uint32_t *bgpointer = (uint32_t *)buffers->background_vertex;
-
-    /* First 3 words of this are a mode1/mode2/texture word, followed by
-     * 3 7-word x/y/z/u/v/base color/offset color chunks specifying the
-     * bottom left, top left and bottom right of the background quad. */
-    for (int i = 0; i < 24; i ++)
-    {
-        bgpointer[i] = 0;
-    }
-}
+#define BACKGROUND_Z_PLANE 0.000001
+#define BACKGROUND_CULL (BACKGROUND_Z_PLANE / 2.0)
 
 // Video parameters from video.c
 extern unsigned int global_video_depth;
 extern unsigned int global_video_width;
 extern unsigned int global_video_height;
+
+void _ta_set_background_color(struct ta_buffers *buffers, uint32_t rgba)
+{
+    if (buffers->background_vertex == 0)
+    {
+        // We aren't initialized!
+        return;
+    }
+
+    uint32_t *bgintpointer = (uint32_t *)buffers->background_vertex;
+    float *bgfltpointer = (float *)buffers->background_vertex;
+
+    /* First 3 words of this are a mode1/mode2/texture word, followed by
+     * 3 7-word x/y/z/u/v/base color/offset color chunks specifying the
+     * first three vertexes of the quad. */
+    bgintpointer[0] =
+        TA_POLYMODE1_Z_GREATER |
+        TA_POLYMODE1_GOURAD_SHADED;
+    bgintpointer[1] =
+        TA_POLYMODE2_SRC_BLEND_ONE |
+        TA_POLYMODE2_DST_BLEND_ZERO |
+        TA_POLYMODE2_FOG_DISABLED |
+        TA_POLYMODE2_DISABLE_TEX_ALPHA |
+        TA_POLYMODE2_MIPMAP_D_1_00 |
+        TA_POLYMODE2_TEXTURE_MODULATE;
+    bgintpointer[2] = 0;
+
+    bgfltpointer[3] = 0.0;
+    bgfltpointer[4] = 0.0;
+    bgfltpointer[5] = BACKGROUND_Z_PLANE;
+    bgintpointer[6] = rgba;
+
+    bgfltpointer[7] = (float)global_video_width;
+    bgfltpointer[8] = 0.0;
+    bgfltpointer[9] = BACKGROUND_Z_PLANE;
+    bgintpointer[10] = rgba;
+
+    bgfltpointer[11] = 0.0;
+    bgfltpointer[12] = (float)global_video_height;
+    bgfltpointer[13] = BACKGROUND_Z_PLANE;
+    bgintpointer[14] = rgba;
+}
+
+static struct ta_buffers ta_working_buffers;
+
+void ta_set_background_color(uint32_t rgba)
+{
+    // This will be packed in the current framebuffer/palette format, so we need to
+    // unpack it first as the TA gourad shading requires RGB0888 color.
+    unsigned int r;
+    unsigned int g;
+    unsigned int b;
+    explodergb(rgba, &r, &g, &b);
+
+    // Now, set the color to the background plane.
+    ta_background_color = RGB0888(r, g, b);
+    _ta_set_background_color(&ta_working_buffers, ta_background_color);
+}
 
 // Actual framebuffer address.
 extern void *buffer_base;
@@ -255,7 +306,6 @@ extern void *buffer_base;
 #define TA_CMDLIST_SIZE (512 * 1024)
 #define TA_BACKGROUND_SIZE (24 * 4)
 
-static struct ta_buffers ta_working_buffers;
 // Alignment required for various buffers.
 #define BUFFER_ALIGNMENT 128
 #define ENSURE_ALIGNMENT(x) (((x) + (BUFFER_ALIGNMENT - 1)) & (~(BUFFER_ALIGNMENT - 1)))
@@ -308,7 +358,7 @@ void _ta_init_buffers()
     }
 
     _ta_create_tile_descriptors(&ta_working_buffers, global_video_width / 32, global_video_height / 32);
-    _ta_clear_background(&ta_working_buffers);
+    _ta_set_background_color(&ta_working_buffers, ta_background_color);
 }
 
 void ta_commit_begin()
@@ -382,7 +432,8 @@ void _ta_begin_render(void *cmd_list_base, void *tiles, void *background, void *
 
     /* Set up background plane for where there aren't triangles/quads to draw. */
     videobase[POWERVR2_BACKGROUND_INSTRUCTIONS] = (
-        (1 << 24) |  // Disable texture for background plane.
+        (1 << 28) |  // Unsure what this does, Naomi BIOS does this.
+        (0 << 24) |  // Some sort of span for the background plane vertexes?
         (bg << 1)    // Background plane instructions pointer.
     );
     videobase[POWERVR2_BACKGROUND_CLIP] = zclipint;
@@ -405,7 +456,7 @@ void ta_render_begin()
         ta_working_buffers.tile_descriptors,
         ta_working_buffers.background_vertex,
         buffer_base,
-        0.001
+        BACKGROUND_CULL
     );
 }
 
@@ -455,6 +506,10 @@ void _ta_init()
 {
     uint32_t old_interrupts = irq_disable();
     volatile unsigned int *videobase = (volatile unsigned int *)POWERVR2_BASE;
+
+    // Make sure we clear out our working code.
+    memset(&ta_working_buffers, 0, sizeof(ta_working_buffers));
+    ta_background_color = RGB0888(0, 0, 0);
 
     // Set up sorting, culling and comparison configuration.
     videobase[POWERVR2_TA_CACHE_SIZES] = (

@@ -37,6 +37,17 @@
     b = (bint << 3) | (bint >> 2); \
     a = ((color) & 0x8000) ? 255 : 0; \
 } while (0)
+#define EXPLODE0888(color, r, g, b) do { \
+    b = (color) & 0xFF; \
+    g = ((color) >> 8) & 0xFF; \
+    r = ((color) >> 16) & 0xFF; \
+} while (0)
+#define EXPLODE8888(color, r, g, b, a) do { \
+    b = (color) & 0xFF; \
+    g = ((color) >> 8) & 0xFF; \
+    r = ((color) >> 16) & 0xFF; \
+    a = ((color) >> 24) & 0xFF; \
+} while (0)
 
 // Shared between TA and video implementation.
 void _ta_init();
