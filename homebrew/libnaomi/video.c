@@ -32,7 +32,11 @@ static unsigned int global_background_set = 0;
 
 // We only use two of these for rendering. The third is so we can
 // give a pointer out to scratch VRAM for other code to use.
-static uint32_t global_buffer_offset[3] = { 0, 0, 0 };
+// The chunk between global_buffer_offset[2] and the next megabyte
+// boundary is "free" to use, but in practice gets used for system
+// textures. So this is mostly for code that doesn't use the TA/PVR
+// to render and unit tests.
+uint32_t global_buffer_offset[3] = { 0, 0, 0 };
 
 // Remember HBLANK/VBLANK set up by BIOS in case we need to return there.
 static uint32_t saved_hvint = 0;

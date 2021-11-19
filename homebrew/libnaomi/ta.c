@@ -330,6 +330,7 @@ void ta_set_background_color(uint32_t rgba)
 
 // Actual framebuffer address.
 extern void *buffer_base;
+extern uint32_t global_buffer_offset[3];
 
 #define MAX_H_TILE (640/32)
 #define MAX_V_TILE (480/32)
@@ -343,13 +344,14 @@ extern void *buffer_base;
 // Alignment required for various buffers.
 #define BUFFER_ALIGNMENT 128
 #define ENSURE_ALIGNMENT(x) (((x) + (BUFFER_ALIGNMENT - 1)) & (~(BUFFER_ALIGNMENT - 1)))
-#define BUFLOC 0xA5400000
 
 void _ta_init_buffers()
 {
     // Where we start with our buffers. Its important that BUFLOC is aligned
-    // to a 1MB boundary (masking with 0xFFFFF should give all 0's).
-    uint32_t curbufloc = BUFLOC;
+    // to a 1MB boundary (masking with 0xFFFFF should give all 0's). So take
+    // our safe memory area after the framebuffers and round to the next MB.
+    uint32_t bufloc = (((global_buffer_offset[2] & 0x00FFFFFF) | 0xA5000000) + 0xFFFFF) & 0xFFF00000;
+    uint32_t curbufloc = bufloc;
 
     // Clear our structure out.
     memset(&ta_working_buffers, 0, sizeof(ta_working_buffers));
@@ -391,9 +393,9 @@ void _ta_init_buffers()
     ta_working_buffers.texture_ram = (void *)((curbufloc & 0x00FFFFFF) | 0xA4000000);
 
     // Clear the above memory so we don't get artifacts.
-    if (hw_memset((void *)BUFLOC, 0, curbufloc - BUFLOC) == 0)
+    if (hw_memset((void *)bufloc, 0, curbufloc - bufloc) == 0)
     {
-        memset((void *)BUFLOC, 0, curbufloc - BUFLOC);
+        memset((void *)bufloc, 0, curbufloc - bufloc);
     }
 
     // Finally, add a command to the command buffer that we will point at for the background polygon.
