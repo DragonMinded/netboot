@@ -16,6 +16,9 @@
 /* What lists we populated and need to wait to finish filling. */
 static unsigned int waiting_lists = 0;
 
+/* What lists we populated ever, during this frame. */
+static unsigned int populated_lists = 0;
+
 /* The background color as set by a user when requesting a different background. */
 static uint32_t ta_background_color = 0;
 
@@ -29,31 +32,50 @@ void ta_commit_list(void *src, int len)
     {
         uint32_t command = ((uint32_t *)src)[0];
 
-        if ((command & TA_CMD_POLYGON) != 0)
+        if ((command & 0xE0000000) == TA_CMD_POLYGON)
         {
-            if ((command & TA_CMD_POLYGON_TYPE_OPAQUE) != 0)
+            if ((command & 0x07000000) == TA_CMD_POLYGON_TYPE_OPAQUE)
             {
+                if ((waiting_lists & (WAITING_LIST_TRANSPARENT | WAITING_LIST_PUNCHTHRU)) != 0)
+                {
+                    _irq_display_invariant("display list failure", "cannot send more than one type of polygon in single list!");
+                }
                 if ((waiting_lists & WAITING_LIST_OPAQUE) == 0)
                 {
                     waiting_lists |= WAITING_LIST_OPAQUE;
+                    populated_lists |= WAITING_LIST_OPAQUE;
                     thread_notify_wait_ta_load_opaque();
                 }
             }
-            if ((command & TA_CMD_POLYGON_TYPE_TRANSPARENT) != 0)
+            else if ((command & 0x07000000) == TA_CMD_POLYGON_TYPE_TRANSPARENT)
             {
+                if ((waiting_lists & (WAITING_LIST_OPAQUE | WAITING_LIST_PUNCHTHRU)) != 0)
+                {
+                    _irq_display_invariant("display list failure", "cannot send more than one type of polygon in single list!");
+                }
                 if ((waiting_lists & WAITING_LIST_TRANSPARENT) == 0)
                 {
                     waiting_lists |= WAITING_LIST_TRANSPARENT;
+                    populated_lists |= WAITING_LIST_TRANSPARENT;
                     thread_notify_wait_ta_load_transparent();
                 }
             }
-            if ((command & TA_CMD_POLYGON_TYPE_PUNCHTHRU) != 0)
+            else if ((command & 0x07000000) == TA_CMD_POLYGON_TYPE_PUNCHTHRU)
             {
+                if ((waiting_lists & (WAITING_LIST_TRANSPARENT | WAITING_LIST_OPAQUE)) != 0)
+                {
+                    _irq_display_invariant("display list failure", "cannot send more than one type of polygon in single list!");
+                }
                 if ((waiting_lists & WAITING_LIST_PUNCHTHRU) == 0)
                 {
                     waiting_lists |= WAITING_LIST_PUNCHTHRU;
+                    populated_lists |= WAITING_LIST_PUNCHTHRU;
                     thread_notify_wait_ta_load_punchthru();
                 }
+            }
+            else
+            {
+                _irq_display_invariant("display list failure", "we do not support this type of polygon!");
             }
         }
     }
@@ -114,7 +136,7 @@ void _ta_create_tile_descriptors(struct ta_buffers *buffers, int tile_width, int
             *vr++ = eob | (y << 8) | (x << 2);
 
             // Opaque polygons.
-            if (buffers->opaque_object_buffer_size)
+            if (buffers->opaque_object_buffer_size > 0 && (populated_lists & WAITING_LIST_OPAQUE) != 0)
             {
                 last_address = opaquebase + ((x + (y * tile_width)) * buffers->opaque_object_buffer_size);
                 *vr++ = last_address;
@@ -128,7 +150,7 @@ void _ta_create_tile_descriptors(struct ta_buffers *buffers, int tile_width, int
             *vr++ = 0x80000000 | last_address;
 
             // Translucent polygons.
-            if (buffers->transparent_object_buffer_size)
+            if (buffers->transparent_object_buffer_size > 0 && (populated_lists & WAITING_LIST_TRANSPARENT) != 0)
             {
                 last_address = transparentbase + ((x + (y * tile_width)) * buffers->transparent_object_buffer_size);
                 *vr++ = last_address;
@@ -142,7 +164,7 @@ void _ta_create_tile_descriptors(struct ta_buffers *buffers, int tile_width, int
             *vr++ = 0x80000000 | last_address;
 
             // Punch-through (or solid/transparent-only) polygons.
-            if (buffers->punchthru_object_buffer_size)
+            if (buffers->punchthru_object_buffer_size > 0 && (populated_lists & WAITING_LIST_PUNCHTHRU) != 0)
             {
                 last_address = punchthrubase + ((x + (y * tile_width)) * buffers->punchthru_object_buffer_size);
                 *vr++ = last_address;
@@ -353,13 +375,6 @@ void _ta_init_buffers()
     ta_working_buffers.opaque_object_buffer_size = TA_OPAQUE_OBJECT_BUFFER_SIZE;
     curbufloc = ENSURE_ALIGNMENT(curbufloc + (TA_OPAQUE_OBJECT_BUFFER_SIZE * MAX_H_TILE * MAX_V_TILE));
 
-    // TODO: For some reason enabling these causes the renderer to lock up completely.
-    // It appears that you *MUST* send a list of each type that you requets here, so it
-    // appears that we need to change the API to explicitly init the TA with a promise
-    // for what lists we will send. We can then also change the ta_commit_begin() call
-    // to take a list type, and if you give it one and then send lists of another, it should
-    // freak out. That makes waiting for fills easier as well.
-#if 0
     ta_working_buffers.transparent_object_buffer = (void *)curbufloc;
     ta_working_buffers.transparent_object_buffer_size = TA_TRANSPARENT_OBJECT_BUFFER_SIZE;
     curbufloc = ENSURE_ALIGNMENT(curbufloc + (TA_TRANSPARENT_OBJECT_BUFFER_SIZE * MAX_H_TILE * MAX_V_TILE));
@@ -367,7 +382,6 @@ void _ta_init_buffers()
     ta_working_buffers.punchthru_object_buffer = (void *)curbufloc;
     ta_working_buffers.punchthru_object_buffer_size = TA_PUNCHTHRU_OBJECT_BUFFER_SIZE;
     curbufloc = ENSURE_ALIGNMENT(curbufloc + (TA_PUNCHTHRU_OBJECT_BUFFER_SIZE * MAX_H_TILE * MAX_V_TILE));
-#endif
 
     // Finally, grab space for the tile descriptors themselves.
     ta_working_buffers.tile_descriptors = (void *)curbufloc;
@@ -381,9 +395,6 @@ void _ta_init_buffers()
     {
         memset((void *)BUFLOC, 0, curbufloc - BUFLOC);
     }
-
-    // Now, populate the tile descriptors themselves, pointing at the object buffers we just allocated.
-    _ta_create_tile_descriptors(&ta_working_buffers, global_video_width / 32, global_video_height / 32);
 
     // Finally, add a command to the command buffer that we will point at for the background polygon.
     _ta_set_background_color(&ta_working_buffers, ta_background_color);
@@ -407,18 +418,18 @@ void ta_commit_end()
     if (_irq_is_disabled(_irq_get_sr()))
     {
         /* Just spinloop waiting for the interrupt to happen. */
-        if (waiting_lists && WAITING_LIST_OPAQUE)
+        if (waiting_lists & WAITING_LIST_OPAQUE)
         {
             while (!(HOLLY_INTERNAL_IRQ_STATUS & HOLLY_INTERNAL_INTERRUPT_TRANSFER_OPAQUE_FINISHED)) { ; }
             HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_TRANSFER_OPAQUE_FINISHED;
         }
 
-        if (waiting_lists && WAITING_LIST_TRANSPARENT)
+        if (waiting_lists & WAITING_LIST_TRANSPARENT)
         {
             while (!(HOLLY_INTERNAL_IRQ_STATUS & HOLLY_INTERNAL_INTERRUPT_TRANSFER_TRANSPARENT_FINISHED)) { ; }
             HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_TRANSFER_TRANSPARENT_FINISHED;
         }
-        if (waiting_lists && WAITING_LIST_PUNCHTHRU)
+        if (waiting_lists & WAITING_LIST_PUNCHTHRU)
         {
             while (!(HOLLY_INTERNAL_IRQ_STATUS & HOLLY_INTERNAL_INTERRUPT_TRANSFER_PUNCHTHRU_FINISHED)) { ; }
             HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_TRANSFER_PUNCHTHRU_FINISHED;
@@ -426,19 +437,22 @@ void ta_commit_end()
     }
     else
     {
-        if (waiting_lists && WAITING_LIST_OPAQUE)
+        if (waiting_lists & WAITING_LIST_OPAQUE)
         {
             thread_wait_ta_load_opaque();
         }
-        if (waiting_lists && WAITING_LIST_TRANSPARENT)
+        if (waiting_lists & WAITING_LIST_TRANSPARENT)
         {
             thread_wait_ta_load_transparent();
         }
-        if (waiting_lists && WAITING_LIST_PUNCHTHRU)
+        if (waiting_lists & WAITING_LIST_PUNCHTHRU)
         {
             thread_wait_ta_load_punchthru();
         }
     }
+
+    /* Reset this here, just incase. */
+    waiting_lists = 0;
 }
 
 union intfloat
@@ -456,6 +470,11 @@ void _ta_begin_render(struct ta_buffers *buffers, void *scrn, float zclip)
     unsigned int tls = ((unsigned int)buffers->tile_descriptors) & 0x00FFFFFF;
     unsigned int scn = ((unsigned int)scrn) & 0x00FFFFFF;
     unsigned int bgl = (unsigned int)buffers->background_list - cmdl;
+
+    /* Actually populate the tile descriptors themselves, pointing at the object buffers we just allocated.
+     * We do this here every frame so we can exclude list types for lists that we definitely have no
+     * polygons for. */
+    _ta_create_tile_descriptors(&ta_working_buffers, global_video_width / 32, global_video_height / 32);
 
     /* Convert the bits from float to int so we can cap off the bottom 4 bits. */
     union intfloat f2i;
@@ -477,6 +496,9 @@ void _ta_begin_render(struct ta_buffers *buffers, void *scrn, float zclip)
 
     /* Launch the render sequence. */
     videobase[POWERVR2_START_RENDER] = 0xffffffff;
+
+    /* Now that we rendered, clear our populated list tracker. */
+    populated_lists = 0;
 }
 
 void ta_render_begin()
@@ -618,6 +640,10 @@ void _ta_init()
 
     // Initialize twiddle table for texture load operations.
     _ta_init_twiddletab();
+
+    // Initialize our list waiting tracking varaibles.
+    waiting_lists = 0;
+    populated_lists = 0;
 
     irq_restore(old_interrupts);
 }
