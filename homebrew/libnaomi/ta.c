@@ -353,7 +353,12 @@ void _ta_init_buffers()
     ta_working_buffers.opaque_object_buffer_size = TA_OPAQUE_OBJECT_BUFFER_SIZE;
     curbufloc = ENSURE_ALIGNMENT(curbufloc + (TA_OPAQUE_OBJECT_BUFFER_SIZE * MAX_H_TILE * MAX_V_TILE));
 
-    // TODO: For some reason enabling these causes the renderer to lock up completely
+    // TODO: For some reason enabling these causes the renderer to lock up completely.
+    // It appears that you *MUST* send a list of each type that you requets here, so it
+    // appears that we need to change the API to explicitly init the TA with a promise
+    // for what lists we will send. We can then also change the ta_commit_begin() call
+    // to take a list type, and if you give it one and then send lists of another, it should
+    // freak out. That makes waiting for fills easier as well.
 #if 0
     ta_working_buffers.transparent_object_buffer = (void *)curbufloc;
     ta_working_buffers.transparent_object_buffer_size = TA_TRANSPARENT_OBJECT_BUFFER_SIZE;
