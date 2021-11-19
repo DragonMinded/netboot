@@ -65,6 +65,9 @@ struct ta_buffers {
     /* Command lists. */
     void *cmd_list;
     int cmd_list_size;
+    /* Background command list. Cleverly stuck where we otherwise needed a buffer */
+    void *background_list;
+    int background_list_size;
     /* Additional object buffers for overflow. */
     void *overflow_buffer;
     int overflow_buffer_size;
@@ -106,9 +109,9 @@ void _ta_create_tile_descriptors(struct ta_buffers *buffers, int tile_width, int
     {
         for (int y = 0; y < tile_height; y++)
         {
-            // Set end of buffer, set autosorted translucent polygons, set tile position
+            // Set end of buffer, set tile position
             int eob = (x == (tile_width - 1) && y == (tile_height - 1)) ? 0x80000000 : 0x00000000;
-            *vr++ = eob | 0x20000000 | (y << 8) | (x << 2);
+            *vr++ = eob | (y << 8) | (x << 2);
 
             // Opaque polygons.
             if (buffers->opaque_object_buffer_size)
@@ -153,7 +156,7 @@ void _ta_create_tile_descriptors(struct ta_buffers *buffers, int tile_width, int
 }
 
 /* Tell the command list compiler where to store the command list, and which tilespace to use */
-void _ta_set_target(struct ta_buffers *buffers, int tile_width, int tile_height)
+uint32_t _ta_set_target(struct ta_buffers *buffers, int tile_width, int tile_height)
 {
     volatile unsigned int *videobase = (volatile unsigned int *)POWERVR2_BASE;
     unsigned int cmdl = ((unsigned int)buffers->cmd_list) & 0x00ffffff;
@@ -232,10 +235,12 @@ void _ta_set_target(struct ta_buffers *buffers, int tile_width, int tile_height)
 
     /* Confirm the above settings. */
     videobase[POWERVR2_TA_CONFIRM] = 0x80000000;
+
+    /* Perform a dummy read that won't get optimized away. */
+    return videobase[POWERVR2_TA_CONFIRM];
 }
 
 #define BACKGROUND_Z_PLANE 0.000001
-#define BACKGROUND_SIZE_BYTES (24 * 4)
 
 // Video parameters from video.c
 extern unsigned int global_video_depth;
@@ -244,13 +249,13 @@ extern unsigned int global_video_height;
 
 void _ta_set_background_color(struct ta_buffers *buffers, uint32_t rgba)
 {
-    if (buffers->cmd_list == 0)
+    if (buffers->background_list == 0)
     {
         // We aren't initialized!
         return;
     }
 
-    uint32_t *bgintpointer = (uint32_t *)(((uint32_t)buffers->cmd_list + buffers->cmd_list_size) - BACKGROUND_SIZE_BYTES);
+    uint32_t *bgintpointer = (uint32_t *)buffers->background_list;
     float *bgfltpointer = (float *)bgintpointer;
 
     /* First 3 words of this are a mode1/mode2/texture word, followed by
@@ -310,9 +315,8 @@ extern void *buffer_base;
 #define TA_TRANSPARENT_OBJECT_BUFFER_SIZE 128
 #define TA_PUNCHTHRU_OBJECT_BUFFER_SIZE 64
 #define TA_CMDLIST_SIZE (512 * 1024)
-#define TA_CMDLIST_PADDING 256
+#define TA_BACKGROUNDLIST_SIZE 256
 #define TA_OVERFLOW_SIZE (256 * 1024)
-#define TA_BACKGROUND_SIZE (24 * 4)
 
 // Alignment required for various buffers.
 #define BUFFER_ALIGNMENT 128
@@ -321,7 +325,8 @@ extern void *buffer_base;
 
 void _ta_init_buffers()
 {
-    // Where we start with our buffers.
+    // Where we start with our buffers. Its important that BUFLOC is aligned
+    // to a 1MB boundary (masking with 0xFFFFF should give all 0's).
     uint32_t curbufloc = BUFLOC;
 
     // Clear our structure out.
@@ -331,7 +336,12 @@ void _ta_init_buffers()
     // extra object buffer limit is not the same as our command buffer limit.
     ta_working_buffers.cmd_list = (void *)curbufloc;
     ta_working_buffers.cmd_list_size = TA_CMDLIST_SIZE;
-    curbufloc = ENSURE_ALIGNMENT(curbufloc + TA_CMDLIST_SIZE + TA_CMDLIST_PADDING);
+    curbufloc = ENSURE_ALIGNMENT(curbufloc + TA_CMDLIST_SIZE);
+
+    // Now, allocate space between the two, both for padding and for the background plane.
+    ta_working_buffers.background_list = (void *)curbufloc;
+    ta_working_buffers.background_list_size = TA_BACKGROUNDLIST_SIZE;
+    curbufloc = ENSURE_ALIGNMENT(curbufloc + TA_BACKGROUNDLIST_SIZE);
 
     // Now, allocate space for extra object buffer overflow.
     ta_working_buffers.overflow_buffer = (void *)curbufloc;
@@ -440,11 +450,7 @@ void _ta_begin_render(struct ta_buffers *buffers, void *scrn, float zclip)
     unsigned int cmdl = ((unsigned int)buffers->cmd_list) & 0x00FFFFFF;
     unsigned int tls = ((unsigned int)buffers->tile_descriptors) & 0x00FFFFFF;
     unsigned int scn = ((unsigned int)scrn) & 0x00FFFFFF;
-
-    /* This is an offset from cmdl where the background instructions are. We always
-     * stick them at the end of the command list, so we can set this to the same
-     * location every time. */
-    unsigned int bgl = buffers->cmd_list_size - BACKGROUND_SIZE_BYTES;
+    unsigned int bgl = (unsigned int)buffers->background_list - cmdl;
 
     /* Convert the bits from float to int so we can cap off the bottom 4 bits. */
     union intfloat f2i;
