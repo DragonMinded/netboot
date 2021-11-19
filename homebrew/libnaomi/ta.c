@@ -101,6 +101,7 @@ void _ta_create_tile_descriptors(struct ta_buffers *buffers, int tile_width, int
     *vr++ = 0x80000000;
 
     /* Set up individual tiles. */
+    uint32_t last_address = 0;
     for (int x = 0; x < tile_width; x++)
     {
         for (int y = 0; y < tile_height; y++)
@@ -112,37 +113,40 @@ void _ta_create_tile_descriptors(struct ta_buffers *buffers, int tile_width, int
             // Opaque polygons.
             if (buffers->opaque_object_buffer_size)
             {
-                *vr++ = opaquebase + ((x + (y * tile_width)) * buffers->opaque_object_buffer_size);
+                last_address = opaquebase + ((x + (y * tile_width)) * buffers->opaque_object_buffer_size);
+                *vr++ = last_address;
             }
             else
             {
-                *vr++ = 0x80000000;
+                *vr++ = 0x80000000 | last_address;
             }
 
             // We don't support opaque modifiers, so nothing here.
-            *vr++ = 0x80000000;
+            *vr++ = 0x80000000 | last_address;
 
             // Translucent polygons.
             if (buffers->transparent_object_buffer_size)
             {
-                *vr++ = transparentbase + ((x + (y * tile_width)) * buffers->transparent_object_buffer_size);
+                last_address = transparentbase + ((x + (y * tile_width)) * buffers->transparent_object_buffer_size);
+                *vr++ = last_address;
             }
             else
             {
-                *vr++ = 0x80000000;
+                *vr++ = 0x80000000 | last_address;
             }
 
             // We don't suppport translucent modifiers, so nothing here.
-            *vr++ = 0x80000000;
+            *vr++ = 0x80000000 | last_address;
 
             // Punch-through (or solid/transparent-only) polygons.
             if (buffers->punchthru_object_buffer_size)
             {
-                *vr++ = punchthrubase + ((x + (y * tile_width)) * buffers->punchthru_object_buffer_size);
+                last_address = punchthrubase + ((x + (y * tile_width)) * buffers->punchthru_object_buffer_size);
+                *vr++ = last_address;
             }
             else
             {
-                *vr++ = 0x80000000;
+                *vr++ = 0x80000000 | last_address;
             }
         }
     }
@@ -302,8 +306,8 @@ extern void *buffer_base;
 
 #define MAX_H_TILE (640/32)
 #define MAX_V_TILE (480/32)
-#define TA_OPAQUE_OBJECT_BUFFER_SIZE 64
-#define TA_TRANSPARENT_OBJECT_BUFFER_SIZE 64
+#define TA_OPAQUE_OBJECT_BUFFER_SIZE 128
+#define TA_TRANSPARENT_OBJECT_BUFFER_SIZE 128
 #define TA_PUNCHTHRU_OBJECT_BUFFER_SIZE 64
 #define TA_CMDLIST_SIZE (512 * 1024)
 #define TA_CMDLIST_PADDING 256
@@ -339,7 +343,7 @@ void _ta_init_buffers()
     ta_working_buffers.opaque_object_buffer_size = TA_OPAQUE_OBJECT_BUFFER_SIZE;
     curbufloc = ENSURE_ALIGNMENT(curbufloc + (TA_OPAQUE_OBJECT_BUFFER_SIZE * MAX_H_TILE * MAX_V_TILE));
 
-    // TODO: For some reason enabling these causes the renderer to go in super slow motion
+    // TODO: For some reason enabling these causes the renderer to lock up completely
 #if 0
     ta_working_buffers.transparent_object_buffer = (void *)curbufloc;
     ta_working_buffers.transparent_object_buffer_size = TA_TRANSPARENT_OBJECT_BUFFER_SIZE;
@@ -530,7 +534,7 @@ void _ta_init()
     // Set up sorting, culling and comparison configuration.
     videobase[POWERVR2_TA_CACHE_SIZES] = (
         (0x200 << 14) |  // Translucent cache size.
-        (0x200 << 4) |   // Punch-through cache size.
+        (0x40 << 4) |    // Punch-through cache size.
         (1 << 3) |       // Enable polygon discard.
         (0 << 0)         // Auto-sort translucent triangles.
     );
