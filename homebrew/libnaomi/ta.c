@@ -402,8 +402,15 @@ void _ta_init_buffers()
 
 void ta_commit_begin()
 {
-    // Set the target of our TA commands based on the current framebuffer position.
-    _ta_set_target(&ta_working_buffers, global_video_width / 32, global_video_height / 32);
+    if (populated_lists == 0)
+    {
+        // Set the target of our TA commands based on the current framebuffer position.
+        // Don't do this if we've already sent it for this frame.
+        _ta_set_target(&ta_working_buffers, global_video_width / 32, global_video_height / 32);
+    }
+
+    // We are not waiting on anything, we will find out what we're about to wait on
+    // as soon as we get a list through ta_commit_list().
     waiting_lists = 0;
 }
 
