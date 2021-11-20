@@ -552,10 +552,11 @@ void ta_render()
 }
 
 static int twiddletab[1024];
+#define TWIDDLE(x, y) (twiddletab[(y)] | (twiddletab[(x)] << 1))
 
 void _ta_init_twiddletab()
 {
-    for(int x=0; x<1024; x++)
+    for(int x = 0; x < 1024; x++)
     {
         twiddletab[x] = (
             (x & 1) |
@@ -718,24 +719,31 @@ int ta_texture_load(void *offset, int uvsize, int bitsize, void *data)
     {
         return -1;
     }
-    if (bitsize != 8)
-    {
-        // Currently only support loading 8bit textures here.
-        return -1;
-    }
     if (offset == 0 || data == 0)
     {
         return -1;
     }
 
-    uint16_t *tex = (uint16_t *)(((uint32_t)offset) | UNCACHED_MIRROR);
-    uint16_t *src = (uint16_t *)data;
-
-    for(int i = 0; i < uvsize; i++)
+    switch (bitsize)
     {
-        for(int j = 0; j < uvsize; j += 2)
+        case 8:
         {
-            tex[twiddletab[i] | (twiddletab[j] >> 1)] = src[(j + (i * uvsize)) >> 1];
+            uint16_t *tex = (uint16_t *)(((uint32_t)offset) | UNCACHED_MIRROR);
+            uint8_t *src = (uint8_t *)data;
+
+            for(int y = 0; y < uvsize; y += 2)
+            {
+                for(int x = 0; x < uvsize; x++)
+                {
+                    tex[TWIDDLE(y >> 1, x)] = src[(x + (y * uvsize))] | (src[x + ((y + 1) * uvsize)] << 8);
+                }
+            }
+            break;
+        }
+        default:
+        {
+            // Currently only support loading 8bit textures here.
+            return -1;
         }
     }
 

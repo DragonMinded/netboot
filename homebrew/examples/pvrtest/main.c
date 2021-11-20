@@ -98,28 +98,28 @@ void draw_face(float *p1, float *p2, float *p3, float *p4, void *tex, int pal)
     myvertex.x = p1[0];
     myvertex.y = p1[1];
     myvertex.z = p1[2];
-    myvertex.u = 1.0;
+    myvertex.u = 0.0;
     myvertex.v = 1.0;
     ta_commit_list(&myvertex, TA_LIST_SHORT);
 
     myvertex.x = p2[0];
     myvertex.y = p2[1];
     myvertex.z = p2[2];
-    myvertex.u = 1.0;
+    myvertex.u = 0.0;
     myvertex.v = 0.0;
     ta_commit_list(&myvertex, TA_LIST_SHORT);
 
     myvertex.x = p3[0];
     myvertex.y = p3[1];
     myvertex.z = p3[2];
-    myvertex.u = 0.0;
+    myvertex.u = 1.0;
     myvertex.v = 1.0;
     ta_commit_list(&myvertex, TA_LIST_SHORT);
 
     myvertex.x = p4[0];
     myvertex.y = p4[1];
     myvertex.z = p4[2];
-    myvertex.u = 0.0;
+    myvertex.u = 1.0;
     myvertex.v = 0.0;
     myvertex.cmd |= TA_CMD_VERTEX_END_OF_STRIP;
     ta_commit_list(&myvertex, TA_LIST_SHORT);
