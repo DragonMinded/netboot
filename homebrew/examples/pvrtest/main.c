@@ -75,6 +75,7 @@ void draw_face(float *p1, float *p2, float *p3, float *p4, void *tex, int pal)
         TA_POLYMODE1_Z_ALWAYS |
         TA_POLYMODE1_CULL_CCW;
     mypoly.mode2 =
+        TA_POLYMODE2_MIPMAP_D_1_00 |
         TA_POLYMODE2_TEXTURE_DECAL |
         TA_POLYMODE2_U_SIZE_256 |
         TA_POLYMODE2_V_SIZE_256 |
