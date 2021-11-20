@@ -48,7 +48,7 @@ void _irq_display_exception(irq_state_t *cur_state, char *failure, int code)
     // Threads should already be disabled, but lets be sure.
     uint32_t old_interrupts = irq_disable();
 
-    video_init_simple();
+    video_init(VIDEO_COLOR_1555);
     console_set_visible(0);
     video_set_background_color(rgb(48, 0, 0));
 
@@ -82,7 +82,7 @@ void _irq_display_invariant(char *msg, char *failure, ...)
     // Threads should already be disabled, but lets be sure.
     uint32_t old_interrupts = irq_disable();
 
-    video_init_simple();
+    video_init(VIDEO_COLOR_1555);
     console_set_visible(0);
     video_set_background_color(rgb(48, 0, 0));
 

@@ -470,6 +470,8 @@ union intfloat
     uint32_t i;
 };
 
+extern void _video_set_ta_registers();
+
 /* Launch a new render pass */
 void _ta_begin_render(struct ta_buffers *buffers, void *scrn, float zclip)
 {
@@ -502,6 +504,9 @@ void _ta_begin_render(struct ta_buffers *buffers, void *scrn, float zclip)
         ((bgl & 0xfffffc) << 1)    // Background plane instructions pointer, we stick it at the beginning of the command buffer.
     );
     videobase[POWERVR2_BACKGROUND_CLIP] = zclipint;
+
+    /* Reset the TA registers that appear to change per-frame. */
+    _video_set_ta_registers();
 
     /* Launch the render sequence. */
     videobase[POWERVR2_START_RENDER] = 0xffffffff;

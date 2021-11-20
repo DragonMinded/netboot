@@ -30,7 +30,7 @@ def main() -> int:
         '--depth',
         metavar='DEPTH',
         type=int,
-        help='The depth of the final sprite, in bytes. Should match the video mode you are initializing.',
+        help='The depth of the final sprite, in bits. Should match the video mode you are initializing.',
     )
     args = parser.parse_args()
 
@@ -44,13 +44,18 @@ def main() -> int:
     pixels = texture.convert('RGBA')
     outdata: List[bytes] = []
 
-    if args.depth == 1:
+    if args.depth == 8:
+        # TODO: This only really makes sense if you want a grayscale image. We should also support
+        # generating palettes as well.
         for r, g, b, _ in pixels.getdata():
             gray = int(0.2989 * r + 0.5870 * g + 0.1140 * b)
             outdata.append(struct.pack("<B", gray))
-    elif args.depth == 2:
+    elif args.depth == 16:
         for r, g, b, a in pixels.getdata():
             outdata.append(struct.pack("<H", ((b >> 3) & (0x1F << 0)) | ((g << 2) & (0x1F << 5)) | ((r << 7) & (0x1F << 10)) | ((a << 8) & 0x8000)))
+    elif args.depth == 32:
+        for r, g, b, a in pixels.getdata():
+            outdata.append(struct.pack("<I", ((b & 0xFF) << 0) | ((g & 0xFF) << 8) | ((r & 0xFF) << 16) | ((a & 0xFF) << 24)))
     else:
         # TODO: Add this when we support other depths.
         raise Exception(f"Unsupported depth {args.depth}!")

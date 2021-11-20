@@ -135,8 +135,8 @@ extern uint8_t *tex6_png_data;
 void main()
 {
     /* Set up PowerVR display and tile accelerator hardware */
-    video_init_simple();
-    video_set_background_color(rgb(48, 48, 48));
+    video_init(VIDEO_COLOR_1555);
+    ta_set_background_color(rgb(48, 48, 48));
 
     /* Create palettes for our grayscale (indexed) textures */
     init_palette();
@@ -243,6 +243,18 @@ void main()
 
         /* Now, display some debugging on top of the TA. */
         video_draw_debug_text(32, 32, rgb(255, 255, 255), "Rendering with TA...\nLiveness counter: %d", count++);
+        video_display_on_vblank();
+    }
+}
+
+void test()
+{
+    video_init(VIDEO_COLOR_1555);
+
+    while ( 1 )
+    {
+        video_fill_screen(rgb(48, 48, 48));
+        video_draw_debug_text(320 - 56, 236, rgb(255, 255, 255), "test mode stub");
         video_display_on_vblank();
     }
 }

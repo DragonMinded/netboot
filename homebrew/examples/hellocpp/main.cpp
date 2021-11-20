@@ -42,7 +42,7 @@ Counter gCounter;
 
 extern "C" void main()
 {
-    video_init_simple();
+    video_init(VIDEO_COLOR_1555);
 
     while ( 1 )
     {
@@ -65,7 +65,7 @@ extern "C" void main()
 
 extern "C" void test()
 {
-    video_init_simple();
+    video_init(VIDEO_COLOR_1555);
 
     while ( 1 )
     {

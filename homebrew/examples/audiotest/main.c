@@ -40,7 +40,7 @@ void main()
     eeprom_read(&settings);
 
     // Initialize some crappy video.
-    video_init_simple();
+    video_init(VIDEO_COLOR_1555);
     video_set_background_color(rgb(48, 48, 48));
 
     // Display status, since loading the binary can take awhile.
@@ -153,7 +153,7 @@ void main()
 
 void test()
 {
-    video_init_simple();
+    video_init(VIDEO_COLOR_1555);
 
     while ( 1 )
     {

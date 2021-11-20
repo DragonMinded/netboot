@@ -20,9 +20,6 @@
 #define min(a,b) (((a) < (b)) ? (a) : (b))
 #endif
 
-// TODO: Need to support more than 640x480 framebuffer mode.
-// TODO: Need to support more than RGB1555 color.
-
 // Static members that don't need to be accessed anywhere else.
 static uint32_t global_background_color = 0;
 static uint32_t global_background_fill_start = 0;
@@ -194,15 +191,52 @@ void _vblank_free()
     irq_restore(old_interrupts);
 }
 
-// TODO: This function assumes 640x480 VGA, we should support more varied options.
-void video_init_simple()
+void _video_set_ta_registers()
 {
+    volatile unsigned int *videobase = (volatile unsigned int *)POWERVR2_BASE;
+
+    // Set up framebuffer config to enable display, set pixel mode, no line double.
+    if (global_video_depth == 2)
+    {
+        // Set up framebuffer render config to dither enabled, RGB0555, no alpha threshold.
+        videobase[POWERVR2_FB_RENDER_CFG] = (
+            0x1 << 3 |               // Dither enabled.
+            RENDER_CFG_RGB0555 << 0  // RGB555 mode, no alpha threshold.
+        );
+    }
+    else if (global_video_depth == 4)
+    {
+        // Set up framebuffer render config to dither disabled, RGB0888, no alpha threshold.
+        videobase[POWERVR2_FB_RENDER_CFG] = (
+            0x0 << 3 |               // Dither disabled.
+            RENDER_CFG_RGB0888 << 0  // RGB0888 mode, no alpha threshold.
+        );
+    }
+
+    // Set up render modulo, (bpp * width) / 8.
+    videobase[POWERVR2_FB_RENDER_MODULO] = (global_video_depth * global_video_width) / 8;
+
+    // Set up horizontal clipping to clip within 0-640.
+    videobase[POWERVR2_FB_CLIP_X] = (global_video_width << 16) | (0 << 0);
+
+    // Set up vertical clipping to within 0-480.
+    videobase[POWERVR2_FB_CLIP_Y] = (global_video_height << 16) | (0 << 0);
+}
+
+void video_init(int colordepth)
+{
+    if (colordepth != VIDEO_COLOR_1555 && colordepth != VIDEO_COLOR_8888)
+    {
+        // Really no option but to exit, we don't even have video to display an error.
+        return;
+    }
+
     uint32_t old_interrupts = irq_disable();
     volatile unsigned int *videobase = (volatile unsigned int *)POWERVR2_BASE;
 
     global_video_width = 640;
     global_video_height = 480;
-    global_video_depth = 2;
+    global_video_depth = colordepth;
     global_background_color = 0;
     global_background_set = 0;
     global_buffer_offset[0] = 0;
@@ -249,18 +283,26 @@ void video_init_simple()
     // Don't display border across whole screen.
     videobase[POWERVR2_VIDEO_CFG] = 0x00160000;
 
-    // Set up frameebuffer config to enable display, set pixel mode, no line double.
-    videobase[POWERVR2_FB_DISPLAY_CFG] = (
-        0x1 << 23 |                 // Double pixel clock for VGA.
-        DISPLAY_CFG_RGB1555 << 2 |  // RGB1555 mode.
-        0x1 << 0                    // Enable display.
-    );
+    // Set up display configuration.
+    if (global_video_depth == 2)
+    {
+        videobase[POWERVR2_FB_DISPLAY_CFG] = (
+            0x1 << 23 |                 // Double pixel clock for VGA.
+            DISPLAY_CFG_RGB1555 << 2 |  // RGB1555 mode.
+            0x1 << 0                    // Enable display.
+        );
+    }
+    else if (global_video_depth == 4)
+    {
+        videobase[POWERVR2_FB_DISPLAY_CFG] = (
+            0x1 << 23 |                 // Double pixel clock for VGA.
+            DISPLAY_CFG_RGB0888 << 2 |  // RGB0888 mode.
+            0x1 << 0                    // Enable display.
+        );
+    }
 
-    // Set up framebuffer render config to dither enabled, RGB0555, no alpha threshold.
-    videobase[POWERVR2_FB_RENDER_CFG] = (
-        0x1 << 3 |               // Dither enabled.
-        RENDER_CFG_RGB0555 << 0  // RGB555 mode, no alpha threshold.
-    );
+    // Set up registers that appear to be reset with TA resets.
+    _video_set_ta_registers();
 
     // Set up even/odd field video base address, shifted by bpp.
     videobase[POWERVR2_FB_DISPLAY_ADDR_1] = global_buffer_offset[current_buffer_loc];
@@ -269,9 +311,6 @@ void video_init_simple()
     // Swap buffer pointer in SW.
     buffer_loc = next_buffer_loc;
     buffer_base = (void *)((VRAM_BASE + global_buffer_offset[current_buffer_loc]) | 0xA0000000);
-
-    // Set up render modulo, (bpp * width) / 8.
-    videobase[POWERVR2_FB_RENDER_MODULO] = (global_video_depth * global_video_width) / 8;
 
     // Set up vertical position.
     videobase[POWERVR2_VPOS] = (
@@ -316,12 +355,6 @@ void video_init_simple()
         0 << 2 |  // Negative H-sync
         0 << 1    // Negative V-sync
     );
-
-    // Set up horizontal clipping to clip within 0-640.
-    videobase[POWERVR2_FB_CLIP_X] = (global_video_width << 16) | (0 << 0);
-
-    // Set up vertical clipping to within 0-480.
-    videobase[POWERVR2_FB_CLIP_Y] = (global_video_height << 16) | (0 << 0);
 
     // Wait for vblank like games do.
     uint32_t vblank_in_position = videobase[POWERVR2_VBLANK_INTERRUPT] & 0x1FF;
@@ -467,7 +500,6 @@ void video_fill_screen(uint32_t color)
 void video_set_background_color(uint32_t color)
 {
     video_fill_screen(color);
-    ta_set_background_color(color);
     global_background_set = 1;
 
     if(global_video_depth == 2)
@@ -560,7 +592,26 @@ void video_fill_box(int x0, int y0, int x1, int y1, uint32_t color)
     }
     else if(global_video_depth == 4)
     {
-        // TODO: 32-bit video modes.
+        if(global_video_vertical)
+        {
+            for(int col = low_x; col <= high_x; col++)
+            {
+                for(int row = high_y; row >= low_y; row--)
+                {
+                    SET_PIXEL_V_4(buffer_base, col, row, color);
+                }
+            }
+        }
+        else
+        {
+            for(int row = low_y; row <= high_y; row++)
+            {
+                for(int col = low_x; col <= high_x; col++)
+                {
+                    SET_PIXEL_H_4(buffer_base, col, row, color);
+                }
+            }
+        }
     }
 }
 
@@ -942,7 +993,90 @@ void video_draw_sprite( int x, int y, int width, int height, void *data )
     }
     else if(global_video_depth == 4)
     {
-        // TODO: 32-bit video modes.
+        uint32_t *pixels = (uint32_t *)data;
+
+        if(global_video_vertical)
+        {
+            for(int col = low_x; col < high_x; col++)
+            {
+                for(int row = (high_y - 1); row >= low_y; row--)
+                {
+                    uint32_t pixel = pixels[col + (row * width)];
+                    unsigned int alpha = (pixel >> 24) & 0xFF;
+
+                    if (alpha)
+                    {
+                        if (alpha >= 255)
+                        {
+                            SET_PIXEL_V_4(buffer_base, x + col, y + row, pixel);
+                        }
+                        else
+                        {
+                            // First grab the actual RGB values of the source alpha.
+                            unsigned int sr;
+                            unsigned int sg;
+                            unsigned int sb;
+                            EXPLODE0888(pixel, sr, sg, sb);
+
+                            // Now grab the actual RGB values (don't care about alpha) for the dest.
+                            unsigned int dr;
+                            unsigned int dg;
+                            unsigned int db;
+                            unsigned int negalpha = (~alpha) & 0xFF;
+                            EXPLODE0888(GET_PIXEL_V_4(buffer_base, x + col, y + row), dr, dg, db);
+
+                            // Technically it should be divided by 255, but this should
+                            // be much much faster for an 0.4% accuracy loss.
+                            dr = ((sr * alpha) + (dr * negalpha)) >> 8;
+                            dg = ((sg * alpha) + (dg * negalpha)) >> 8;
+                            db = ((sb * alpha) + (db * negalpha)) >> 8;
+                            SET_PIXEL_V_4(buffer_base, x + col, y + row, RGB0888(dr, dg, db));
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            for(int row = low_y; row < high_y; row++)
+            {
+                for(int col = low_x; col < high_x; col++)
+                {
+                    uint32_t pixel = pixels[col + (row * width)];
+                    unsigned int alpha = (pixel >> 24) & 0xFF;
+
+                    if (alpha)
+                    {
+                        if (alpha >= 255)
+                        {
+                            SET_PIXEL_H_4(buffer_base, x + col, y + row, pixel);
+                        }
+                        else
+                        {
+                            // First grab the actual RGB values of the source alpha.
+                            unsigned int sr;
+                            unsigned int sg;
+                            unsigned int sb;
+                            EXPLODE0888(pixel, sr, sg, sb);
+
+                            // Now grab the actual RGB values (don't care about alpha) for the dest.
+                            unsigned int dr;
+                            unsigned int dg;
+                            unsigned int db;
+                            unsigned int negalpha = (~alpha) & 0xFF;
+                            EXPLODE0888(GET_PIXEL_H_4(buffer_base, x + col, y + row), dr, dg, db);
+
+                            // Technically it should be divided by 255, but this should
+                            // be much much faster for an 0.4% accuracy loss.
+                            dr = ((sr * alpha) + (dr * negalpha)) >> 8;
+                            dg = ((sg * alpha) + (dg * negalpha)) >> 8;
+                            db = ((sb * alpha) + (db * negalpha)) >> 8;
+                            SET_PIXEL_H_4(buffer_base, x + col, y + row, RGB0888(dr, dg, db));
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

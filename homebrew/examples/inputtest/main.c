@@ -14,7 +14,7 @@ void main()
     eeprom_read(&settings);
 
     // Set up a crude console
-    video_init_simple();
+    video_init(VIDEO_COLOR_1555);
     video_set_background_color(rgb(48, 48, 48));
     console_init(16);
 
@@ -194,7 +194,7 @@ void main()
 
 void test()
 {
-    video_init_simple();
+    video_init(VIDEO_COLOR_1555);
 
     while ( 1 )
     {

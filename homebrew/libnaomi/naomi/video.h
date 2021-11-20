@@ -12,9 +12,14 @@ extern "C" {
 // once it is indeterminate what will display on the screen. It is recommended
 // not to interact with the video system across multiple threads.
 
-// Initialize a simple video setup, currently only supporting 640x480
-// RGB 1555 color.
-void video_init_simple();
+// Defines for the color argument of the below function.
+#define VIDEO_COLOR_1555 2
+#define VIDEO_COLOR_8888 4
+
+// Initialize the video hardware for software and hardware drawn sprites and
+// graphics. Currently only supports 640x480@60fps VGA, no 15khz support.
+// Pass one of the above video color defines to specify color depth.
+void video_init(int colordepth);
 
 // Free existing video system so that it can be initialized with another
 // call.

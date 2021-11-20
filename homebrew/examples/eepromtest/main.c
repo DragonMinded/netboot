@@ -9,7 +9,7 @@
 void main()
 {
     // Set up a crude console
-    video_init_simple();
+    video_init(VIDEO_COLOR_1555);
 
     video_fill_screen(rgb(48, 48, 48));
     video_draw_debug_text(0, 0, rgb(255, 255, 255), "Reading EEPROM...");
@@ -102,7 +102,7 @@ void main()
 
 void test()
 {
-    video_init_simple();
+    video_init(VIDEO_COLOR_1555);
 
     while ( 1 )
     {

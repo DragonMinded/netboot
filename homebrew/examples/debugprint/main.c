@@ -8,7 +8,7 @@
 void main()
 {
     // We just want a simple framebuffer display.
-    video_init_simple();
+    video_init(VIDEO_COLOR_1555);
     video_set_background_color(rgb(48, 48, 48));
 
     // Initialize message library, ask for stdio hooks.
@@ -41,7 +41,7 @@ void main()
 
 void test()
 {
-    video_init_simple();
+    video_init(VIDEO_COLOR_1555);
 
     while ( 1 )
     {

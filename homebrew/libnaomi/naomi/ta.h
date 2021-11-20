@@ -234,10 +234,7 @@ void ta_commit_list(void *list, int size);
 void ta_commit_end();
 
 // Set the background color for TA renders, specifically for areas where there is not any
-// polygon to draw. Note that you can also accomplish this with video_set_background_color()
-// but that function call is slower as it also instructs the raw framebuffer code to manaully
-// clear the screen as well. So if you are using the TA to draw, its recommended to only use
-// this function.
+// polygon to draw.
 void ta_set_background_color(uint32_t color);
 
 // Defines for the size of a ta_commit_list() call.

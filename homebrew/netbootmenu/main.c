@@ -34,7 +34,7 @@ void main()
     message_stdio_redirect_init();
 
     // Init the screen for a simple 640x480 framebuffer.
-    video_init_simple();
+    video_init(VIDEO_COLOR_1555);
     video_set_background_color(rgb(0, 0, 0));
 
     // Init audio system for displaying sound effects.
@@ -114,7 +114,7 @@ void main()
 void test()
 {
     // Initialize a simple console
-    video_init_simple();
+    video_init(VIDEO_COLOR_1555);
     video_set_background_color(rgb(0, 0, 0));
 
     while ( 1 )
