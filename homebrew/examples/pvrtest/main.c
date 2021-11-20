@@ -151,12 +151,12 @@ void main()
     tex[3] = (void*)(((char *)tex[2])+256*256);
     tex[4] = (void*)(((char *)tex[3])+256*256);
     tex[5] = (void*)(((char *)tex[4])+256*256);
-    ta_texture_load(tex[0], 256, tex1_png_data);
-    ta_texture_load(tex[1], 256, tex2_png_data);
-    ta_texture_load(tex[2], 256, tex3_png_data);
-    ta_texture_load(tex[3], 256, tex4_png_data);
-    ta_texture_load(tex[4], 256, tex5_png_data);
-    ta_texture_load(tex[5], 256, tex6_png_data);
+    ta_texture_load(tex[0], 256, 8, tex1_png_data);
+    ta_texture_load(tex[1], 256, 8, tex2_png_data);
+    ta_texture_load(tex[2], 256, 8, tex3_png_data);
+    ta_texture_load(tex[3], 256, 8, tex4_png_data);
+    ta_texture_load(tex[4], 256, 8, tex5_png_data);
+    ta_texture_load(tex[5], 256, 8, tex6_png_data);
 
     /* x/y/z rotation amount in degrees */
     int i = 45;

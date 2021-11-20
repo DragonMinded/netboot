@@ -83,7 +83,8 @@ void ta_commit_list(void *src, int len)
     hw_memcpy((void *)0xB0000000, src, len);
 }
 
-struct ta_buffers {
+struct ta_buffers
+{
     /* Command lists. */
     void *cmd_list;
     int cmd_list_size;
@@ -342,15 +343,17 @@ extern uint32_t global_buffer_offset[3];
 #define TA_OVERFLOW_SIZE (256 * 1024)
 
 // Alignment required for various buffers.
+#define SAFE_BUFFER_BEGIN 0xA5400000
 #define BUFFER_ALIGNMENT 128
 #define ENSURE_ALIGNMENT(x) (((x) + (BUFFER_ALIGNMENT - 1)) & (~(BUFFER_ALIGNMENT - 1)))
 
 void _ta_init_buffers()
 {
     // Where we start with our buffers. Its important that BUFLOC is aligned
-    // to a 1MB boundary (masking with 0xFFFFF should give all 0's). So take
-    // our safe memory area after the framebuffers and round to the next MB.
-    uint32_t bufloc = (((global_buffer_offset[2] & 0x00FFFFFF) | 0xA5000000) + 0xFFFFF) & 0xFFF00000;
+    // to a 1MB boundary (masking with 0xFFFFF should give all 0's). It should
+    // be safe to calculate where to put this based on the framebuffer locations,
+    // but for some reason this results in stomped on texture RAM.
+    uint32_t bufloc = SAFE_BUFFER_BEGIN;
     uint32_t curbufloc = bufloc;
 
     // Clear our structure out.
@@ -709,10 +712,15 @@ void *ta_texture_base()
     return ta_working_buffers.texture_ram;
 }
 
-int ta_texture_load(void *offset, int size, void *data)
+int ta_texture_load(void *offset, int uvsize, int bitsize, void *data)
 {
-    if (size != 8 && size != 16 && size != 32 && size != 64 && size != 128 && size != 256 && size != 512 && size != 1024)
+    if (uvsize != 8 && uvsize != 16 && uvsize != 32 && uvsize != 64 && uvsize != 128 && uvsize != 256 && uvsize != 512 && uvsize != 1024)
     {
+        return -1;
+    }
+    if (bitsize != 8)
+    {
+        // Currently only support loading 8bit textures here.
         return -1;
     }
     if (offset == 0 || data == 0)
@@ -723,11 +731,11 @@ int ta_texture_load(void *offset, int size, void *data)
     uint16_t *tex = (uint16_t *)(((uint32_t)offset) | UNCACHED_MIRROR);
     uint16_t *src = (uint16_t *)data;
 
-    for(int i = 0; i < 256; i++)
+    for(int i = 0; i < uvsize; i++)
     {
-        for(int j = 0; j < 256; j += 2)
+        for(int j = 0; j < uvsize; j += 2)
         {
-            tex[twiddletab[i] | (twiddletab[j] >> 1)] = src[(j + (i * 256)) >> 1];
+            tex[twiddletab[i] | (twiddletab[j] >> 1)] = src[(j + (i * uvsize)) >> 1];
         }
     }
 

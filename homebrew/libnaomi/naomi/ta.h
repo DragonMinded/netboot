@@ -254,7 +254,7 @@ void *ta_texture_base();
 // RAM in twiddled format required by several video modes. Note that the texture size is
 // the size in pixels of one side. The only allowed sizes are 8, 16, 32, 64, 128, 256, 512
 // and 1024.
-int ta_texture_load(void *offset, int size, void *data);
+int ta_texture_load(void *offset, int uvsize, int bitsize, void *data);
 
 #ifdef __cplusplus
 }
