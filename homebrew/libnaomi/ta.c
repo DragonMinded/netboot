@@ -338,12 +338,11 @@ extern uint32_t global_buffer_offset[3];
 #define TA_OPAQUE_OBJECT_BUFFER_SIZE 128
 #define TA_TRANSPARENT_OBJECT_BUFFER_SIZE 128
 #define TA_PUNCHTHRU_OBJECT_BUFFER_SIZE 64
-#define TA_CMDLIST_SIZE (512 * 1024)
+#define TA_CMDLIST_SIZE (1 * 1024 * 1024)
 #define TA_BACKGROUNDLIST_SIZE 256
-#define TA_OVERFLOW_SIZE (256 * 1024)
+#define TA_OVERFLOW_SIZE (1 * 1024 * 1024)
 
 // Alignment required for various buffers.
-#define SAFE_BUFFER_BEGIN 0xA5400000
 #define BUFFER_ALIGNMENT 128
 #define ENSURE_ALIGNMENT(x) (((x) + (BUFFER_ALIGNMENT - 1)) & (~(BUFFER_ALIGNMENT - 1)))
 
@@ -353,7 +352,7 @@ void _ta_init_buffers()
     // to a 1MB boundary (masking with 0xFFFFF should give all 0's). It should
     // be safe to calculate where to put this based on the framebuffer locations,
     // but for some reason this results in stomped on texture RAM.
-    uint32_t bufloc = SAFE_BUFFER_BEGIN;
+    uint32_t bufloc = (((global_buffer_offset[2] & 0x00FFFFFF) | 0xA5000000) + 0xFFFFF) & 0xFFF00000;
     uint32_t curbufloc = bufloc;
 
     // Clear our structure out.
@@ -499,7 +498,7 @@ void _ta_begin_render(struct ta_buffers *buffers, void *scrn, float zclip)
     videobase[POWERVR2_TILES_ADDR] = tls;
     videobase[POWERVR2_CMDLIST_ADDR] = cmdl;
     videobase[POWERVR2_TA_FRAMEBUFFER_ADDR_1] = scn;
-    videobase[POWERVR2_TA_FRAMEBUFFER_ADDR_2] = ((uint32_t)scn) + global_video_width * global_video_depth;
+    videobase[POWERVR2_TA_FRAMEBUFFER_ADDR_2] = scn + global_video_width * global_video_depth;
 
     /* Set up background plane for where there aren't triangles/quads to draw. */
     videobase[POWERVR2_BACKGROUND_INSTRUCTIONS] = (
