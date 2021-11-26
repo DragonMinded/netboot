@@ -191,6 +191,7 @@ int hw_memset(void *addr, uint32_t value, unsigned int amount)
         // order the hardware copies things.
         uint32_t *queue = (uint32_t *)(STORE_QUEUE_BASE | (((uint32_t)addr) & 0x03FFFFE0));
         uint32_t actual_copy_addr = (uint32_t)addr;
+        uint32_t stop_copy_addr = actual_copy_addr + (amount & 0xFFFFFFE0);
         uint32_t stored_addr_bits = (actual_copy_addr >> 24) & 0x1C;
 
         // Set the top address bits (28:26) into the store queue address control registers.
@@ -199,13 +200,26 @@ int hw_memset(void *addr, uint32_t value, unsigned int amount)
 
         // Now, set up both store queues to contain the same value that we want to memset.
         // This is 8 32-bit values per store queue.
-        for (int i = 0; i < 16; i++) {
-            queue[i] = value;
-        }
+        queue[0] = value;
+        queue[1] = value;
+        queue[2] = value;
+        queue[3] = value;
+        queue[4] = value;
+        queue[5] = value;
+        queue[6] = value;
+        queue[7] = value;
+        queue[8] = value;
+        queue[9] = value;
+        queue[10] = value;
+        queue[11] = value;
+        queue[12] = value;
+        queue[13] = value;
+        queue[14] = value;
+        queue[15] = value;
 
         // Now, trigger the hardware to copy the values from the queue to the address we
         // care about, triggering one 32-byte prefetch at a time.
-        for (int cycles = amount >> 5; cycles > 0; cycles--)
+        while (actual_copy_addr != stop_copy_addr)
         {
             // Make sure we don't wrap around our top address bits.
             if (((actual_copy_addr >> 24) & 0x1C) != stored_addr_bits)
@@ -217,9 +231,22 @@ int hw_memset(void *addr, uint32_t value, unsigned int amount)
 
                 // Now, set up both store queues to contain the same value that we want to memset.
                 // This is 8 32-bit values per store queue.
-                for (int i = 0; i < 16; i++) {
-                    queue[i] = value;
-                }
+                queue[0] = value;
+                queue[1] = value;
+                queue[2] = value;
+                queue[3] = value;
+                queue[4] = value;
+                queue[5] = value;
+                queue[6] = value;
+                queue[7] = value;
+                queue[8] = value;
+                queue[9] = value;
+                queue[10] = value;
+                queue[11] = value;
+                queue[12] = value;
+                queue[13] = value;
+                queue[14] = value;
+                queue[15] = value;
             }
 
             // Perform the actual memset.
@@ -274,6 +301,7 @@ int hw_memcpy(void *dest, void *src, unsigned int amount)
         uint32_t *srcptr = (uint32_t *)src;
         uint32_t *queue = (uint32_t *)(STORE_QUEUE_BASE | (((uint32_t)dest) & 0x03FFFFE0));
         uint32_t actual_copy_dest = (uint32_t)dest;
+        uint32_t stop_copy_dest = actual_copy_dest + (amount & 0xFFFFFFE0);
         uint32_t stored_dest_bits = (actual_copy_dest >> 24) & 0x1C;
 
         // Set the top address bits (28:26) into the store queue address control registers.
@@ -282,7 +310,7 @@ int hw_memcpy(void *dest, void *src, unsigned int amount)
 
         // Now, trigger the hardware to copy the values from the queue to the address we
         // care about, triggering one 32-byte prefetch at a time.
-        for (int cycles = amount >> 5; cycles > 0; cycles--)
+        while (actual_copy_dest != stop_copy_dest)
         {
             // Make sure we don't wrap around if we were near a memory border.
             if (((actual_copy_dest >> 24) & 0x1C) != stored_dest_bits)
