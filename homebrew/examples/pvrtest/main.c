@@ -223,7 +223,7 @@ void main()
         /* Apply the transformation to all the coordinates, and normalize the
            resulting homogenous coordinates into normal 3D coordinates again. */
         float trans_coords[8][3];
-        matrix_transform_coords(coords, trans_coords, 8);
+        matrix_perspective_transform_coords(coords, trans_coords, 8);
 
         /* Begin sending commands to the TA to draw stuff */
         ta_commit_begin();

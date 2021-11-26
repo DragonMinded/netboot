@@ -2,6 +2,11 @@
 #include "naomi/matrix.h"
 #include <math.h>
 
+#define MAX_MATRIXES 16
+
+static int matrixpos = 0;
+static float sysmatrix[MAX_MATRIXES][4][4];
+
 void matrix_init_identity()
 {
     uint32_t old_irq = irq_disable();
@@ -90,7 +95,110 @@ void matrix_apply(float (*matrix)[4][4])
     irq_restore(old_irq);
 }
 
-void matrix_transform_coords(float (*src)[3], float (*dest)[3], int n)
+void matrix_set(float (*matrix)[4][4])
+{
+    uint32_t old_irq = irq_disable();
+
+    // Set a 4x4 matrix into the XMTRX register.
+    register float (*matrix_param)[4][4] asm("r4") = matrix;
+    asm(" \
+        fmov.s @r4+,fr0\n \
+        fmov.s @r4+,fr1\n \
+        fmov.s @r4+,fr2\n \
+        fmov.s @r4+,fr3\n \
+        fmov.s @r4+,fr4\n \
+        fmov.s @r4+,fr5\n \
+        fmov.s @r4+,fr6\n \
+        fmov.s @r4+,fr7\n \
+        fmov.s @r4+,fr8\n \
+        fmov.s @r4+,fr9\n \
+        fmov.s @r4+,fr10\n \
+        fmov.s @r4+,fr11\n \
+        fmov.s @r4+,fr12\n \
+        fmov.s @r4+,fr13\n \
+        fmov.s @r4+,fr14\n \
+        fmov.s @r4+,fr15\n \
+        fschg\n \
+        fmov dr0,xd0\n \
+        fmov dr2,xd2\n \
+        fmov dr4,xd4\n \
+        fmov dr6,xd6\n \
+        fmov dr8,xd8\n \
+        fmov dr10,xd10\n \
+        fmov dr12,xd12\n \
+        fmov dr14,xd14\n \
+        fschg\n \
+        " :
+        /* No ouputs */ :
+        "r" (matrix_param) :
+        "fr0", "fr1", "fr2", "fr3", "fr4", "fr5", "fr6", "fr7", "fr8", "fr9", "fr10", "fr11", "fr12", "fr13", "fr14", "fr15"
+    );
+
+    irq_restore(old_irq);
+}
+
+void matrix_get(float (*matrix)[4][4])
+{
+    uint32_t old_irq = irq_disable();
+
+    // Set a 4x4 matrix into the XMTRX register.
+    register float (*matrix_param)[4][4] asm("r4") = matrix;
+    asm(" \
+        fschg\n \
+        fmov xd0,dr0\n \
+        fmov xd2,dr2\n \
+        fmov xd4,dr4\n \
+        fmov xd6,dr6\n \
+        fmov xd8,dr8\n \
+        fmov xd10,dr10\n \
+        fmov xd12,dr12\n \
+        fmov xd14,dr14\n \
+        fschg\n \
+        add #64,r4\n \
+        fmov.s fr15,@-r4\n \
+        fmov.s fr14,@-r4\n \
+        fmov.s fr13,@-r4\n \
+        fmov.s fr12,@-r4\n \
+        fmov.s fr11,@-r4\n \
+        fmov.s fr10,@-r4\n \
+        fmov.s fr9,@-r4\n \
+        fmov.s fr8,@-r4\n \
+        fmov.s fr7,@-r4\n \
+        fmov.s fr6,@-r4\n \
+        fmov.s fr5,@-r4\n \
+        fmov.s fr4,@-r4\n \
+        fmov.s fr3,@-r4\n \
+        fmov.s fr2,@-r4\n \
+        fmov.s fr1,@-r4\n \
+        fmov.s fr0,@-r4\n \
+        " :
+        /* No ouputs */ :
+        "r" (matrix_param) :
+        "fr0", "fr1", "fr2", "fr3", "fr4", "fr5", "fr6", "fr7", "fr8", "fr9", "fr10", "fr11", "fr12", "fr13", "fr14", "fr15"
+    );
+
+    irq_restore(old_irq);
+}
+
+void matrix_push()
+{
+    if (matrixpos < MAX_MATRIXES)
+    {
+        matrix_get(&sysmatrix[matrixpos]);
+        matrixpos++;
+    }
+}
+
+void matrix_pop()
+{
+    if (matrixpos > 0)
+    {
+        matrixpos--;
+        matrix_set(&sysmatrix[matrixpos]);
+    }
+}
+
+void matrix_affine_transform_coords(float (*src)[3], float (*dest)[3], int n)
 {
     // Let's do some bounds checking!
     if (n <= 0) { return; }
@@ -104,7 +212,45 @@ void matrix_transform_coords(float (*src)[3], float (*dest)[3], int n)
     register float (*dst_param)[3] asm("r5") = dest;
     register int n_param asm("r6") = n;
     asm(" \
-    .loop:\n \
+    .affineloop:\n \
+        fmov.s @r4+,fr0\n \
+        fmov.s @r4+,fr1\n \
+        fmov.s @r4+,fr2\n \
+        fldi1 fr3\n \
+        ftrv xmtrx,fv0\n \
+        dt r6\n \
+        fmov.s fr0,@r5\n \
+        add #4,r5\n \
+        fmov.s fr1,@r5\n \
+        add #4,r5\n \
+        fmov.s fr2,@r5\n \
+        add #4,r5\n \
+        bf/s .affineloop\n \
+        nop\n \
+        " :
+        /* No outputs */ :
+        "r" (src_param), "r" (dst_param), "r" (n_param) :
+        "fr0", "fr1", "fr2", "fr3"
+    );
+
+    irq_restore(old_irq);
+}
+
+void matrix_perspective_transform_coords(float (*src)[3], float (*dest)[3], int n)
+{
+    // Let's do some bounds checking!
+    if (n <= 0) { return; }
+
+    uint32_t old_irq = irq_disable();
+
+    // Given a pre-set XMTRX (use matrix_clear() and matrix_apply() to get here),
+    // multiply it by a set of points to transform them from world space to screen space.
+    // These are extended to homogenous coordinates by assuming a "w" value of 1.0.
+    register float (*src_param)[3] asm("r4") = src;
+    register float (*dst_param)[3] asm("r5") = dest;
+    register int n_param asm("r6") = n;
+    asm(" \
+    .perspectiveloop:\n \
         fmov.s @r4+,fr0\n \
         fmov.s @r4+,fr1\n \
         fmov.s @r4+,fr2\n \
@@ -120,12 +266,12 @@ void matrix_transform_coords(float (*src)[3], float (*dest)[3], int n)
         fdiv fr3,fr2\n \
         fmov.s fr2,@r5\n \
         add #4,r5\n \
-        bf/s .loop\n \
+        bf/s .perspectiveloop\n \
         nop\n \
         " :
         /* No outputs */ :
         "r" (src_param), "r" (dst_param), "r" (n_param) :
-        "fr0", "fr1", "fr2", "fr3" 
+        "fr0", "fr1", "fr2", "fr3"
     );
 
     irq_restore(old_irq);
