@@ -222,19 +222,18 @@ void main()
 
         /* Apply the transformation to all the coordinates, and normalize the
            resulting homogenous coordinates into normal 3D coordinates again. */
-        float trans_coords[8][3];
-        matrix_perspective_transform_coords(coords, trans_coords, 8);
+        matrix_perspective_transform_coords(coords, coords, 8);
 
         /* Begin sending commands to the TA to draw stuff */
         ta_commit_begin();
 
         /* Draw the 6 faces of the cube */
-        draw_face(trans_coords[0], trans_coords[1], trans_coords[2], trans_coords[3], tex[0], 0);
-        draw_face(trans_coords[1], trans_coords[5], trans_coords[3], trans_coords[7], tex[1], 1);
-        draw_face(trans_coords[4], trans_coords[5], trans_coords[0], trans_coords[1], tex[2], 2);
-        draw_face(trans_coords[5], trans_coords[4], trans_coords[7], trans_coords[6], tex[3], 3);
-        draw_face(trans_coords[4], trans_coords[0], trans_coords[6], trans_coords[2], tex[4], 1);
-        draw_face(trans_coords[2], trans_coords[3], trans_coords[6], trans_coords[7], tex[5], 2);
+        draw_face(coords[0], coords[1], coords[2], coords[3], tex[0], 0);
+        draw_face(coords[1], coords[5], coords[3], coords[7], tex[1], 1);
+        draw_face(coords[4], coords[5], coords[0], coords[1], tex[2], 2);
+        draw_face(coords[5], coords[4], coords[7], coords[6], tex[3], 3);
+        draw_face(coords[4], coords[0], coords[6], coords[2], tex[4], 1);
+        draw_face(coords[2], coords[3], coords[6], coords[7], tex[5], 2);
 
         /* Mark the end of the command list */
         ta_commit_end();
