@@ -10,6 +10,9 @@ extern "C" {
 // Initialize the system matrix with a 4x4 identity matrix.
 void matrix_init_identity();
 
+// Initialize the system matrix with a 4x4 projection matrix.
+void matrix_init_perspective(float fovy, float zNear, float zFar);
+
 // Set a 4x4 matrix into the system matrix.
 void matrix_set(float (*matrix)[4][4]);
 

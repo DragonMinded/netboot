@@ -9,29 +9,10 @@
 
 // PVR/TA example based heavily off of the Hardware 3D example by marcus.
 
-// Definitions for matrixes that convert from worldview to screenview.
-#define XCENTER 320.0
-#define YCENTER 240.0
-
-#define COT_FOVY_2 1.73 /* cot(FOVy / 2) */
+#define FOV   60.0
 #define ZNEAR 1.0
 #define ZFAR  100.0
-
 #define ZOFFS 5.0
-
-float screenview_matrix[4][4] = {
-    { YCENTER,     0.0,   0.0,   0.0 },
-    {     0.0, YCENTER,   0.0,   0.0 },
-    {     0.0,     0.0,   1.0 ,  0.0 },
-    { XCENTER, YCENTER,   0.0,   1.0 },
-};
-
-float projection_matrix[4][4] = {
-    { COT_FOVY_2,         0.0,                        0.0,   0.0 },
-    {        0.0,  COT_FOVY_2,                        0.0,   0.0 },
-    {        0.0,         0.0,  (ZFAR+ZNEAR)/(ZNEAR-ZFAR),  -1.0 },
-    {        0.0,         0.0,  2*ZFAR*ZNEAR/(ZNEAR-ZFAR),   1.0 },
-};
 
 void init_palette()
 {
@@ -208,11 +189,7 @@ void main()
         };
 
         /* Set up the hardware transformation in the SH4 with the transformations we need to do */
-        matrix_init_identity();
-
-        /* TODO: These should be moved into the TA library and also take into account the screen rotation. */
-        matrix_apply(&screenview_matrix);
-        matrix_apply(&projection_matrix);
+        matrix_init_perspective(FOV, ZNEAR, ZFAR);
         matrix_translate_z(ZOFFS);
 
         /* Rotate the camera about the cube. */

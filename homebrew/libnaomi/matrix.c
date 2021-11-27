@@ -1,5 +1,6 @@
 #include "naomi/interrupt.h"
 #include "naomi/matrix.h"
+#include "naomi/video.h"
 #include <math.h>
 
 #define MAX_MATRIXES 16
@@ -47,6 +48,66 @@ void matrix_init_identity()
     );
 
     irq_restore(old_irq);
+}
+
+void matrix_init_perspective(float fovy, float zNear, float zFar)
+{
+    // Actually set up the system matrix as such.
+    if (video_is_vertical())
+    {
+        // Adjust coordinates so that the screen goes from -1.0 to 1.0 in both x and y direction.
+        float halfheight = video_width() / 2.0;
+        float halfwidth = video_height() / 2.0;
+        float screenview_matrix[4][4] = {
+            { halfwidth, 0.0, 0.0, 0.0 },
+            { 0.0, halfheight, 0.0, 0.0 },
+            { 0.0, 0.0, 1.0, 0.0 },
+            { halfwidth, halfheight, 0.0, 1.0 },
+        };
+
+        // Create a projection matrix which allows for perspective projection.
+        float fovrads = (fovy / 180.0) * M_PI;
+        float aspect = (float)halfheight / (float)halfwidth;
+        float cot_fovy_2 = cos(fovrads / 2.0) / sin(fovrads / 2.0);
+        float projection_matrix[4][4] = {
+            { cot_fovy_2 / aspect, 0.0, 0.0, 0.0 },
+            { 0.0, cot_fovy_2, 0.0, 0.0 },
+            { 0.0, 0.0, (zFar+zNear)/(zNear-zFar), -1.0 },
+            { 0.0, 0.0, 2*zFar*zNear/(zNear-zFar), 1.0 },
+        };
+
+        matrix_init_identity();
+        matrix_apply(&screenview_matrix);
+        matrix_rotate_z(-90.0);
+        matrix_apply(&projection_matrix);
+    }
+    else
+    {
+        // Adjust coordinates so that the screen goes from -1.0 to 1.0 in both x and y direction.
+        float halfwidth = video_width() / 2.0;
+        float halfheight = video_height() / 2.0;
+        float screenview_matrix[4][4] = {
+            { halfwidth, 0.0, 0.0, 0.0 },
+            { 0.0, halfheight, 0.0, 0.0 },
+            { 0.0, 0.0, 1.0, 0.0 },
+            { halfwidth, halfheight, 0.0, 1.0 },
+        };
+
+        // Create a projection matrix which allows for perspective projection.
+        float fovrads = (fovy / 180.0) * M_PI;
+        float aspect = (float)halfwidth / (float)halfheight;
+        float cot_fovy_2 = cos(fovrads / 2.0) / sin(fovrads / 2.0);
+        float projection_matrix[4][4] = {
+            { cot_fovy_2 / aspect, 0.0, 0.0, 0.0 },
+            { 0.0, cot_fovy_2, 0.0, 0.0 },
+            { 0.0, 0.0, (zFar+zNear)/(zNear-zFar), -1.0 },
+            { 0.0, 0.0, 2*zFar*zNear/(zNear-zFar), 1.0 },
+        };
+
+        matrix_init_identity();
+        matrix_apply(&screenview_matrix);
+        matrix_apply(&projection_matrix);
+    }
 }
 
 void matrix_apply(float (*matrix)[4][4])
