@@ -165,6 +165,10 @@ directory_entry_t *_romfs_find_entry(uint32_t rootoffset, void *directory, unsig
 
     // Okay, safe to recurse.
     void *dirdata = malloc(entry->size * 256);
+    if (dirdata == 0)
+    {
+        _irq_display_invariant("memory failure", "could not get memory to read subdirectory!");
+    }
     cart_read(dirdata, rootoffset + entry->offset, entry->size * 256);
     entry = _romfs_find_entry(rootoffset + entry->offset, dirdata, entry->size, rest, actual_offset);
     free(dirdata);
@@ -225,12 +229,21 @@ void *_romfs_open(void *fshandle, const char *name, int flags, int mode)
 
     // Okay, create a new open file handle and return that!
     open_file_t *filehandle = malloc(sizeof(open_file_t));
+    if (filehandle == 0)
+    {
+        return (void *)-ENOMEM;
+    }
     filehandle->offset = actual_offset;
     filehandle->size = entry->size;
     filehandle->seek = 0;
 
     // Create cache struture as well.
     filehandle->cachedblock = malloc(CACHED_BLOCK_SIZE);
+    if (filehandle->cachedblock == 0)
+    {
+        free(filehandle);
+        return (void *)-ENOMEM;
+    }
     filehandle->cachedoffset = 0;
     return filehandle;
 }
@@ -467,6 +480,10 @@ void *_romfs_opendir( void *fshandle, const char *path )
     if (strcmp(path, "/") == 0)
     {
         dir_t *dir = malloc(sizeof(dir_t));
+        if (dir == 0)
+        {
+            return (void *)-ENOMEM;
+        }
         dir->dirsector = (directory_entry_t *)hooks->rootdir;
         dir->offset = hooks->rootoffset;
         dir->loc = 0;
@@ -487,7 +504,16 @@ void *_romfs_opendir( void *fshandle, const char *path )
         }
 
         dir_t *dir = malloc(sizeof(dir_t));
+        if (dir == 0)
+        {
+            return (void *)-ENOMEM;
+        }
         dir->dirsector = malloc(256 * diritself->size);
+        if (dir->dirsector == 0)
+        {
+            free(dir);
+            return (void *)-ENOMEM;
+        }
         dir->offset = actual_offset;
         dir->loc = 0;
         dir->size = diritself->size;
@@ -636,13 +662,21 @@ int romfs_init(uint32_t rom_offset, char *prefix)
             if (retval == 0)
             {
                 void *rootdir = malloc(256 * romheaderaligned[3]);
-                cart_read(rootdir, rom_offset + 16, 256 * romheaderaligned[3]);
+                if (rootdir != 0)
+                {
+                    cart_read(rootdir, rom_offset + 16, 256 * romheaderaligned[3]);
 
-                // It worked! Mark this filesystem as active!
-                active_hooks[i].rootoffset = rom_offset + 16;
-                active_hooks[i].rootentries = romheaderaligned[3];
-                active_hooks[i].rootdir = rootdir;
-                strcpy(active_hooks[i].prefix, actual_prefix);
+                    // It worked! Mark this filesystem as active!
+                    active_hooks[i].rootoffset = rom_offset + 16;
+                    active_hooks[i].rootentries = romheaderaligned[3];
+                    active_hooks[i].rootdir = rootdir;
+                    strcpy(active_hooks[i].prefix, actual_prefix);
+                }
+                else
+                {
+                    detach_filesystem(actual_prefix);
+                    retval = -1;
+                }
             }
 
             return retval;
