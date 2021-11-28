@@ -5,6 +5,7 @@
 #include "naomi/system.h"
 #include "naomi/thread.h"
 #include "naomi/interrupt.h"
+#include "irqinternal.h"
 
 #define MAPLE_BASE 0xA05F6C00
 
@@ -115,6 +116,10 @@ void _maple_init()
     // Allocate enough memory for a request and a response, as well as
     // 32 bytes of padding.
     maple_base = malloc(1024 + 1024 + 32);
+    if (maple_base == 0)
+    {
+        _irq_display_invariant("memory failure", "could not get memory for maple exchange buffer!");
+    }
 
     // Alow ourselves exclusive access to the hardware.
     mutex_init(&maple_mutex);
