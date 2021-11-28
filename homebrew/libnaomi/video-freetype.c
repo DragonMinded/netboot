@@ -31,23 +31,46 @@ font_t * video_font_add(void *buffer, unsigned int size)
 {
     FT_Library *library = __video_freetype_init();
     font_t *font = malloc(sizeof(font_t));
+    if (font == 0)
+    {
+        return 0;
+    }
     font->faces = malloc(sizeof(void *) * MAX_FALLBACK_SIZE);
+    if (font->faces == 0)
+    {
+        free(font);
+        return 0;
+    }
     memset(font->faces, 0, sizeof(void *) * MAX_FALLBACK_SIZE);
     font->faces[0] = malloc(sizeof(FT_Face));
+    if (font->faces[0] == 0)
+    {
+        free(font->faces);
+        free(font);
+        return 0;
+    }
 
-    if (FT_New_Memory_Face(*library, buffer, size, 0, (FT_Face *)font->faces[0]))
+    font->cachesize = FONT_CACHE_SIZE;
+    font->cacheloc = 0;
+    font->cache = malloc(sizeof(font_cache_entry_t *) * font->cachesize);
+    if (font->cache == 0)
     {
         free(font->faces[0]);
         free(font->faces);
         free(font);
         return 0;
     }
-    FT_Select_Charmap(*((FT_Face *)font->faces[0]), FT_ENCODING_UNICODE);
-
-    font->cachesize = FONT_CACHE_SIZE;
-    font->cacheloc = 0;
-    font->cache = malloc(sizeof(font_cache_entry_t *) * font->cachesize);
     memset(font->cache, 0, sizeof(font_cache_entry_t *) * font->cachesize);
+
+    if (FT_New_Memory_Face(*library, buffer, size, 0, (FT_Face *)font->faces[0]))
+    {
+        free(font->cache);
+        free(font->faces[0]);
+        free(font->faces);
+        free(font);
+        return 0;
+    }
+    FT_Select_Charmap(*((FT_Face *)font->faces[0]), FT_ENCODING_UNICODE);
 
     video_font_set_size(font, 12);
 
@@ -62,6 +85,10 @@ int video_font_add_fallback(font_t *font, void *buffer, unsigned int size)
         {
             FT_Library *library = __video_freetype_init();
             font->faces[i] = malloc(sizeof(FT_Face));
+            if (font->faces[i] == 0)
+            {
+                return -1;
+            }
             int error = FT_New_Memory_Face(*library, buffer, size, 0, (FT_Face *)font->faces[i]);
             if (error)
             {
@@ -113,6 +140,10 @@ int __cache_add(font_t *fontface, font_cache_entry_t *entry)
     {
         return 0;
     }
+    if (entry == 0)
+    {
+        return 0;
+    }
 
     fontface->cache[fontface->cacheloc++] = entry;
     return 1;
@@ -121,6 +152,10 @@ int __cache_add(font_t *fontface, font_cache_entry_t *entry)
 font_cache_entry_t *__cache_create(uint32_t index, int advancex, int advancey, int bitmap_left, int bitmap_top, int width, int height, int mode, uint8_t *buffer)
 {
     font_cache_entry_t *entry = malloc(sizeof(font_cache_entry_t));
+    if (entry == 0)
+    {
+        return 0;
+    }
     entry->index = index;
     entry->advancex = advancex;
     entry->advancey = advancey;
@@ -130,6 +165,11 @@ font_cache_entry_t *__cache_create(uint32_t index, int advancex, int advancey, i
     entry->width = width;
     entry->height = height;
     entry->buffer = malloc(width * height);
+    if (entry->buffer == 0)
+    {
+        free(entry);
+        return 0;
+    }
     memcpy(entry->buffer, buffer, width * height);
 
     return entry;

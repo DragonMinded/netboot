@@ -45,17 +45,20 @@ typedef struct
 // API that can be used with the video library as well as the freetype
 // library to render text to the screen.
 
-// Load a new fontface and return a handle to it.
+// Load a new fontface and return a handle to it. If there was not enough memory for
+// this fontface, returns a null pointer, so be sure to check for that.
 font_t *video_font_add(void *buffer, unsigned int size);
 
 // Discard a previously loaded fontface.
 void video_font_disard(font_t *fontface);
 
 // Add a fallback fontface to a previously created font for rendering
-// characters that do not appear in the original font.
+// characters that do not appear in the original font. Returns zero
+// on success or a negative error value on failure.
 int video_font_add_fallback(font_t *fontface, void *buffer, unsigned int size);
 
-// Set the pixel size for a particular font
+// Set the pixel size for a particular font. Returns zero on success
+// or a negative error value on failure.
 int video_font_set_size(font_t *fontface, unsigned int size);
 
 // Given a previously set up font, draw a character. Unlike the debug
