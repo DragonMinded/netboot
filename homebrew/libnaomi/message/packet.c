@@ -128,9 +128,12 @@ int packetlib_send(void *data, unsigned int length)
         if (packetlib_state.pending_packets[i] == 0)
         {
             packetlib_state.pending_packets[i] = (packet_t *)malloc(sizeof(packet_t));
-            memcpy(packetlib_state.pending_packets[i]->data, data, length);
-            packetlib_state.pending_packets[i]->len = length;
-            retval = 0;
+            if (packetlib_state.pending_packets[i] != 0)
+            {
+                memcpy(packetlib_state.pending_packets[i]->data, data, length);
+                packetlib_state.pending_packets[i]->len = length;
+                retval = 0;
+            }
             break;
         }
     }
@@ -357,10 +360,19 @@ void write_data(uint32_t data)
                 {
                     if (packetlib_state.received_packets[j] == 0)
                     {
-                        // Copy the packet information so userspace can read it.
                         packetlib_state.received_packets[j] = (packet_t *)malloc(sizeof(packet_t));
-                        memcpy(packetlib_state.received_packets[j]->data, packetlib_state.pending_recv_data, packetlib_state.pending_recv_size);
-                        packetlib_state.received_packets[j]->len = packetlib_state.pending_recv_size;
+                        if (packetlib_state.received_packets[j] != 0)
+                        {
+                            // Copy the packet information so userspace can read it.
+                            memcpy(packetlib_state.received_packets[j]->data, packetlib_state.pending_recv_data, packetlib_state.pending_recv_size);
+                            packetlib_state.received_packets[j]->len = packetlib_state.pending_recv_size;
+                            packetlib_state.success_received ++;
+                        }
+                        else
+                        {
+                            // No memory, cancel this packet.
+                            packetlib_state.cancelled_packets ++;
+                        }
                         break;
                     }
                 }
@@ -368,7 +380,6 @@ void write_data(uint32_t data)
                 // Mark that the packet was received.
                 packetlib_state.pending_recv_size = 0;
                 packetlib_state.pending_recv_location = 0;
-                packetlib_state.success_received ++;
 
                 return;
             }

@@ -9,6 +9,7 @@
 #include "naomi/interrupt.h"
 #include "naomi/message/message.h"
 #include "naomi/message/packet.h"
+#include "../irqinternal.h"
 
 #ifdef ZLIB_INCLUDED
 int zlib_decompress(uint8_t *compressed, unsigned int compressedlen, uint8_t *decompressed, unsigned int decompressedlen)
@@ -199,7 +200,22 @@ int message_recv(uint16_t *type, void ** data, unsigned int *length)
                 if (num_packets_needed > 0)
                 {
                     seen_positions[index] = malloc(num_packets_needed);
-                    memset(seen_positions[index], 0, num_packets_needed);
+                    if (seen_positions[index] != 0)
+                    {
+                        memset(seen_positions[index], 0, num_packets_needed);
+                    }
+                    else
+                    {
+                        for (unsigned int k = 0; k < MAX_OUTSTANDING_PACKETS; k++)
+                        {
+                            if (seen_positions[k])
+                            {
+                                free(seen_positions[k]);
+                            }
+                        }
+
+                        return -7;
+                    }
                 }
                 break;
             }
@@ -243,6 +259,18 @@ int message_recv(uint16_t *type, void ** data, unsigned int *length)
             if (seen_packet_lengths[index] > 0)
             {
                 reassembled_data = malloc(seen_packet_lengths[index]);
+                if (reassembled_data == 0)
+                {
+                    for (unsigned int k = 0; k < MAX_OUTSTANDING_PACKETS; k++)
+                    {
+                        if (seen_positions[k])
+                        {
+                            free(seen_positions[k]);
+                        }
+                    }
+
+                    return -7;
+                }
             }
             *data = reassembled_data;
             *length = seen_packet_lengths[index];
@@ -314,24 +342,36 @@ int message_recv(uint16_t *type, void ** data, unsigned int *length)
 
         memcpy(&decompressed_length, &compressed_data[0], 4);
         decompressed_data = malloc(decompressed_length);
-
-        if (zlib_decompress(&compressed_data[4], compressed_length - 4, decompressed_data, decompressed_length) == 0)
+        if (decompressed_data != 0)
         {
-            free(compressed_data);
-            *data = decompressed_data;
-            *length = decompressed_length;
-            *type = ((*type) & 0x7FFF);
+            if (zlib_decompress(&compressed_data[4], compressed_length - 4, decompressed_data, decompressed_length) == 0)
+            {
+                free(compressed_data);
+                *data = decompressed_data;
+                *length = decompressed_length;
+                *type = ((*type) & 0x7FFF);
+            }
+            else
+            {
+                free(compressed_data);
+                free(decompressed_data);
+                *type = 0;
+                *data = 0;
+                *length = 0;
+
+                // Failed to decompress somehow.
+                success = -6;
+            }
         }
         else
         {
             free(compressed_data);
-            free(decompressed_data);
             *type = 0;
             *data = 0;
             *length = 0;
 
-            // Failed to decompress somehow.
-            success = -6;
+            // Failed to decompress due to out of memory.
+            success = -7;
         }
     }
 #endif
@@ -418,8 +458,16 @@ void message_stdio_redirect_init()
     {
         /* Get memory for that size */
         stdout_buffer = malloc(MAX_CONSOLE_MESSAGE + 1);
+        if (stdout_buffer == 0)
+        {
+            _irq_display_invariant("memory failure", "could not get memory for stdout redirect buffer!");
+        }
         memset(stdout_buffer, 0, MAX_CONSOLE_MESSAGE + 1);
         stderr_buffer = malloc(MAX_CONSOLE_MESSAGE + 1);
+        if (stderr_buffer == 0)
+        {
+            _irq_display_invariant("memory failure", "could not get memory for stderr redirect buffer!");
+        }
         memset(stderr_buffer, 0, MAX_CONSOLE_MESSAGE + 1);
 
         /* Register ourselves with newlib */
