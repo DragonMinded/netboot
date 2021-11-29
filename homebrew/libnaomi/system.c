@@ -403,6 +403,10 @@ void * hook_stdio_calls( stdio_t *stdio_calls )
 
     /* Safe to hook */
     stdio_registered_hooks_t *new_hooks = malloc(sizeof(stdio_registered_hooks_t));
+    if (new_hooks == 0)
+    {
+        _irq_display_invariant("memory failure", "could not get memory for stdio hooks!");
+    }
     new_hooks->stdio_hooks.stdin_read = stdio_calls->stdin_read;
     new_hooks->stdio_hooks.stdout_write = stdio_calls->stdout_write;
     new_hooks->stdio_hooks.stderr_write = stdio_calls->stderr_write;
@@ -755,13 +759,37 @@ char *realpath(const char *restrict path, char *restrict resolved_path)
         if (resolved_path == 0)
         {
             resolved_path = malloc(PATH_MAX + 1);
+            if (resolved_path == 0)
+            {
+                errno = ENOMEM;
+                return 0;
+            }
             allocated = 1;
         }
 
         if (fullpath[0] != 0)
         {
             char **parts = malloc(sizeof(char *));
+            if (parts == 0)
+            {
+                if (allocated)
+                {
+                    free(resolved_path);
+                }
+                errno = ENOMEM;
+                return 0;
+            }
             parts[0] = malloc(PATH_MAX + 1);
+            if (parts[0] == 0)
+            {
+                if (allocated)
+                {
+                    free(resolved_path);
+                }
+                free(parts);
+                errno = ENOMEM;
+                return 0;
+            }
             memset(parts[0], 0, PATH_MAX + 1);
             int partscount = 1;
             int partpos = 0;
@@ -784,6 +812,20 @@ char *realpath(const char *restrict path, char *restrict resolved_path)
                         partscount++;
                         parts = realloc(parts, sizeof(char *) * partscount);
                         parts[partscount - 1] = malloc(PATH_MAX + 1);
+                        if (parts[partscount - 1] == 0)
+                        {
+                            if (allocated)
+                            {
+                                free(resolved_path);
+                            }
+                            for (int i = 0; i < partscount - 1; i++)
+                            {
+                                free(parts[i]);
+                            }
+                            free(parts);
+                            errno = ENOMEM;
+                            return 0;
+                        }
                         memset(parts[partscount - 1], 0, PATH_MAX + 1);
                         partpos = 0;
                     }
@@ -802,6 +844,20 @@ char *realpath(const char *restrict path, char *restrict resolved_path)
             // At this point we have a string of path parts. Now we need to rejoin
             // them all canonicalized. First, take care of . and .. in the path.
             char **newparts = malloc(sizeof(char *) * partscount);
+            if (newparts == 0)
+            {
+                if (allocated)
+                {
+                    free(resolved_path);
+                }
+                for (int i = 0; i < partscount; i++)
+                {
+                    free(parts[i]);
+                }
+                free(parts);
+                errno = ENOMEM;
+                return 0;
+            }
             int newpartscount = 0;
             for (int i = 0; i < partscount; i++)
             {
@@ -1757,10 +1813,32 @@ DIR *opendir(const char *name)
         {
             /* Create new DIR handle */
             DIR *dir = malloc(sizeof(DIR));
+            if (dir == 0)
+            {
+                if (fs->closedir)
+                {
+                    fs->closedir(filesystems[mapping].fshandle, handle);
+                }
+                errno = ENOMEM;
+                return 0;
+            }
             dir->handle = handle;
             dir->fs = mapping;
             dir->ent = malloc(sizeof(struct dirent));
-            return dir;
+            if (dir->ent == 0)
+            {
+                if (fs->closedir)
+                {
+                    fs->closedir(filesystems[mapping].fshandle, handle);
+                }
+                free(dir);
+                errno = ENOMEM;
+                return 0;
+            }
+            else
+            {
+                return dir;
+            }
         }
         else
         {
