@@ -257,6 +257,7 @@ class MessageException(Exception):
 MESSAGE_HEADER_LENGTH: int = 8
 MAX_MESSAGE_DATA_LENGTH: int = MAX_PACKET_LENGTH - MESSAGE_HEADER_LENGTH
 MAX_MESSAGE_LENGTH: int = 0xFFFF
+MAX_MESSAGE_TIMEOUT: float = 3.0
 
 
 MESSAGE_HOST_STDOUT: int = 0x7FFE
@@ -321,6 +322,7 @@ def send_message(netdimm: NetDimm, message: Message, verbose: bool = False) -> N
 pending_received_chunks: Dict[int, Dict[int, bytes]] = {}
 pending_received_sizes: Dict[int, int] = {}
 pending_received_msgids: Dict[int, int] = {}
+pending_received_timestamp: Dict[int, float] = {}
 recv_sequence: int = -1
 
 
@@ -364,6 +366,9 @@ def receive_message(netdimm: NetDimm, verbose: bool = False) -> Optional[Message
             msgid = pending_received_msgids[sequence]
             total_length = pending_received_sizes[sequence]
             break
+        elif recv_sequence in pending_received_timestamp and time.time() - pending_received_timestamp[recv_sequence] > MAX_MESSAGE_TIMEOUT:
+            # Act like we just connected, force a resync.
+            recv_sequence = -1
 
         # Try to receive a new packet.
         new_packet = receive_packet(netdimm)
@@ -384,6 +389,7 @@ def receive_message(netdimm: NetDimm, verbose: bool = False) -> Optional[Message
                         del pending_received_chunks[potential_sequence]
                         del pending_received_msgids[potential_sequence]
                         del pending_received_sizes[potential_sequence]
+                        del pending_received_timestamp[potential_sequence]
 
                         # We know the next packet is ready, so just start there.
                         recv_sequence = next_potential_sequence
@@ -408,15 +414,18 @@ def receive_message(netdimm: NetDimm, verbose: bool = False) -> Optional[Message
             pending_received_chunks[sequence] = {}
             pending_received_msgids[sequence] = msgid
             pending_received_sizes[sequence] = total_length
+            pending_received_timestamp[sequence] = time.time()
 
         if location not in pending_received_chunks[sequence]:
             pending_received_chunks[sequence][location] = new_packet[8:]
+            pending_received_timestamp[sequence] = time.time()
 
     # We have it all!
     msgdata = b"".join(pending_received_chunks[sequence][position] for position in range(0, total_length, MAX_MESSAGE_DATA_LENGTH))
     del pending_received_chunks[sequence]
     del pending_received_msgids[sequence]
     del pending_received_sizes[sequence]
+    del pending_received_timestamp[sequence]
 
     # Make sure we receive the next packet in order. We intentionally don't
     # wrap around the sequence here because we want to handle both the case
