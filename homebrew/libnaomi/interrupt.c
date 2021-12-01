@@ -143,11 +143,11 @@ uint32_t _irq_read_vbr();
 // Hardware drivers which need init/free after IRQ setup.
 void _dimm_comms_init();
 void _dimm_comms_free();
-void _dimm_command_handler();
+void _dimm_command_handler(irq_state_t *cur_state);
 void _vblank_init();
 void _vblank_free();
 
-uint32_t _holly_interrupt()
+uint32_t _holly_interrupt(irq_state_t *cur_state)
 {
     // Interrupts we care about that we actually got this round.
     uint32_t serviced = 0;
@@ -270,7 +270,7 @@ uint32_t _holly_interrupt()
 
         if ((requested & HOLLY_EXTERNAL_INTERRUPT_DIMM_COMMS) != 0)
         {
-            _dimm_command_handler();
+            _dimm_command_handler(cur_state);
             handled |= HOLLY_EXTERNAL_INTERRUPT_DIMM_COMMS;
             serviced |= HOLLY_SERVICED_DIMM_COMMS;
         }
@@ -313,7 +313,7 @@ irq_state_t * _irq_external_interrupt(irq_state_t *cur_state)
         case IRQ_EVENT_HOLLY_LEVEL4:
         case IRQ_EVENT_HOLLY_LEVEL6:
         {
-            uint32_t serviced = _holly_interrupt();
+            uint32_t serviced = _holly_interrupt(cur_state);
             cur_state = _syscall_holly(cur_state, serviced);
             break;
         }

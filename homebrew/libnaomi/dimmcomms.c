@@ -3,7 +3,9 @@
 #include "naomi/dimmcomms.h"
 #include "naomi/timer.h"
 #include "naomi/interrupt.h"
+#include "naomi/thread.h"
 #include "holly.h"
+#include "irqstate.h"
 
 #define NAOMI_DIMM_COMMAND ((volatile uint16_t *)0xA05F703C)
 #define NAOMI_DIMM_OFFSETL ((volatile uint16_t *)0xA05F7040)
@@ -23,7 +25,7 @@ static poke_call_t global_poke_hook = 0;
 int _gdb_has_response();
 int _gdb_check_address(uint32_t address);
 uint32_t _gdb_make_address();
-void _gdb_handle_command(uint32_t address);
+void _gdb_handle_command(uint32_t address, irq_state_t *cur_state);
 
 int check_has_dimm_inserted()
 {
@@ -33,7 +35,7 @@ int check_has_dimm_inserted()
     return 1;
 }
 
-void _dimm_command_handler()
+void _dimm_command_handler(irq_state_t *cur_state)
 {
     // Keep track of the top 8 bits of the address for peek/poke commands.
     static uint32_t base_address = 0;
@@ -186,7 +188,7 @@ void _dimm_command_handler()
                         /* Must check for GDB knock address. */
                         if ((address & 0x01FFFFFF) == (START_ADDR & 0x01FFFFFF) && _gdb_check_address(value))
                         {
-                            _gdb_handle_command(value & 0x00FFFFFF);
+                            _gdb_handle_command(value & 0x00FFFFFF, cur_state);
                         }
                         else
                         {

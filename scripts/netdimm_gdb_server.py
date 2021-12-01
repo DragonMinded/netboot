@@ -80,12 +80,16 @@ def gdb_handle_packet(netdimm: NetDimm, knock_address: int, ringbuffer_address: 
         # to advertise what we do support.
         return True, b"PacketSize=512"
 
+    if packet == b"qSymbol::":
+        # Symbol lookup, we don't need to handle this.
+        return True, b"OK"
+
     if packet == b"vMustReplyEmpty":
         # GDB is probing us to see if we handle this correctly. We must return
         # an empty string, as the packet states.
         return True, b""
 
-    if packet[0:1] in {b"H", b"q"}:
+    if packet[0:1] in {b"h", b"H", b"q", b"Q", b"g", b"G", b"m", b"M", b"?"}:
         # Packet that should be handled by the Naomi. First, lay it down the packet
         # itself so it can be read by the target.
         netdimm.send_chunk(ringbuffer_address, struct.pack("<I", len(packet)) + packet)

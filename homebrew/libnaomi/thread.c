@@ -106,6 +106,12 @@ typedef struct
     void *retval;
 } thread_t;
 
+uint32_t _thread_current_id(irq_state_t *cur_state)
+{
+    thread_t *current_thread = (thread_t *)cur_state->threadptr;
+    return current_thread->id;
+}
+
 // Waiting interupt values.
 #define WAITING_IRQ_VBLANK_IN 1
 #define WAITING_IRQ_VBLANK_OUT 2
