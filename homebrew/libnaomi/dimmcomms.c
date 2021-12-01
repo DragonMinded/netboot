@@ -19,6 +19,12 @@
 static peek_call_t global_peek_hook = 0;
 static poke_call_t global_poke_hook = 0;
 
+// Prototypes for GDB functionality.
+int _gdb_has_response();
+int _gdb_check_address(uint32_t address);
+uint32_t _gdb_make_address();
+void _gdb_handle_command(uint32_t address);
+
 int check_has_dimm_inserted()
 {
     if (*NAOMI_DIMM_COMMAND == CONST_NO_DIMM) {
@@ -108,11 +114,21 @@ void _dimm_command_handler()
 
                     if ((address & 3) == 0)
                     {
-                        if (global_peek_hook)
+                        /* Mask off the upper bits since the net dimm sets the base address unpredictably. */
+                        if ((address & 0x01FFFFFF) == (START_ADDR & 0x01FFFFFF) && _gdb_has_response())
                         {
-                            uint32_t data = global_peek_hook(address, 4);
+                            uint32_t data = _gdb_make_address();
                             paramh = (data >> 16) & 0xFFFF;
                             paraml = data & 0xFFFF;
+                        }
+                        else
+                        {
+                            if (global_peek_hook)
+                            {
+                                uint32_t data = global_peek_hook(address, 4);
+                                paramh = (data >> 16) & 0xFFFF;
+                                paraml = data & 0xFFFF;
+                            }
                         }
 
                         retval = 1;
@@ -167,9 +183,17 @@ void _dimm_command_handler()
 
                     if ((address & 3) == 0)
                     {
-                        if (global_poke_hook)
+                        /* Must check for GDB knock address. */
+                        if ((address & 0x01FFFFFF) == (START_ADDR & 0x01FFFFFF) && _gdb_check_address(value))
                         {
-                            global_poke_hook(address, 4, value);
+                            _gdb_handle_command(value & 0x00FFFFFF);
+                        }
+                        else
+                        {
+                            if (global_poke_hook)
+                            {
+                                global_poke_hook(address, 4, value);
+                            }
                         }
 
                         retval = 1;

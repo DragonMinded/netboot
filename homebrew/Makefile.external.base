@@ -216,12 +216,12 @@ build/%.o: %.s
 # A rule for how to build C files. Depends on the build dir being created.
 build/%.o: %.c
 	@mkdir -p $(dir $@)
-	${CC} -c $< -o $@ -DSERIAL=\"${SERIAL}\" -DBUILD_DATE=$(shell ${DATE})
+	${CC} -c $< -o $@ -DSERIAL=\"${SERIAL}\" -DBUILD_DATE=$(shell ${DATE}) -DSTART_ADDR=${START_ADDR}
 
 # A rule for how to build C++ files. Depends on the build dir being created.
 build/%.o: %.cpp
 	@mkdir -p $(dir $@)
-	${CPP} -c $< -o $@ -DSERIAL=\"${SERIAL}\" -DBUILD_DATE=$(shell ${DATE})
+	${CPP} -c $< -o $@ -DSERIAL=\"${SERIAL}\" -DBUILD_DATE=$(shell ${DATE}) -DSTART_ADDR=${START_ADDR}
 
 # A rule for how to build font files. Depends on the build dir being created.
 build/%.o: %.ttf ${BIN2C_FILE}
