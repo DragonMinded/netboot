@@ -187,6 +187,40 @@ class NetDimm:
             else:
                 return None
 
+    def send_chunk(self, offset: int, data: Union[bytes, FileBytes]) -> None:
+        with self.connection():
+            addr: int = 0
+            total: int = len(data)
+            sequence: int = 1
+
+            while addr < total:
+                # Upload data to a particular address.
+                current = data[addr:(addr + 0x8000)]
+                curlen = len(current)
+                last_packet = addr + curlen == total
+
+                self.__upload(sequence, offset + addr, current, last_packet)
+                addr += curlen
+                sequence += 1
+
+    def receive_chunk(self, offset: int, length: int) -> bytes:
+        with self.connection():
+            data: List[bytes] = []
+            address: int = 0
+
+            while address < length:
+                # Get next chunk size.
+                amount = length - address
+                if amount > 0x8000:
+                    amount = 0x8000
+
+                # Get next chunk.
+                chunk = self.__download(offset + address, amount)
+                data.append(chunk)
+                address += len(chunk)
+
+            return b''.join(data)
+
     def reboot(self) -> None:
         with self.connection():
             # restart host, this wil boot into game

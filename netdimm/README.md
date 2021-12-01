@@ -83,6 +83,25 @@ argument in the form of a function with two integer parameters and returning not
 this is provided, the callack will be called periodically with the current location and
 receive size of the game being downloaded.
 
+### send_chunk() method
+
+Send a chunk of binary data to the net dimm, stored at an offset. Takes two parameters, the
+first being the integer offset from the beginning of the net dimm writeable memory to put
+the binary data, and the second being either bytes or `FileBytes` and sends the entire
+chunk to that location. Note that this is not to be used to upload game data as it does
+not attempt to calculate or update the CRC. Using this to change data within the CRC'd
+section of a valid sent game will cause it to become invalid on the next boot. If you
+send data to a running game, you can subsequently read that data using the cartridge
+read interface on running target.
+
+### receive_chunk() method
+
+Receive a chunk of binary data from the net dimm. Takes two parameters, the first being
+an integer offset from the beginning of the net dimm writeable memory to get the binary
+data, and the second being an integer length in bytes of the amount of data to receive.
+Note that if you use the cartridge write interface on the running target to write data
+to the cart, it will be available to read using this function.
+
 ### reboot() method
 
 Reboot the net dimm after sending a game in order to boot the game. This can be issued at
