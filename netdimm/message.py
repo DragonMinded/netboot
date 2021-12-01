@@ -319,9 +319,28 @@ def send_message(netdimm: NetDimm, message: Message, verbose: bool = False) -> N
 
 
 pending_received_chunks: Dict[int, Dict[int, bytes]] = {}
+pending_received_sizes: Dict[int, int] = {}
+pending_received_msgids: Dict[int, int] = {}
+recv_sequence: int = -1
+
+
+def _packet_finished(sequence: int) -> bool:
+    if sequence not in pending_received_sizes:
+        return False
+    total_length = pending_received_sizes[sequence]
+
+    for needed_location in range(0, total_length, MAX_MESSAGE_DATA_LENGTH):
+        if needed_location not in pending_received_chunks[sequence]:
+            # We're missing this location.
+            return False
+
+    # We have all the bits
+    return True
 
 
 def receive_message(netdimm: NetDimm, verbose: bool = False) -> Optional[Message]:
+    global recv_sequence
+
     config = read_config_register(netdimm)
     if config is None:
         return None
@@ -329,31 +348,82 @@ def receive_message(netdimm: NetDimm, verbose: bool = False) -> Optional[Message
         raise MessageException("Host is not running message protocol!")
     zlib_enabled = (config & CONFIG_MESSAGE_HAS_ZLIB) != 0
 
-    # Try to receive a new packet.
-    new_packet = receive_packet(netdimm)
-    if new_packet is None:
-        return None
+    # First, see if all packets are available for the current receive sequence.
+    while True:
+        if _packet_finished(recv_sequence):
+            # We have a finished packet that we can receive!
+            sequence = recv_sequence
+            msgid = pending_received_msgids[sequence]
+            total_length = pending_received_sizes[sequence]
+            break
+        elif recv_sequence > 1 and _packet_finished(1):
+            # We wrapped our sequence number around, or the target restarted
+            # and we want to resync with it here.
+            recv_sequence = 1
+            sequence = recv_sequence
+            msgid = pending_received_msgids[sequence]
+            total_length = pending_received_sizes[sequence]
+            break
 
-    # Make sure it isn't a dud packet.
-    if len(new_packet) < MESSAGE_HEADER_LENGTH:
-        raise MessageException("Got dud packet from target!")
+        # Try to receive a new packet.
+        new_packet = receive_packet(netdimm)
+        if new_packet is None:
+            # First, if we don't know the received packet, we should grab the
+            # lowest sequence we've received instead of exiting.
+            if recv_sequence < 0:
+                if pending_received_chunks:
+                    potential_sequence = min(pending_received_chunks.keys())
+                    next_potential_sequence = (potential_sequence + 1) & 0xFFFF
+                    if next_potential_sequence == 0:
+                        next_potential_sequence = 1
 
-    # See if this packet can be reassembled.
-    msgid, sequence, total_length, location = struct.unpack("<HHHH", new_packet[0:8])
+                    # The potential sequence could have been cut off, so if it is
+                    # not entirely ready, discard it as we have no way in our
+                    # protocol to signal that we need it fully retransmitted.
+                    if potential_sequence in pending_received_chunks and not _packet_finished(potential_sequence) and _packet_finished(next_potential_sequence):
+                        del pending_received_chunks[potential_sequence]
+                        del pending_received_msgids[potential_sequence]
+                        del pending_received_sizes[potential_sequence]
 
-    if sequence not in pending_received_chunks:
-        pending_received_chunks[sequence] = {}
-    if location not in pending_received_chunks[sequence]:
-        pending_received_chunks[sequence][location] = new_packet[8:]
+                        # We know the next packet is ready, so just start there.
+                        recv_sequence = next_potential_sequence
+                        continue
+                    elif _packet_finished(potential_sequence):
+                        # This packet is actually ready, pop around the loop and
+                        # reassemble it and then receive packets from there onward.
+                        recv_sequence = potential_sequence
+                        continue
 
-    for needed_location in range(0, total_length, MAX_MESSAGE_DATA_LENGTH):
-        if needed_location not in pending_received_chunks[sequence]:
-            # We're missing this location.
+            # No packets available, return that there isn't anything.
             return None
+
+        # Make sure it isn't a dud packet.
+        if len(new_packet) < MESSAGE_HEADER_LENGTH:
+            raise MessageException("Got dud packet from target!")
+
+        # See if this packet can be reassembled.
+        msgid, sequence, total_length, location = struct.unpack("<HHHH", new_packet[0:8])
+
+        if sequence not in pending_received_chunks:
+            pending_received_chunks[sequence] = {}
+            pending_received_msgids[sequence] = msgid
+            pending_received_sizes[sequence] = total_length
+
+        if location not in pending_received_chunks[sequence]:
+            pending_received_chunks[sequence][location] = new_packet[8:]
 
     # We have it all!
     msgdata = b"".join(pending_received_chunks[sequence][position] for position in range(0, total_length, MAX_MESSAGE_DATA_LENGTH))
     del pending_received_chunks[sequence]
+    del pending_received_msgids[sequence]
+    del pending_received_sizes[sequence]
+
+    # Make sure we receive the next packet in order. We intentionally don't
+    # wrap around the sequence here because we want to handle both the case
+    # where the sequence number naturally wraps around as well as the case
+    # of the host system rebooting and restarting its sequence in the same
+    # code section above.
+    recv_sequence += 1
 
     if zlib_enabled and (msgid & 0x8000 != 0):
         # It was compressed.
