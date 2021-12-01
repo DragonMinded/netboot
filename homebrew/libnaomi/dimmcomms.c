@@ -25,7 +25,7 @@ static poke_call_t global_poke_hook = 0;
 int _gdb_has_response();
 int _gdb_check_address(uint32_t address);
 uint32_t _gdb_make_address();
-void _gdb_handle_command(uint32_t address, irq_state_t *cur_state);
+int _gdb_handle_command(uint32_t address, irq_state_t *cur_state);
 
 int check_has_dimm_inserted()
 {
@@ -35,10 +35,13 @@ int check_has_dimm_inserted()
     return 1;
 }
 
-void _dimm_command_handler(irq_state_t *cur_state)
+int _dimm_command_handler(irq_state_t *cur_state)
 {
     // Keep track of the top 8 bits of the address for peek/poke commands.
     static uint32_t base_address = 0;
+
+    // Keep track of halt status given GDB integration.
+    static int halt = 0;
 
     if ((HOLLY_EXTERNAL_IRQ_STATUS & HOLLY_EXTERNAL_INTERRUPT_DIMM_COMMS) != 0)
     {
@@ -188,7 +191,7 @@ void _dimm_command_handler(irq_state_t *cur_state)
                         /* Must check for GDB knock address. */
                         if ((address & 0x01FFFFFF) == (START_ADDR & 0x01FFFFFF) && _gdb_check_address(value))
                         {
-                            _gdb_handle_command(value & 0x00FFFFFF, cur_state);
+                            halt = _gdb_handle_command(value & 0x00FFFFFF, cur_state);
                         }
                         else
                         {
@@ -242,6 +245,9 @@ void _dimm_command_handler(irq_state_t *cur_state)
             } while ((HOLLY_EXTERNAL_IRQ_STATUS & HOLLY_EXTERNAL_INTERRUPT_DIMM_COMMS) != 0);
         }
     }
+
+    // Whether we should halt and poll or exit the IRQ handler after exiting this function.
+    return halt;
 }
 
 void _dimm_comms_init()

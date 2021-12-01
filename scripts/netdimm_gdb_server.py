@@ -89,29 +89,29 @@ def gdb_handle_packet(netdimm: NetDimm, knock_address: int, ringbuffer_address: 
         # an empty string, as the packet states.
         return True, b""
 
-    if packet[0:1] in {b"h", b"H", b"q", b"Q", b"g", b"G", b"m", b"M", b"?"}:
-        # Packet that should be handled by the Naomi. First, lay it down the packet
-        # itself so it can be read by the target.
-        netdimm.send_chunk(ringbuffer_address, struct.pack("<I", len(packet)) + packet)
+    # Packet that should be handled by the Naomi. First, lay it down the packet
+    # itself so it can be read by the target.
+    netdimm.send_chunk(ringbuffer_address, struct.pack("<I", len(packet)) + packet)
 
-        # Now, generate an interrupt on the target to handle the packet.
-        netdimm.poke(knock_address, PeekPokeTypeEnum.TYPE_LONG, target_make_crc(ringbuffer_address))
+    # Now, generate an interrupt on the target to handle the packet.
+    netdimm.poke(knock_address, PeekPokeTypeEnum.TYPE_LONG, target_make_crc(ringbuffer_address))
 
-        # Now, grab the location of the response.
-        loc = None
-        while loc is None:
-            loc = target_validate_crc(netdimm.peek(knock_address, PeekPokeTypeEnum.TYPE_LONG))
+    # Now, grab the location of the response.
+    loc = None
+    while loc is None:
+        loc = target_validate_crc(netdimm.peek(knock_address, PeekPokeTypeEnum.TYPE_LONG))
 
-        # Now, read the response itself.
-        valid, length = struct.unpack("<II", netdimm.receive_chunk(loc, 8))
-        if valid != 0 and length > 0:
-            return True, netdimm.receive_chunk(loc + 8, length)
-        elif valid != 0:
-            return True, b""
+    # Now, read the response itself.
+    valid, length = struct.unpack("<II", netdimm.receive_chunk(loc, 8))
+    if valid != 0 and length > 0:
+        if length == 0xFFFFFFFF:
+            return True, None
         else:
-            return False, None
-
-    return True, None
+            return True, netdimm.receive_chunk(loc + 8, length)
+    elif valid != 0:
+        return True, b""
+    else:
+        return False, None
 
 
 def main() -> int:
@@ -205,7 +205,13 @@ def main() -> int:
 
                         if data:
                             # Handle GDB protocol here.
-                            packet, valid = gdb_check_crc(data)
+                            if data == b"\x03":
+                                # Interrupt the host with a GDB halt.
+                                packet = b"?"
+                                valid = True
+                            else:
+                                packet, valid = gdb_check_crc(data)
+
                             if valid:
                                 if packet is None:
                                     raise Exception("Logic error!")
@@ -223,6 +229,11 @@ def main() -> int:
                                         if verbose:
                                             print("Sending positive acknowledgement")
                                         sock.send(b'+')
+
+                                    if packet == b"D":
+                                        # Remote requested to be detached, so we should hang up on them.
+                                        client_socket.close()
+                                        sockets.remove(client_socket)
                                 else:
                                     if verbose:
                                         print("Sending negative acknowledgement")

@@ -15,6 +15,9 @@
 static uint32_t saved_sr;
 static uint32_t saved_vbr;
 
+// Whether we're currently halted or not. This is for GDB debugging.
+static int halted;
+
 // Size we wish our stack to be.
 #define IRQ_STACK_SIZE 16384
 
@@ -143,7 +146,7 @@ uint32_t _irq_read_vbr();
 // Hardware drivers which need init/free after IRQ setup.
 void _dimm_comms_init();
 void _dimm_comms_free();
-void _dimm_command_handler(irq_state_t *cur_state);
+int _dimm_command_handler(irq_state_t *cur_state);
 void _vblank_init();
 void _vblank_free();
 
@@ -270,7 +273,7 @@ uint32_t _holly_interrupt(irq_state_t *cur_state)
 
         if ((requested & HOLLY_EXTERNAL_INTERRUPT_DIMM_COMMS) != 0)
         {
-            _dimm_command_handler(cur_state);
+            halted = _dimm_command_handler(cur_state);
             handled |= HOLLY_EXTERNAL_INTERRUPT_DIMM_COMMS;
             serviced |= HOLLY_SERVICED_DIMM_COMMS;
         }
@@ -344,6 +347,12 @@ void _irq_handler(uint32_t source)
         // External interrupts.
         irq_state = _irq_external_interrupt(irq_state);
     }
+
+    // Now, loop forever if we were requested to.
+    while (halted)
+    {
+        halted = _dimm_command_handler(irq_state);
+    }
 }
 
 void _irq_init()
@@ -360,6 +369,9 @@ void _irq_init()
 
     // Now, make sure interrupts are disabled.
     irq_disable();
+
+    // Make sure we aren't halted.
+    halted = 0;
 
     // Initialize our stats.
     stats.last_source = 0;
