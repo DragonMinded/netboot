@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+#include <sys/signal.h>
 #include "naomi/interrupt.h"
 #include "naomi/video.h"
 #include "naomi/console.h"
@@ -17,6 +18,9 @@ static uint32_t saved_vbr;
 
 // Whether we're currently halted or not. This is for GDB debugging.
 static int halted;
+
+// Whether we're in the IRQ handler currently or not.
+static int in_interrupt;
 
 // Size we wish our stack to be.
 #define IRQ_STACK_SIZE 16384
@@ -46,11 +50,26 @@ static char exception_buffer[1024];
 // Statistics about the interrupt system.
 static irq_stats_t stats;
 
-void _irq_display_exception(irq_state_t *cur_state, char *failure, int code)
+// Prototype for passing the signal on to GDB if it connects.
+void _gdb_set_haltreason(int reason);
+
+// Prototype for halting the system with a GDB breakpoint.
+int _gdb_user_halt(irq_state_t *cur_state);
+
+// Prototype for polling DIMM commands so we can keep the communication
+// channel open even in a halted state. This is so GDB can connect and
+// debug us properly.
+int _dimm_command_handler(int halted, irq_state_t *cur_state);
+
+void _irq_display_exception(int signal, irq_state_t *cur_state, char *failure, int code)
 {
     // Threads should already be disabled, but lets be sure.
     uint32_t old_interrupts = irq_disable();
 
+    // Inform GDB why we halted.
+    _gdb_set_haltreason(signal);
+
+    // (Re-)init video to a known state to display the exception.
     video_init(VIDEO_COLOR_1555);
     console_set_visible(0);
     video_set_background_color(rgb(48, 0, 0));
@@ -75,15 +94,51 @@ void _irq_display_exception(irq_state_t *cur_state, char *failure, int code)
     __video_draw_debug_text(32, 32, rgb(255, 255, 255), exception_buffer);
     video_display_on_vblank();
 
-    while( 1 ) { ; }
+    while( 1 )
+    {
+        halted = _dimm_command_handler(halted, cur_state);
+    }
 
     irq_restore(old_interrupts);
 }
 
+// Syscall for capturing registers if we need it.
+#define _irq_capture_regs() asm("trapa #254")
+
 void _irq_display_invariant(char *msg, char *failure, ...)
 {
-    // Threads should already be disabled, but lets be sure.
+    // Make sure that interrupts are already initialized. If not, we have no chance
+    // of capturing proper stack traces.
+    if (irq_state != 0)
+    {
+        // We only care to do anything below if we aren't in interrupt context. If
+        // we are, we already have the correct stack trace in irq_state so we don't
+        // need to do any gymnastics to get registers so GDB can perform backtraces.
+        if (!in_interrupt)
+        {
+            if (!_irq_is_disabled(_irq_get_sr()))
+            {
+                // Capture registers for backtraces to make sense if we were called
+                // in user context instead of interrupt context.
+                _irq_capture_regs();
+            }
+            else
+            {
+                // TODO: Technically if we disable interrupts and then call
+                // _irq_display_invariant() the stack trace and registers will be wrong.
+                // Maybe we should attempt to re-enable interrupts here, call the
+                // capture regs syscall and then let the below disable work? We can't
+                // possibly screw up any more than we already have, given that we're
+                // about to halt the system for good with an exception message.
+            }
+        }
+    }
+
+    // Threads should normally already be disabled, but lets be sure.
     uint32_t old_interrupts = irq_disable();
+
+    // Inform GDB why we halted.
+    _gdb_set_haltreason(SIGABRT);
 
     video_init(VIDEO_COLOR_1555);
     console_set_visible(0);
@@ -105,7 +160,15 @@ void _irq_display_invariant(char *msg, char *failure, ...)
 
     video_display_on_vblank();
 
-    while( 1 ) { ; }
+    while( 1 )
+    {
+        // This is a bit of a hack to get us the last used IRQ state. If we
+        // are in interrupt context, it will be accurate since we broke into
+        // IRQ by setting the state. If we are outside of interrupt context,
+        // it will be the last context switch which shold have happened at
+        // the beginning of this function, so it will be accurate enough.
+        halted = _dimm_command_handler(halted, irq_state);
+    }
 
     irq_restore(old_interrupts);
 }
@@ -120,14 +183,64 @@ irq_state_t * _irq_general_exception(irq_state_t *cur_state)
         {
             // TRAPA, AKA syscall exception.
             unsigned int which = ((TRA) >> 2) & 0xFF;
-            cur_state = _syscall_trapa(cur_state, which);
-
+            if (which == 254)
+            {
+                // We don't need to do anything here, this is just an interrupt
+                // jump to capture registers of the calling process.
+            }
+            else if (which == 255)
+            {
+                // We should jump into GDB mode and halt, since we were requested
+                // to do so by the breakpoint trap call.
+                halted = _gdb_user_halt(cur_state);
+            }
+            else
+            {
+                // Handle syscall using our microkernel.
+                cur_state = _syscall_trapa(cur_state, which);
+            }
+            break;
+        }
+        case IRQ_EVENT_MEMORY_READ_ERROR:
+        {
+            // Instruction address or memory read address error.
+            _irq_display_exception(SIGSEGV, cur_state, "memory read address exception", EXPEVT);
+            break;
+        }
+        case IRQ_EVENT_MEMORY_WRITE_ERROR:
+        {
+            // Memory write address error.
+            _irq_display_exception(SIGSEGV, cur_state, "memory write address exception", EXPEVT);
+            break;
+        }
+        case IRQ_EVENT_FPU_EXCEPTION:
+        {
+            // Floating point unit exception.
+            _irq_display_exception(SIGFPE, cur_state, "floating point exception", EXPEVT);
+            break;
+        }
+        case IRQ_EVENT_ILLEGAL_INSTRUCTION:
+        {
+            // Illegal instruction.
+            _irq_display_exception(SIGILL, cur_state, "illegal instruction", EXPEVT);
+            break;
+        }
+        case IRQ_EVENT_ILLEGAL_SLOT_INSTRUCTION:
+        {
+            // Illegal branch delay instruction.
+            _irq_display_exception(SIGILL, cur_state, "illegal branch slot instruction", EXPEVT);
+            break;
+        }
+        case IRQ_EVENT_NMI:
+        {
+            // Non-maskable interrupt, did we ask for this?
+            _irq_display_exception(SIGINT, cur_state, "NMI interrupt fired", EXPEVT);
             break;
         }
         default:
         {
-            // Empty handler.
-            _irq_display_exception(cur_state, "uncaught general exception", EXPEVT);
+            // Empty handler, unknown exception.
+            _irq_display_exception(SIGINT, cur_state, "uncaught general exception", EXPEVT);
             break;
         }
     }
@@ -146,7 +259,6 @@ uint32_t _irq_read_vbr();
 // Hardware drivers which need init/free after IRQ setup.
 void _dimm_comms_init();
 void _dimm_comms_free();
-int _dimm_command_handler(irq_state_t *cur_state);
 void _vblank_init();
 void _vblank_free();
 
@@ -273,7 +385,7 @@ uint32_t _holly_interrupt(irq_state_t *cur_state)
 
         if ((requested & HOLLY_EXTERNAL_INTERRUPT_DIMM_COMMS) != 0)
         {
-            halted = _dimm_command_handler(cur_state);
+            halted = _dimm_command_handler(halted, cur_state);
             handled |= HOLLY_EXTERNAL_INTERRUPT_DIMM_COMMS;
             serviced |= HOLLY_SERVICED_DIMM_COMMS;
         }
@@ -323,7 +435,7 @@ irq_state_t * _irq_external_interrupt(irq_state_t *cur_state)
         default:
         {
             // Empty handler.
-            _irq_display_exception(cur_state, "uncaught external interrupt", INTEVT);
+            _irq_display_exception(SIGINT, cur_state, "uncaught external interrupt", INTEVT);
             break;
         }
     }
@@ -334,6 +446,10 @@ irq_state_t * _irq_external_interrupt(irq_state_t *cur_state)
 
 void _irq_handler(uint32_t source)
 {
+    // Mark that we're in interrupt context.
+    in_interrupt = 1;
+
+    // Keep track of stats for debugging purposes.
     stats.last_source = source;
     stats.num_interrupts ++;
 
@@ -351,8 +467,11 @@ void _irq_handler(uint32_t source)
     // Now, loop forever if we were requested to.
     while (halted)
     {
-        halted = _dimm_command_handler(irq_state);
+        halted = _dimm_command_handler(halted, irq_state);
     }
+
+    // No longer need to mark this.
+    in_interrupt = 0;
 }
 
 void _irq_init()
@@ -372,6 +491,7 @@ void _irq_init()
 
     // Make sure we aren't halted.
     halted = 0;
+    in_interrupt = 0;
 
     // Initialize our stats.
     stats.last_source = 0;

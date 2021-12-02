@@ -22,10 +22,10 @@ static peek_call_t global_peek_hook = 0;
 static poke_call_t global_poke_hook = 0;
 
 // Prototypes for GDB functionality.
-int _gdb_has_response();
 int _gdb_check_address(uint32_t address);
-uint32_t _gdb_make_address();
 int _gdb_handle_command(uint32_t address, irq_state_t *cur_state);
+int _gdb_has_response();
+uint32_t _gdb_handle_response();
 
 int check_has_dimm_inserted()
 {
@@ -35,13 +35,10 @@ int check_has_dimm_inserted()
     return 1;
 }
 
-int _dimm_command_handler(irq_state_t *cur_state)
+int _dimm_command_handler(int halted, irq_state_t *cur_state)
 {
     // Keep track of the top 8 bits of the address for peek/poke commands.
     static uint32_t base_address = 0;
-
-    // Keep track of halt status given GDB integration.
-    static int halt = 0;
 
     if ((HOLLY_EXTERNAL_IRQ_STATUS & HOLLY_EXTERNAL_INTERRUPT_DIMM_COMMS) != 0)
     {
@@ -122,7 +119,7 @@ int _dimm_command_handler(irq_state_t *cur_state)
                         /* Mask off the upper bits since the net dimm sets the base address unpredictably. */
                         if ((address & 0x01FFFFFF) == (START_ADDR & 0x01FFFFFF) && _gdb_has_response())
                         {
-                            uint32_t data = _gdb_make_address();
+                            uint32_t data = _gdb_handle_response();
                             paramh = (data >> 16) & 0xFFFF;
                             paraml = data & 0xFFFF;
                         }
@@ -191,7 +188,7 @@ int _dimm_command_handler(irq_state_t *cur_state)
                         /* Must check for GDB knock address. */
                         if ((address & 0x01FFFFFF) == (START_ADDR & 0x01FFFFFF) && _gdb_check_address(value))
                         {
-                            halt = _gdb_handle_command(value & 0x00FFFFFF, cur_state);
+                            halted = _gdb_handle_command(value & 0x00FFFFFF, cur_state);
                         }
                         else
                         {
@@ -247,7 +244,7 @@ int _dimm_command_handler(irq_state_t *cur_state)
     }
 
     // Whether we should halt and poll or exit the IRQ handler after exiting this function.
-    return halt;
+    return halted;
 }
 
 void _dimm_comms_init()

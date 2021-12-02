@@ -72,6 +72,24 @@ def target_validate_crc(addr: int) -> Optional[int]:
         return None
 
 
+def gdb_peek_packet(netdimm: NetDimm, knock_address: int, ringbuffer_address: int) -> Optional[bytes]:
+    loc = target_validate_crc(netdimm.peek(knock_address, PeekPokeTypeEnum.TYPE_LONG))
+    if loc is None:
+        return None
+
+    # Now, read the response itself.
+    valid, length = struct.unpack("<II", netdimm.receive_chunk(loc, 8))
+    if valid != 0 and length > 0:
+        if length == 0xFFFFFFFF:
+            return None
+        else:
+            return netdimm.receive_chunk(loc + 8, length)
+    elif valid != 0:
+        return b""
+    else:
+        return None
+
+
 def gdb_handle_packet(netdimm: NetDimm, knock_address: int, ringbuffer_address: int, packet: bytes) -> Tuple[bool, Optional[bytes]]:
     if packet[:11] == b"qSupported:":
         supported_options = [x.decode('ascii') for x in packet[11:].split(b";")]  # noqa
@@ -205,6 +223,8 @@ def main() -> int:
 
                         if data:
                             # Handle GDB protocol here.
+                            packet: Optional[bytes]
+
                             if data == b"\x03":
                                 # Interrupt the host with a GDB halt.
                                 packet = b"?"
@@ -232,8 +252,11 @@ def main() -> int:
 
                                     if packet == b"D":
                                         # Remote requested to be detached, so we should hang up on them.
+                                        if client_socket is None:
+                                            raise Exception("Logic error!")
                                         client_socket.close()
                                         sockets.remove(client_socket)
+                                        client_socket = None
                                 else:
                                     if verbose:
                                         print("Sending negative acknowledgement")
@@ -245,6 +268,14 @@ def main() -> int:
                     else:
                         sock.close()
                         sockets.remove(sock)
+
+            # Process any out of band packets (entered breakpoint on host).
+            if client_socket is not None:
+                out_of_band = gdb_peek_packet(netdimm, knock_loc, buffer_loc)
+                if out_of_band is not None:
+                    if verbose:
+                        print(f"Sending packet \"{out_of_band.decode('latin1')}\"")
+                    sock.send(b'+' + gdb_make_crc(out_of_band))
 
             # Process any incoming stdio/stderr message from the target.
             if args.enable_stdio_hooks:

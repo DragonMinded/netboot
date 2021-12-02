@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <sys/signal.h>
 #include "naomi/interrupt.h"
 #include "naomi/thread.h"
 #include "naomi/timer.h"
@@ -1104,7 +1105,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
             }
             else
             {
-                _irq_display_exception(current, "cannot locate thread object", which);
+                _irq_display_exception(SIGABRT, current, "cannot locate thread object", which);
             }
             break;
         }
@@ -1163,7 +1164,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
             }
             else
             {
-                _irq_display_exception(current, "cannot locate thread object", which);
+                _irq_display_exception(SIGABRT, current, "cannot locate thread object", which);
             }
             break;
         }
@@ -1175,7 +1176,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
             if (!myself)
             {
                 // Literally should never happen.
-                _irq_display_exception(current, "cannot locate thread object", which);
+                _irq_display_exception(SIGABRT, current, "cannot locate thread object", which);
             }
             else
             {
@@ -1230,7 +1231,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
             }
             else
             {
-                _irq_display_exception(current, "cannot locate thread object", which);
+                _irq_display_exception(SIGABRT, current, "cannot locate thread object", which);
             }
 
             // Wake up any other threads that were waiting on this thread for a join.
@@ -1266,7 +1267,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
                     else
                     {
                         // Should never happen.
-                        _irq_display_exception(current, "cannot locate thread object", which);
+                        _irq_display_exception(SIGABRT, current, "cannot locate thread object", which);
                     }
                 }
             }
@@ -1277,7 +1278,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
                 char *msg = current->gp_regs[5] == SEM_TYPE_SEMAPHORE ?
                     "attempt acquire uninitialized semaphore" :
                     "attempt acquire uninitialized mutex";
-                _irq_display_exception(current, msg, id);
+                _irq_display_exception(SIGABRT, current, msg, id);
             }
 
             break;
@@ -1298,7 +1299,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
                     char *msg = current->gp_regs[5] == SEM_TYPE_SEMAPHORE ?
                         "attempt release unowned semaphore" :
                         "attempt release unowned mutex";
-                    _irq_display_exception(current, msg, id);
+                    _irq_display_exception(SIGABRT, current, msg, id);
                 }
 
                 // Wake up any other threads that were waiting on this thread for a join.
@@ -1314,7 +1315,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
                 char *msg = current->gp_regs[5] == SEM_TYPE_SEMAPHORE ?
                     "attempt release uninitialized semaphore" :
                     "attempt release uninitialized mutex";
-                _irq_display_exception(current, msg, id);
+                _irq_display_exception(SIGABRT, current, msg, id);
             }
 
             break;
@@ -1337,7 +1338,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
             else
             {
                 // Should never happen.
-                _irq_display_exception(current, "cannot locate thread object", which);
+                _irq_display_exception(SIGABRT, current, "cannot locate thread object", which);
             }
             break;
         }
@@ -1356,7 +1357,7 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
             else
             {
                 // Should never happen.
-                _irq_display_exception(current, "cannot locate thread object", which);
+                _irq_display_exception(SIGABRT, current, "cannot locate thread object", which);
             }
             break;
         }
@@ -1374,13 +1375,13 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
                 }
                 else
                 {
-                    _irq_display_exception(current, "unrecognized IRQ wait value %d", waiting_irq);
+                    _irq_display_exception(SIGABRT, current, "unrecognized IRQ wait value", waiting_irq);
                 }
             }
             else
             {
                 // Should never happen.
-                _irq_display_exception(current, "cannot locate thread object", which);
+                _irq_display_exception(SIGABRT, current, "cannot locate thread object", which);
             }
             break;
         }
@@ -1411,19 +1412,31 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
                 }
                 else
                 {
-                    _irq_display_exception(current, "unrecognized IRQ wait value %d", waiting_irq);
+                    _irq_display_exception(SIGABRT, current, "unrecognized IRQ wait value", waiting_irq);
                 }
             }
             else
             {
                 // Should never happen.
-                _irq_display_exception(current, "cannot locate thread object", which);
+                _irq_display_exception(SIGABRT, current, "cannot locate thread object", which);
             }
+            break;
+        }
+        case 254:
+        {
+            // Reserved for a fake context switch just to grab the registers
+            // at the point where this was called. We should never get here.
+            break;
+        }
+        case 255:
+        {
+            // Reserved for jumping into GDB context in a future update. Much
+            // like the above, we should never get here.
             break;
         }
         default:
         {
-            _irq_display_exception(current, "unrecognized syscall", which);
+            _irq_display_exception(SIGABRT, current, "unrecognized syscall", which);
             break;
         }
     }

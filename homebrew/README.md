@@ -21,4 +21,3 @@ TODOs
 =====
  - Use PowerVR accelerated texture commands instead of raw framebuffer.
  - Address various TODOs in libnaomi.
- - Incorporate GDB handler into exception and invariant screens.
