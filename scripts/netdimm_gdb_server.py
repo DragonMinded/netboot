@@ -34,6 +34,10 @@ def gdb_check_crc(data: bytes) -> Tuple[Optional[bytes], bool]:
             checksum += byte
         checksum = checksum % 256
 
+        # TODO: If the packet is good, we should decode any
+        # run-length encoding or escaped bytes before returning
+        # it here.
+
         # Verify the CRC itself.
         if checksum == crcint:
             return packet, True
@@ -51,6 +55,9 @@ def _hex(val: int) -> bytes:
 
 
 def gdb_make_crc(packet: bytes) -> bytes:
+    # TODO: Before checksumming the packet, we should perform
+    # any needed run-length encoding or byte escaping here.
+
     checksum = 0
     for byte in packet:
         checksum += byte
