@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdint.h>
 #include "naomi/dimmcomms.h"
-#include "naomi/timer.h"
 #include "naomi/interrupt.h"
 #include "naomi/thread.h"
 #include "holly.h"
@@ -214,11 +213,6 @@ int _dimm_command_handler(int halted, irq_state_t *cur_state)
                     break;
                 }
             }
-
-            // I don't know why this wait is necessary. If I remove it, the net dimm
-            // flat out never receives responses and won't reboot homebrew when sending
-            // a new image.
-            timer_wait(5);
 
             // Acknowledge the command, return the response.
             *NAOMI_DIMM_COMMAND = (dimm_command & CONST_DIMM_COMMAND_MASK) | (retval & 0xFF);
