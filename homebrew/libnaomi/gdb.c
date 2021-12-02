@@ -524,6 +524,11 @@ int _gdb_handle_command(uint32_t address, irq_state_t *cur_state)
         }
     }
 
+    // TODO: The current GDB stub we have implemented doesn't support setting
+    // memory or registers, nor does it support stepping through code. The
+    // former is probably going to be left as-is until somebody truly needs it.
+    // The latter will be implemented shortly.
+
     // Unrecognized packet, so send a negative response.
     _gdb_send_invalid_response();
 
