@@ -276,6 +276,35 @@ int _gdb_handle_command(uint32_t address, irq_state_t *cur_state)
 
             break;
         }
+        case 'C':
+        {
+            // Continue thread with signal, ignore the signal.
+            long int threadid = threadids[OPERATION_CONTINUE];
+            if (threadid == -1)
+            {
+                // We don't support continuing *ALL* threads.
+                _gdb_send_valid_response("E%02X", EINVAL);
+                return 1;
+            }
+            else if (threadid == 0)
+            {
+                // Make sure that, unless an exception occurs, the next halt reason
+                // will be a user trap exception.
+                haltreason = SIGTRAP;
+
+                // Wake up and continue processing, no longer halt in GDB. Don't send a packet.
+                _gdb_send_acknowledge_response();
+                return 0;
+            }
+            else
+            {
+                // Continue specific thread, not currently supported.
+                _gdb_send_valid_response("E%02X", EINVAL);
+                return 1;
+            }
+
+            break;
+        }
         case 'D':
         {
             // Detach from debugging.

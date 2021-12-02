@@ -97,6 +97,11 @@ void _irq_display_exception(int signal, irq_state_t *cur_state, char *failure, i
     while( 1 )
     {
         halted = _dimm_command_handler(halted, cur_state);
+        if (halted == 0)
+        {
+            // User continued, not valid, so re-raise the exception.
+            _gdb_set_haltreason(signal);
+        }
     }
 
     irq_restore(old_interrupts);
@@ -168,6 +173,11 @@ void _irq_display_invariant(char *msg, char *failure, ...)
         // it will be the last context switch which shold have happened at
         // the beginning of this function, so it will be accurate enough.
         halted = _dimm_command_handler(halted, irq_state);
+        if (halted == 0)
+        {
+            // User continued, not valid, so re-raise the exception.
+            _gdb_set_haltreason(SIGABRT);
+        }
     }
 
     irq_restore(old_interrupts);
