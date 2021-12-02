@@ -283,12 +283,12 @@ uint32_t _holly_interrupt(irq_state_t *cur_state)
         uint32_t handled = 0;
 
         // First, check for any error status.
-        if (requested & HOLLY_INTERNAL_INTERRUPT_ERROR)
+        if (requested & HOLLY_INTERNAL_INTERRUPT_CHECK_ERROR)
         {
-            // This cannot be cleared by writing a 1 to it. So we must figure
-            // out what the error was and clear that.
-            HOLLY_ERROR_IRQ_STATUS = HOLLY_ERROR_IRQ_STATUS;
-            handled |= HOLLY_INTERNAL_INTERRUPT_ERROR;
+            // If we were interested in ignoring certain errors, we could do so here
+            // by setting the corresponding error bit to 1 inside HOLLY_ERROR_IRQ_STATUS
+            // to clear the error and move on.
+            _irq_display_exception(SIGINT, cur_state, "holly error interrupt fired", HOLLY_ERROR_IRQ_STATUS);
         }
 
         // Now, ignore any external interrupt set bits, since we will be checking

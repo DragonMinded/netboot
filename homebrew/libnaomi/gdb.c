@@ -234,11 +234,13 @@ int _gdb_handle_command(uint32_t address, irq_state_t *cur_state)
             if (strcmp(cmdbuf, "vCont?") == 0)
             {
                 // Query to get what supported continue actions exist.
-                _gdb_send_valid_response("vCont;c;s;t");
+                _gdb_send_valid_response("vCont;c;s");
                 return 1;
             }
 
-            break;
+            // All v packets that are unrecognized should, by spec, return "".
+            _gdb_send_valid_response("");
+            return 1;
         }
         case 'c':
         {
@@ -437,15 +439,17 @@ int _gdb_handle_command(uint32_t address, irq_state_t *cur_state)
                 // Copy registers into the response in the right order according to regformats/reg-sh.dat.
                 for (unsigned int i = 0; i < 16; i++)
                 {
+                    // Registers 0-15 in GDB mapping language.
                     sprintf(regbuf + strlen(regbuf), "%08lX", bs(state->gp_regs[i]));
                 }
 
-                // Copy special registers.
+                // Copy special registers (registers 16-24 in GDB mapping language).
                 sprintf(regbuf + strlen(regbuf), "%08lX", bs(state->pc));
                 sprintf(regbuf + strlen(regbuf), "%08lX", bs(state->pr));
                 sprintf(regbuf + strlen(regbuf), "%08lX", bs(state->gbr));
                 sprintf(regbuf + strlen(regbuf), "%08lX", bs(state->vbr));
                 sprintf(regbuf + strlen(regbuf), "%08lX", bs(state->mach));
+                sprintf(regbuf + strlen(regbuf), "%08lX", bs(state->macl));
                 sprintf(regbuf + strlen(regbuf), "%08lX", bs(state->sr));
                 sprintf(regbuf + strlen(regbuf), "%08lX", bs(state->fpul));
                 sprintf(regbuf + strlen(regbuf), "%08lX", bs(state->fpscr));
@@ -453,11 +457,204 @@ int _gdb_handle_command(uint32_t address, irq_state_t *cur_state)
                 // Copy floating point registers.
                 for (unsigned int i = 0; i < 16; i++)
                 {
+                    // Registers 25-40 in GDB mapping language.
                     sprintf(regbuf + strlen(regbuf), "%08lX", bs(state->fr[i]));
+                }
+
+                // According to sh-tdep.h, 41 is SSR and 42 is SPC which are really only
+                // available inside interrupt context. We don't allow debugging inside
+                // the kernel, so we don't return these registers.
+                sprintf(regbuf + strlen(regbuf), "xxxxxxxx");
+                sprintf(regbuf + strlen(regbuf), "xxxxxxxx");
+
+                // 43-50 are bank 0 general purpose registers R0-R7, we don't support
+                // changing banks, so we ignore those.
+                for (unsigned int i = 0; i < 8; i++)
+                {
+                    sprintf(regbuf + strlen(regbuf), "xxxxxxxx");
+                }
+
+                // 51-58 are bank 1 general purpose registers R0-R7, we don't support
+                // changing banks, so we ignore those.
+                for (unsigned int i = 0; i < 8; i++)
+                {
+                    sprintf(regbuf + strlen(regbuf), "xxxxxxxx");
                 }
 
                 _gdb_send_valid_response(regbuf);
                 return 1;
+            }
+
+            break;
+        }
+        case 'p':
+        {
+            // Read single register.
+            long int threadid = threadids[OPERATION_REGISTERS];
+            irq_state_t *state = 0;
+
+            if (threadid == -1)
+            {
+                // We don't support getting registers from *ALL* threads.
+                state = 0;
+            }
+            else if (threadid == 0)
+            {
+                // Read from current thread.
+                state = cur_state;
+            }
+            else
+            {
+                // Read from particular thread.
+                state = _thread_get_regs(threadid);
+            }
+
+            if (state == 0)
+            {
+                _gdb_send_valid_response("E%02X", EINVAL);
+                return 1;
+            }
+            else
+            {
+                long int whichreg = strtol(&cmdbuf[1], NULL, 16);
+                switch(whichreg)
+                {
+                    case 0:
+                    case 1:
+                    case 2:
+                    case 3:
+                    case 4:
+                    case 5:
+                    case 6:
+                    case 7:
+                    case 8:
+                    case 9:
+                    case 10:
+                    case 11:
+                    case 12:
+                    case 13:
+                    case 14:
+                    case 15:
+                    {
+                        // GP register.
+                        _gdb_send_valid_response("%08lX", bs(state->gp_regs[whichreg]));
+                        return 1;
+                    }
+                    case 16:
+                    {
+                        // PC register.
+                        _gdb_send_valid_response("%08lX", bs(state->pc));
+                        return 1;
+                    }
+                    case 17:
+                    {
+                        // PR register.
+                        _gdb_send_valid_response("%08lX", bs(state->pr));
+                        return 1;
+                    }
+                    case 18:
+                    {
+                        // GBR register.
+                        _gdb_send_valid_response("%08lX", bs(state->gbr));
+                        return 1;
+                    }
+                    case 19:
+                    {
+                        // VBR register.
+                        _gdb_send_valid_response("%08lX", bs(state->vbr));
+                        return 1;
+                    }
+                    case 20:
+                    {
+                        // MACH register.
+                        _gdb_send_valid_response("%08lX", bs(state->mach));
+                        return 1;
+                    }
+                    case 21:
+                    {
+                        // MACL register.
+                        _gdb_send_valid_response("%08lX", bs(state->macl));
+                        return 1;
+                    }
+                    case 22:
+                    {
+                        // SR register.
+                        _gdb_send_valid_response("%08lX", bs(state->sr));
+                        return 1;
+                    }
+                    case 23:
+                    {
+                        // FPUL register.
+                        _gdb_send_valid_response("%08lX", bs(state->fpul));
+                        return 1;
+                    }
+                    case 24:
+                    {
+                        // FPSCR register.
+                        _gdb_send_valid_response("%08lX", bs(state->fpscr));
+                        return 1;
+                    }
+                    case 25:
+                    case 26:
+                    case 27:
+                    case 28:
+                    case 29:
+                    case 30:
+                    case 31:
+                    case 32:
+                    case 33:
+                    case 34:
+                    case 35:
+                    case 36:
+                    case 37:
+                    case 38:
+                    case 39:
+                    case 40:
+                    {
+                        // FPU register.
+                        _gdb_send_valid_response("%08lX", bs(state->fr[whichreg - 25]));
+                        return 1;
+                    }
+                    case 41:
+                    case 42:
+                    {
+                        // SSR/SPC register, we don't capture this.
+                        _gdb_send_valid_response("xxxxxxxx");
+                        return 1;
+                    }
+                    case 43:
+                    case 44:
+                    case 45:
+                    case 46:
+                    case 47:
+                    case 48:
+                    case 49:
+                    case 50:
+                    {
+                        // Register Bank 0 R0-R7, we don't capture these.
+                        _gdb_send_valid_response("xxxxxxxx");
+                        return 1;
+                    }
+                    case 51:
+                    case 52:
+                    case 53:
+                    case 54:
+                    case 55:
+                    case 56:
+                    case 57:
+                    case 58:
+                    {
+                        // Register Bank 1 R0-R7, we don't capture these.
+                        _gdb_send_valid_response("xxxxxxxx");
+                        return 1;
+                    }
+                    default:
+                    {
+                        // Unrecognized register.
+                        _gdb_send_valid_response("E%02X", EINVAL);
+                        return 1;
+                    }
+                }
             }
 
             break;

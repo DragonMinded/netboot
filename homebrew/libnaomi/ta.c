@@ -186,8 +186,8 @@ uint32_t _ta_set_target(struct ta_buffers *buffers, int tile_width, int tile_hei
     unsigned int objbuf = ((unsigned int)buffers->overflow_buffer) & 0x00ffffff;
 
     /* Reset TA */
-    videobase[POWERVR2_RESET] = 1;
-    videobase[POWERVR2_RESET] = 0;
+    videobase[POWERVR2_RESET] = 0x3;
+    videobase[POWERVR2_RESET] = 0x0;
 
     /* Set the tile buffer base in the TA, grows downward. */
     videobase[POWERVR2_OBJBUF_BASE] = objbuf + buffers->overflow_buffer_size;
@@ -618,9 +618,9 @@ void _ta_init()
     // Set up unknown FPU parameters
     videobase[POWERVR2_TA_FPU_PARAMS] = 0x0027df77;
 
-    // Reset the TA
-    videobase[POWERVR2_RESET] = 1;
-    videobase[POWERVR2_RESET] = 0;
+    // Reset the TA and PVR.
+    videobase[POWERVR2_RESET] = 0x3;
+    videobase[POWERVR2_RESET] = 0x0;
 
     // Set stride width to zero for stride-based textures
     videobase[POWERVR2_TSP_CFG] = 0x0;

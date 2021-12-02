@@ -274,7 +274,7 @@ void video_init(int colordepth)
     videobase[POWERVR2_VRAM_CFG3] = 0x15D1C955;
     videobase[POWERVR2_VRAM_CFG1] = 0x00000020;
 
-    // Reset video.
+    // Make sure video is not in reset.
     videobase[POWERVR2_RESET] = 0;
 
     // Set border color to black.
