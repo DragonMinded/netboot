@@ -307,36 +307,71 @@ uint32_t _holly_interrupt(irq_state_t *cur_state)
             HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_MAPLE_DMA_FINISHED;
             handled |= HOLLY_INTERNAL_INTERRUPT_MAPLE_DMA_FINISHED;
         }
-        if (requested & HOLLY_INTERNAL_INTERRUPT_RENDER_FINISHED)
+        if (requested & HOLLY_INTERNAL_INTERRUPT_TSP_RENDER_FINISHED)
         {
-            // Mark down which of the bits we actually got.
-            if (requested & HOLLY_INTERNAL_INTERRUPT_TSP_RENDER_FINISHED)
-            {
-                serviced |= HOLLY_SERVICED_TSP_FINISHED;
-            }
-
             // Request to clear the interrupt.
-            HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_RENDER_FINISHED;
-            handled |= HOLLY_INTERNAL_INTERRUPT_RENDER_FINISHED;
+            HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_TSP_RENDER_FINISHED;
+            handled |= HOLLY_INTERNAL_INTERRUPT_TSP_RENDER_FINISHED;
+
+            // Signal to the thread library to wake any waiting threads.
+            serviced |= HOLLY_SERVICED_TSP_FINISHED;
         }
-        if (requested & HOLLY_INTERNAL_INTERRUPT_TRANSFER_FINISHED)
+        if (requested & HOLLY_INTERNAL_INTERRUPT_ISP_RENDER_FINISHED)
         {
-            if (requested & HOLLY_INTERNAL_INTERRUPT_TRANSFER_OPAQUE_FINISHED)
-            {
-                serviced |= HOLLY_SERVICED_TA_LOAD_OPAQUE_FINISHED;
-            }
-            if (requested & HOLLY_INTERNAL_INTERRUPT_TRANSFER_TRANSPARENT_FINISHED)
-            {
-                serviced |= HOLLY_SERVICED_TA_LOAD_TRANSPARENT_FINISHED;
-            }
-            if (requested & HOLLY_INTERNAL_INTERRUPT_TRANSFER_PUNCHTHRU_FINISHED)
-            {
-                serviced |= HOLLY_SERVICED_TA_LOAD_PUNCHTHRU_FINISHED;
-            }
-
             // Request to clear the interrupt.
-            HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_TRANSFER_FINISHED;
-            handled |= HOLLY_INTERNAL_INTERRUPT_TRANSFER_FINISHED;
+            HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_ISP_RENDER_FINISHED;
+            handled |= HOLLY_INTERNAL_INTERRUPT_ISP_RENDER_FINISHED;
+        }
+        if (requested & HOLLY_INTERNAL_INTERRUPT_VIDEO_RENDER_FINISHED)
+        {
+            // Request to clear the interrupt.
+            HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_VIDEO_RENDER_FINISHED;
+            handled |= HOLLY_INTERNAL_INTERRUPT_VIDEO_RENDER_FINISHED;
+        }
+        if (requested & HOLLY_INTERNAL_INTERRUPT_TRANSFER_OPAQUE_FINISHED)
+        {
+            // Request to clear the interrupt.
+            HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_TRANSFER_OPAQUE_FINISHED;
+            handled |= HOLLY_INTERNAL_INTERRUPT_TRANSFER_OPAQUE_FINISHED;
+
+            // Notify the thread system to wake any waiting threads.
+            serviced |= HOLLY_SERVICED_TA_LOAD_OPAQUE_FINISHED;
+        }
+        if (requested & HOLLY_INTERNAL_INTERRUPT_TRANSFER_OPAQUE_MODIFIER_FINISHED)
+        {
+            // Request to clear the interrupt.
+            HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_TRANSFER_OPAQUE_MODIFIER_FINISHED;
+            handled |= HOLLY_INTERNAL_INTERRUPT_TRANSFER_OPAQUE_MODIFIER_FINISHED;
+        }
+        if (requested & HOLLY_INTERNAL_INTERRUPT_TRANSFER_TRANSPARENT_FINISHED)
+        {
+            // Request to clear the interrupt.
+            HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_TRANSFER_TRANSPARENT_FINISHED;
+            handled |= HOLLY_INTERNAL_INTERRUPT_TRANSFER_TRANSPARENT_FINISHED;
+
+            // Notify the thread system to wake any waiting threads.
+            serviced |= HOLLY_SERVICED_TA_LOAD_TRANSPARENT_FINISHED;
+        }
+        if (requested & HOLLY_INTERNAL_INTERRUPT_TRANSFER_TRANSPARENT_MODIFIER_FINISHED)
+        {
+            // Request to clear the interrupt.
+            HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_TRANSFER_TRANSPARENT_MODIFIER_FINISHED;
+            handled |= HOLLY_INTERNAL_INTERRUPT_TRANSFER_TRANSPARENT_MODIFIER_FINISHED;
+        }
+        if (requested & HOLLY_INTERNAL_INTERRUPT_TRANSFER_PUNCHTHRU_FINISHED)
+        {
+            // Request to clear the interrupt.
+            HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_TRANSFER_PUNCHTHRU_FINISHED;
+            handled |= HOLLY_INTERNAL_INTERRUPT_TRANSFER_PUNCHTHRU_FINISHED;
+
+            // Notify the thread system to wake any waiting threads.
+            serviced |= HOLLY_SERVICED_TA_LOAD_PUNCHTHRU_FINISHED;
+        }
+        if (requested & HOLLY_INTERNAL_INTERRUPT_TRANSFER_YUV_FINISHED)
+        {
+            // Request to clear the interrupt.
+            HOLLY_INTERNAL_IRQ_STATUS = HOLLY_INTERNAL_INTERRUPT_TRANSFER_YUV_FINISHED;
+            handled |= HOLLY_INTERNAL_INTERRUPT_TRANSFER_YUV_FINISHED;
         }
         if (requested & HOLLY_INTERNAL_INTERRUPT_MAPLE_VBLANK_FINISHED)
         {

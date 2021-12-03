@@ -95,7 +95,8 @@ void _enter()
     register uint32_t boot_mode asm("r3");
     uint32_t _boot_mode = boot_mode;
 
-    // Invalidate cache, as is done in real games.
+    // Invalidate cache, as is done in real games. This requires that the
+    // cache be setup which it is in sh-crt0.s.
     CCR = 0x905;
 
     // Set up system DMA to allow for things like Maple to operate. This
