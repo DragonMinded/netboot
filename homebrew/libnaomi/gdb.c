@@ -713,6 +713,47 @@ int _gdb_handle_command(uint32_t address, irq_state_t *cur_state)
 
             break;
         }
+        case 'X':
+        {
+            // Write to memory (binary data provided).
+            char *commaloc = 0;
+            long int memloc = strtol(&cmdbuf[1], &commaloc, 16);
+
+            if (commaloc == 0)
+            {
+                _gdb_send_valid_response("E%02X", 1);
+                return 1;
+            }
+            if (commaloc[0] != ',')
+            {
+                _gdb_send_valid_response("E%02X", 2);
+                return 1;
+            }
+
+            char *colonloc = 0;
+            long int memsize = strtol(&commaloc[1], &colonloc, 16);
+
+            if (colonloc == 0)
+            {
+                _gdb_send_valid_response("E%02X", 3);
+                return 1;
+            }
+            if (colonloc[0] != ':')
+            {
+                _gdb_send_valid_response("E%02X", 4);
+                return 1;
+            }
+
+            uint8_t *dataloc = (uint8_t *)&colonloc[1];
+
+            for (long int i = 0; i < memsize; i++)
+            {
+                *((uint8_t *)(memloc + i)) = dataloc[i];
+            }
+
+            _gdb_send_valid_response("OK");
+            return 1;
+        }
         case '?':
         {
             // Query why we were stopped.
@@ -722,9 +763,8 @@ int _gdb_handle_command(uint32_t address, irq_state_t *cur_state)
     }
 
     // TODO: The current GDB stub we have implemented doesn't support setting
-    // memory or registers, nor does it support stepping through code. The
-    // former is probably going to be left as-is until somebody truly needs it.
-    // The latter will be implemented shortly.
+    // registers or setting memory through the "M" command. It also does not
+    // support stepping through code. Both will need to be fixed.
 
     // Unrecognized packet, so send a negative response.
     _gdb_send_invalid_response();
