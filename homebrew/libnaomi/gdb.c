@@ -162,6 +162,53 @@ uint32_t bs(uint32_t val)
     return ((val >> 24) & 0x000000FF) | ((val >> 8) & 0x0000FF00) | ((val << 8) & 0x00FF0000) | ((val << 24) & 0xFF000000);
 }
 
+unsigned int _gdb_hex2int(char **buffer, int size)
+{
+    unsigned int number = 0;
+
+    while(size > 0 && **buffer != 0)
+    {
+        // Grab the next digit, advance the buffer itself.
+        char digit = **buffer;
+        (*buffer)++;
+        size--;
+
+        // Calculate the number itself.
+        unsigned int newval = 0;
+
+        if (digit >= '0' && digit <= '9')
+        {
+            newval = digit - '0';
+        }
+        else if (digit >= 'a' && digit <= 'f')
+        {
+            newval = (digit - 'a') + 0xa;
+        }
+        else if (digit >= 'A' && digit <= 'F')
+        {
+            newval = (digit - 'A') + 0xA;
+        }
+
+        // Add the new value in
+        number = (number << 4) | newval;
+    }
+
+    // Return the final number.
+    return number;
+}
+
+unsigned int _gdb_hex2intdefault(char **buffer, int size, unsigned int def)
+{
+    if (**buffer == 0)
+    {
+        return def;
+    }
+    else
+    {
+        return _gdb_hex2int(buffer, size);
+    }
+}
+
 // Prototypes from the threading library for working out threads.
 uint32_t _thread_current_id(irq_state_t *cur_state);
 irq_state_t *_thread_get_regs(uint32_t threadid);
@@ -193,7 +240,7 @@ int _gdb_handle_command(uint32_t address, irq_state_t *cur_state)
         case 'H':
         {
             // Grab the thread ID itself.
-            long int threadid = strtol(&cmdbuf[2], NULL, 16);
+            unsigned int threadid = strtoul(&cmdbuf[2], NULL, 16);
             int recognized = 0;
 
             // Set thread for subsequent operations.
@@ -366,7 +413,7 @@ int _gdb_handle_command(uint32_t address, irq_state_t *cur_state)
             if (strncmp(cmdbuf, "qThreadExtraInfo,", 17) == 0)
             {
                 // Query extra info about a particular thread.
-                long int threadid = strtol(&cmdbuf[17], NULL, 16);
+                unsigned int threadid = strtoul(&cmdbuf[17], NULL, 16);
                 thread_info_t info;
                 thread_info(threadid, &info);
 
@@ -487,6 +534,71 @@ int _gdb_handle_command(uint32_t address, irq_state_t *cur_state)
 
             break;
         }
+        case 'G':
+        {
+            // Write registers.
+            long int threadid = threadids[OPERATION_REGISTERS];
+            irq_state_t *state = 0;
+
+            if (threadid == -1)
+            {
+                // We don't support getting registers from *ALL* threads.
+                state = 0;
+            }
+            else if (threadid == 0)
+            {
+                // Read from current thread.
+                state = cur_state;
+            }
+            else
+            {
+                // Read from particular thread.
+                state = _thread_get_regs(threadid);
+            }
+
+            if (state == 0)
+            {
+                _gdb_send_valid_response("E%02X", EINVAL);
+                return 1;
+            }
+            else
+            {
+                // Hex data follows, we must decode each register in order.
+                char *dataloc = &cmdbuf[1];
+
+                // Copy registers into the response in the right order according to regformats/reg-sh.dat.
+                for (unsigned int i = 0; i < 16; i++)
+                {
+                    // Registers 0-15 in GDB mapping language.
+                    state->gp_regs[i] = bs(_gdb_hex2intdefault(&dataloc, 8, state->gp_regs[i]));
+                }
+
+                // Copy special registers (registers 16-24 in GDB mapping language).
+                state->pc = bs(_gdb_hex2intdefault(&dataloc, 8, state->pc));
+                state->pr = bs(_gdb_hex2intdefault(&dataloc, 8, state->pr));
+                state->gbr = bs(_gdb_hex2intdefault(&dataloc, 8, state->gbr));
+                state->vbr = bs(_gdb_hex2intdefault(&dataloc, 8, state->vbr));
+                state->mach = bs(_gdb_hex2intdefault(&dataloc, 8, state->mach));
+                state->macl = bs(_gdb_hex2intdefault(&dataloc, 8, state->macl));
+                state->sr = bs(_gdb_hex2intdefault(&dataloc, 8, state->sr));
+                state->fpul = bs(_gdb_hex2intdefault(&dataloc, 8, state->fpul));
+                state->fpscr = bs(_gdb_hex2intdefault(&dataloc, 8, state->fpscr));
+
+                // Copy floating point registers.
+                for (unsigned int i = 0; i < 16; i++)
+                {
+                    // Registers 25-40 in GDB mapping language.
+                    state->fr[i] = bs(_gdb_hex2intdefault(&dataloc, 8, state->fr[i]));
+                }
+
+                // The rest of the registers we don't support writing, so don't even bother iterating
+                // through the rest of the data if it exists.
+                _gdb_send_valid_response("OK");
+                return 1;
+            }
+
+            break;
+        }
         case 'p':
         {
             // Read single register.
@@ -516,7 +628,7 @@ int _gdb_handle_command(uint32_t address, irq_state_t *cur_state)
             }
             else
             {
-                long int whichreg = strtol(&cmdbuf[1], NULL, 16);
+                unsigned int whichreg = strtoul(&cmdbuf[1], NULL, 16);
                 switch(whichreg)
                 {
                     case 0:
@@ -659,11 +771,209 @@ int _gdb_handle_command(uint32_t address, irq_state_t *cur_state)
 
             break;
         }
+        case 'P':
+        {
+            // Write single register.
+            long int threadid = threadids[OPERATION_REGISTERS];
+            irq_state_t *state = 0;
+
+            if (threadid == -1)
+            {
+                // We don't support putting registers to *ALL* threads.
+                state = 0;
+            }
+            else if (threadid == 0)
+            {
+                // Write to current thread.
+                state = cur_state;
+            }
+            else
+            {
+                // Write to particular thread.
+                state = _thread_get_regs(threadid);
+            }
+
+            if (state == 0)
+            {
+                _gdb_send_valid_response("E%02X", EINVAL);
+                return 1;
+            }
+            else
+            {
+                char *equalloc = 0;
+                unsigned int whichreg = strtoul(&cmdbuf[1], &equalloc, 16);
+
+                if (equalloc == 0)
+                {
+                    _gdb_send_valid_response("E%02X", EINVAL);
+                    return 1;
+                }
+                if (equalloc[0] != '=')
+                {
+                    _gdb_send_valid_response("E%02X", EINVAL);
+                    return 1;
+                }
+
+                unsigned int regval = bs(strtoul(&equalloc[1], NULL, 16));
+
+                switch(whichreg)
+                {
+                    case 0:
+                    case 1:
+                    case 2:
+                    case 3:
+                    case 4:
+                    case 5:
+                    case 6:
+                    case 7:
+                    case 8:
+                    case 9:
+                    case 10:
+                    case 11:
+                    case 12:
+                    case 13:
+                    case 14:
+                    case 15:
+                    {
+                        // GP register.
+                        state->gp_regs[whichreg] = regval;
+                        _gdb_send_valid_response("OK");
+                        return 1;
+                    }
+                    case 16:
+                    {
+                        // PC register.
+                        state->pc = regval;
+                        _gdb_send_valid_response("OK");
+                        return 1;
+                    }
+                    case 17:
+                    {
+                        // PR register.
+                        state->pr = regval;
+                        _gdb_send_valid_response("OK");
+                        return 1;
+                    }
+                    case 18:
+                    {
+                        // GBR register.
+                        state->gbr = regval;
+                        _gdb_send_valid_response("OK");
+                        return 1;
+                    }
+                    case 19:
+                    {
+                        // VBR register.
+                        state->vbr = regval;
+                        _gdb_send_valid_response("OK");
+                        return 1;
+                    }
+                    case 20:
+                    {
+                        // MACH register.
+                        state->mach = regval;
+                        _gdb_send_valid_response("OK");
+                        return 1;
+                    }
+                    case 21:
+                    {
+                        // MACL register.
+                        state->macl = regval;
+                        _gdb_send_valid_response("OK");
+                        return 1;
+                    }
+                    case 22:
+                    {
+                        // SR register.
+                        state->sr = regval;
+                        _gdb_send_valid_response("OK");
+                        return 1;
+                    }
+                    case 23:
+                    {
+                        // FPUL register.
+                        state->fpul = regval;
+                        _gdb_send_valid_response("OK");
+                        return 1;
+                    }
+                    case 24:
+                    {
+                        // FPSCR register.
+                        state->fpscr = regval;
+                        _gdb_send_valid_response("OK");
+                        return 1;
+                    }
+                    case 25:
+                    case 26:
+                    case 27:
+                    case 28:
+                    case 29:
+                    case 30:
+                    case 31:
+                    case 32:
+                    case 33:
+                    case 34:
+                    case 35:
+                    case 36:
+                    case 37:
+                    case 38:
+                    case 39:
+                    case 40:
+                    {
+                        // FPU register.
+                        state->fr[whichreg - 25] = regval;
+                        _gdb_send_valid_response("OK");
+                        return 1;
+                    }
+                    case 41:
+                    case 42:
+                    {
+                        // SSR/SPC register, we don't save this.
+                        _gdb_send_valid_response("E%02X", EINVAL);
+                        return 1;
+                    }
+                    case 43:
+                    case 44:
+                    case 45:
+                    case 46:
+                    case 47:
+                    case 48:
+                    case 49:
+                    case 50:
+                    {
+                        // Register Bank 0 R0-R7, we don't save these.
+                        _gdb_send_valid_response("E%02X", EINVAL);
+                        return 1;
+                    }
+                    case 51:
+                    case 52:
+                    case 53:
+                    case 54:
+                    case 55:
+                    case 56:
+                    case 57:
+                    case 58:
+                    {
+                        // Register Bank 1 R0-R7, we don't save these.
+                        _gdb_send_valid_response("E%02X", EINVAL);
+                        return 1;
+                    }
+                    default:
+                    {
+                        // Unrecognized register.
+                        _gdb_send_valid_response("E%02X", EINVAL);
+                        return 1;
+                    }
+                }
+            }
+
+            break;
+        }
         case 'm':
         {
             // Read memory.
             char *commaloc = 0;
-            long int memloc = strtol(&cmdbuf[1], &commaloc, 16);
+            unsigned int memloc = strtoul(&cmdbuf[1], &commaloc, 16);
 
             if (commaloc == 0)
             {
@@ -676,7 +986,7 @@ int _gdb_handle_command(uint32_t address, irq_state_t *cur_state)
                 return 1;
             }
 
-            long int memsize = strtol(&commaloc[1], NULL, 16);
+            unsigned int memsize = strtoul(&commaloc[1], NULL, 16);
             char membuf[MAX_PACKET_SIZE + 1];
             membuf[0] = 0;
 
@@ -694,10 +1004,50 @@ int _gdb_handle_command(uint32_t address, irq_state_t *cur_state)
             _gdb_send_valid_response(membuf);
             return 1;
         }
+        case 'M':
+        {
+            // Write memory.
+            char *commaloc = 0;
+            unsigned int memloc = strtoul(&cmdbuf[1], &commaloc, 16);
+
+            if (commaloc == 0)
+            {
+                _gdb_send_valid_response("E%02X", EINVAL);
+                return 1;
+            }
+            if (commaloc[0] != ',')
+            {
+                _gdb_send_valid_response("E%02X", EINVAL);
+                return 1;
+            }
+
+            char *colonloc = 0;
+            unsigned int memsize = strtoul(&commaloc[1], &colonloc, 16);
+
+            if (colonloc == 0)
+            {
+                _gdb_send_valid_response("E%02X", EINVAL);
+                return 1;
+            }
+            if (colonloc[0] != ':')
+            {
+                _gdb_send_valid_response("E%02X", EINVAL);
+                return 1;
+            }
+
+            char *dataloc = (char *)&colonloc[1];
+            for (long int i = 0; i < memsize; i++)
+            {
+                *((uint8_t *)(memloc + i)) = _gdb_hex2int(&dataloc, 2);
+            }
+
+            _gdb_send_valid_response("OK");
+            return 1;
+        }
         case 'T':
         {
             // Thread alive query.
-            long int threadid = strtol(&cmdbuf[1], 0, 16);
+            unsigned int threadid = strtoul(&cmdbuf[1], 0, 16);
             irq_state_t *state = _thread_get_regs(threadid);
 
             if (state != 0)
@@ -715,32 +1065,32 @@ int _gdb_handle_command(uint32_t address, irq_state_t *cur_state)
         }
         case 'X':
         {
-            // Write to memory (binary data provided).
+            // Write memory (binary data provided).
             char *commaloc = 0;
-            long int memloc = strtol(&cmdbuf[1], &commaloc, 16);
+            unsigned int memloc = strtoul(&cmdbuf[1], &commaloc, 16);
 
             if (commaloc == 0)
             {
-                _gdb_send_valid_response("E%02X", 1);
+                _gdb_send_valid_response("E%02X", EINVAL);
                 return 1;
             }
             if (commaloc[0] != ',')
             {
-                _gdb_send_valid_response("E%02X", 2);
+                _gdb_send_valid_response("E%02X", EINVAL);
                 return 1;
             }
 
             char *colonloc = 0;
-            long int memsize = strtol(&commaloc[1], &colonloc, 16);
+            unsigned int memsize = strtoul(&commaloc[1], &colonloc, 16);
 
             if (colonloc == 0)
             {
-                _gdb_send_valid_response("E%02X", 3);
+                _gdb_send_valid_response("E%02X", EINVAL);
                 return 1;
             }
             if (colonloc[0] != ':')
             {
-                _gdb_send_valid_response("E%02X", 4);
+                _gdb_send_valid_response("E%02X", EINVAL);
                 return 1;
             }
 
@@ -762,9 +1112,8 @@ int _gdb_handle_command(uint32_t address, irq_state_t *cur_state)
         }
     }
 
-    // TODO: The current GDB stub we have implemented doesn't support setting
-    // registers or setting memory through the "M" command. It also does not
-    // support stepping through code. Both will need to be fixed.
+    // TODO: The current GDB stub we have implemented doesn't support stepping
+    // through code or memory breakpoints.
 
     // Unrecognized packet, so send a negative response.
     _gdb_send_invalid_response();

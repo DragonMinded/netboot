@@ -124,6 +124,7 @@ typedef struct
 // Calculate stats every second.
 #define STATS_DENOMINATOR 1000000
 
+static int threads_disabled = 0;
 static uint32_t interruptions = 0;
 static uint32_t last_second_interruptions = 0;
 static uint64_t running_time_denominator = 0;
@@ -160,6 +161,14 @@ irq_state_t *_thread_get_regs(uint32_t threadid)
     {
         return 0;
     }
+}
+
+void _thread_disable_switching()
+{
+    // Used by interrupt.c to aid in capturing registers, effectively makes
+    // the current thread the only runnable thread in the system but still
+    // allows for syscalls to work.
+    threads_disabled = 1;
 }
 
 void _thread_check_waiting(thread_t *thread)
@@ -425,6 +434,13 @@ last_thread_t *last_thread_for_band(int priority)
 
 irq_state_t *_thread_schedule(irq_state_t *state, int request)
 {
+    if (threads_disabled)
+    {
+        // We should only ever schedule the current thread, never preempt, never try to swap
+        // out threads.
+        return state;
+    }
+
     thread_t *current_thread = (thread_t *)state->threadptr;
 
     if (current_thread == 0)
@@ -570,6 +586,7 @@ void _thread_init()
     interruptions = 0;
     last_second_interruptions = 0;
     highest_thread = 0;
+    threads_disabled = 0;
     memset(global_counters, 0, sizeof(uint32_t *) * MAX_GLOBAL_COUNTERS);
     memset(semaphores, 0, sizeof(semaphore_internal_t *) * MAX_SEM_AND_MUTEX);
     memset(threads, 0, sizeof(thread_t *) * MAX_THREADS);
@@ -972,6 +989,13 @@ void _thread_calc_stats(irq_state_t *current, uint32_t elapsed, uint32_t overhea
 
 irq_state_t *_syscall_timer(irq_state_t *current, int timer)
 {
+    if (threads_disabled)
+    {
+        // We should only ever schedule the current thread, never preempt, never try to swap
+        // out threads.
+        return current;
+    }
+
     if (timer < 0)
     {
         // Periodic preemption timer.
@@ -994,6 +1018,13 @@ irq_state_t *_syscall_timer(irq_state_t *current, int timer)
 
 irq_state_t *_syscall_holly(irq_state_t *current, uint32_t serviced_holly_interrupts)
 {
+    if (threads_disabled)
+    {
+        // We should only ever schedule the current thread, never preempt, never try to swap
+        // out threads.
+        return current;
+    }
+
     uint64_t start = _profile_get_current(0);
     int should_schedule = 0;
 
@@ -1054,6 +1085,13 @@ irq_state_t *_syscall_holly(irq_state_t *current, uint32_t serviced_holly_interr
 
 irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
 {
+    if (threads_disabled)
+    {
+        // We should only ever schedule the current thread, never preempt, never try to swap
+        // out threads.
+        return current;
+    }
+
     uint64_t start = _profile_get_current(0);
     int schedule = THREAD_SCHEDULE_CURRENT;
 

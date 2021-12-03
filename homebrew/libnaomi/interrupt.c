@@ -56,15 +56,26 @@ void _gdb_set_haltreason(int reason);
 // Prototype for halting the system with a GDB breakpoint.
 int _gdb_user_halt(irq_state_t *cur_state);
 
+// Prototype to force thread system to disable preemption, used for safely
+// re-enabling interrupts to capture registers on an abort call.
+void _thread_disable_switching();
+
 // Prototype for polling DIMM commands so we can keep the communication
 // channel open even in a halted state. This is so GDB can connect and
 // debug us properly.
 int _dimm_command_handler(int halted, irq_state_t *cur_state);
 
+// Prototypes of functions we don't want in the public headers.
+void _irq_set_vector_table();
+int _timer_interrupt(int timer);
+uint32_t _irq_enable();
+uint32_t _irq_read_sr();
+uint32_t _irq_read_vbr();
+
 void _irq_display_exception(int signal, irq_state_t *cur_state, char *failure, int code)
 {
     // Threads should already be disabled, but lets be sure.
-    uint32_t old_interrupts = irq_disable();
+    irq_disable();
 
     // Inform GDB why we halted.
     _gdb_set_haltreason(signal);
@@ -103,8 +114,6 @@ void _irq_display_exception(int signal, irq_state_t *cur_state, char *failure, i
             _gdb_set_haltreason(signal);
         }
     }
-
-    irq_restore(old_interrupts);
 }
 
 // Syscall for capturing registers if we need it.
@@ -112,6 +121,9 @@ void _irq_display_exception(int signal, irq_state_t *cur_state, char *failure, i
 
 void _irq_display_invariant(char *msg, char *failure, ...)
 {
+    // Force thread system to only ever run us from now on.
+    _thread_disable_switching();
+
     // Make sure that interrupts are already initialized. If not, we have no chance
     // of capturing proper stack traces.
     if (irq_state != 0)
@@ -121,26 +133,23 @@ void _irq_display_invariant(char *msg, char *failure, ...)
         // need to do any gymnastics to get registers so GDB can perform backtraces.
         if (!in_interrupt)
         {
-            if (!_irq_is_disabled(_irq_get_sr()))
+            if (_irq_is_disabled(_irq_get_sr()))
             {
-                // Capture registers for backtraces to make sense if we were called
-                // in user context instead of interrupt context.
-                _irq_capture_regs();
+                // Re-enable interrupts so that we can call a syscall to force the
+                // current register block to be correct. This ensures that stack
+                // traces are correct even when interrupts are disabled when we hit
+                // an invariant call.
+                _irq_enable();
             }
-            else
-            {
-                // TODO: Technically if we disable interrupts and then call
-                // _irq_display_invariant() the stack trace and registers will be wrong.
-                // Maybe we should attempt to re-enable interrupts here, call the
-                // capture regs syscall and then let the below disable work? We can't
-                // possibly screw up any more than we already have, given that we're
-                // about to halt the system for good with an exception message.
-            }
+
+            // Capture registers for backtraces to make sense if we were called
+            // in user context instead of interrupt context.
+            _irq_capture_regs();
         }
     }
 
     // Threads should normally already be disabled, but lets be sure.
-    uint32_t old_interrupts = irq_disable();
+    irq_disable();
 
     // Inform GDB why we halted.
     _gdb_set_haltreason(SIGABRT);
@@ -179,8 +188,6 @@ void _irq_display_invariant(char *msg, char *failure, ...)
             _gdb_set_haltreason(SIGABRT);
         }
     }
-
-    irq_restore(old_interrupts);
 }
 
 irq_state_t * _irq_general_exception(irq_state_t *cur_state)
@@ -258,13 +265,6 @@ irq_state_t * _irq_general_exception(irq_state_t *cur_state)
     // Return updated IRQ state.
     return cur_state;
 }
-
-// Prototypes of functions we don't want in the public headers.
-void _irq_set_vector_table();
-int _timer_interrupt(int timer);
-uint32_t _irq_enable();
-uint32_t _irq_read_sr();
-uint32_t _irq_read_vbr();
 
 // Hardware drivers which need init/free after IRQ setup.
 void _dimm_comms_init();
