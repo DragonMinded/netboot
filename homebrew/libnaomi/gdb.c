@@ -59,8 +59,9 @@ uint32_t _gdb_handle_response()
         return 0;
     }
 
-    // Format the response location and such.
-    uint32_t response_address = buffer_offset + MAX_PACKET_SIZE;
+    // Format the response location and such, making sure to account for the
+    // size of the header in the request.
+    uint32_t response_address = buffer_offset + MAX_PACKET_SIZE + 4;
     uint32_t crc = ~(((response_address & 0xFF) + ((response_address >> 8) & 0xFF) + ((response_address >> 16) & 0xFF)) & 0xFF);
     uint32_t response = ((crc << 24) & 0xFF000000) | (response_address & 0x00FFFFFF);
 
@@ -990,7 +991,7 @@ int _gdb_handle_command(uint32_t address, irq_state_t *cur_state)
             char membuf[MAX_PACKET_SIZE + 1];
             membuf[0] = 0;
 
-            if (memsize >= (MAX_PACKET_SIZE / 2))
+            if (memsize > (MAX_PACKET_SIZE / 2))
             {
                 _gdb_send_valid_response("E%02X", ENOMEM);
                 return 1;

@@ -23,26 +23,34 @@ def gdb_strip_ack(data: bytes) -> Tuple[Optional[bool], bytes]:
 def gdb_check_crc(data: bytes) -> Tuple[Optional[bytes], bool]:
     if data[0:1] == b'$':
         # Split the packet to its data and CRC.
-        packet, crc = data[1:].rsplit(b'#', 1)
+        escaped, crc = data[1:].rsplit(b'#', 1)
         if len(crc) != 2:
             return None, False
 
         # Calculate packet CRC.
         crcint = int(crc, 16)
         checksum = 0
-        for byte in packet:
+        for byte in escaped:
             checksum += byte
         checksum = checksum % 256
 
-        # TODO: If the packet is good, we should decode any
-        # run-length encoding or escaped bytes before returning
-        # it here.
+        # Fix any escaped bytes.
+        packet = []
+        flip = False
+        for byte in escaped:
+            if byte == ord("}"):
+                flip = True
+            elif flip:
+                packet.append(byte ^ 0x20)
+                flip = False
+            else:
+                packet.append(byte)
 
         # Verify the CRC itself.
         if checksum == crcint:
-            return packet, True
+            return bytes(packet), True
         else:
-            return packet, False
+            return bytes(packet), False
     else:
         return None, False
 
@@ -54,15 +62,26 @@ def _hex(val: int) -> bytes:
     return hexval.encode('ascii')
 
 
-def gdb_make_crc(packet: bytes) -> bytes:
-    # TODO: Before checksumming the packet, we should perform
-    # any needed run-length encoding or byte escaping here.
+_escapable_bytes = {ord("}"), ord("#"), ord("$")}
 
-    checksum = 0
+
+def gdb_make_crc(packet: bytes) -> bytes:
+    # Escape any bytes that need escaping.
+    escapedbytes = []
     for byte in packet:
+        if byte in _escapable_bytes:
+            escapedbytes.append(ord("}"))
+            escapedbytes.append(byte ^ 0x20)
+        else:
+            escapedbytes.append(byte)
+
+    # Make the checksum and return the encapsulated packet itself.
+    escaped = bytes(escapedbytes)
+    checksum = 0
+    for byte in escaped:
         checksum += byte
     checksum = checksum % 256
-    return b"$" + packet + b"#" + _hex(checksum)
+    return b"$" + escaped + b"#" + _hex(checksum)
 
 
 def target_make_crc(addr: int) -> int:
