@@ -12,25 +12,30 @@ from typing import List
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Utility for converting image files to C include style sprites."
+        description="Utility for converting image files to C include style or raw sprites."
     )
     parser.add_argument(
-        'c',
-        metavar='C_FILE',
+        'file',
+        metavar='FILE',
         type=str,
-        help='The C file we should generate.',
+        help='The output file we should generate.',
     )
     parser.add_argument(
         'img',
         metavar='IMG',
         type=str,
-        help='The image file we should generate a C file for.',
+        help='The image file we should use to generate the output file.',
     )
     parser.add_argument(
         '--depth',
         metavar='DEPTH',
         type=int,
         help='The depth of the final sprite, in bits. Should match the video mode you are initializing.',
+    )
+    parser.add_argument(
+        '--raw',
+        action="store_true",
+        help='Output a raw sprite file instead of a C include file.',
     )
     args = parser.parse_args()
 
@@ -61,20 +66,25 @@ def main() -> int:
         raise Exception(f"Unsupported depth {args.depth}!")
 
     bindata = b"".join(outdata)
-    name = os.path.basename(args.img).replace('.', '_')
-    cfile = f"""
-    #include <stdint.h>
 
-    uint8_t __{name}_data[{len(bindata)}] __attribute__ ((aligned (4))) = {{
-        {", ".join(hex(b) for b in bindata)}
-    }};
-    unsigned int {name}_width = {width};
-    unsigned int {name}_height = {height};
-    void *{name}_data = __{name}_data;
-    """
+    if args.raw:
+        with open(args.file, "wb") as bfp:
+            bfp.write(bindata)
+    else:
+        name = os.path.basename(args.img).replace('.', '_')
+        cfile = f"""
+        #include <stdint.h>
 
-    with open(args.c, "w") as sfp:
-        sfp.write(textwrap.dedent(cfile))
+        uint8_t __{name}_data[{len(bindata)}] __attribute__ ((aligned (4))) = {{
+            {", ".join(hex(b) for b in bindata)}
+        }};
+        unsigned int {name}_width = {width};
+        unsigned int {name}_height = {height};
+        void *{name}_data = __{name}_data;
+        """
+
+        with open(args.file, "w") as sfp:
+            sfp.write(textwrap.dedent(cfile))
 
     return 0
 

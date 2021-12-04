@@ -133,6 +133,8 @@ DATE = ${VENV_PYTHON3} ${NAOMI_BASE}/tools/date.py
 # Set up various toolchain utilities.
 IMG2C_FILE = ${NAOMI_BASE}/tools/sprite.py
 IMG2C = ${VENV_PYTHON3} ${IMG2C_FILE}
+IMG2BIN_FILE = ${NAOMI_BASE}/tools/sprite.py
+IMG2BIN = ${VENV_PYTHON3} ${IMG2BIN_FILE} --raw
 
 # Set up various toolchain utilities.
 PITCHGEN_FILE = ${NAOMI_BASE}/tools/pitchgen.py

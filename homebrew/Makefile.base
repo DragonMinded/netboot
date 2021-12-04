@@ -141,6 +141,8 @@ DATE = ${VENV_PYTHON3} $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/date.
 # Set up various toolchain utilities.
 IMG2C_FILE = $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/sprite.py
 IMG2C = ${VENV_PYTHON3} ${IMG2C_FILE}
+IMG2BIN_FILE = $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/sprite.py
+IMG2BIN = ${VENV_PYTHON3} ${IMG2BIN_FILE} --raw
 
 # Set up various toolchain utilities.
 PITCHGEN_FILE = $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tools/pitchgen.py
