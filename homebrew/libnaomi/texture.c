@@ -158,6 +158,11 @@ void *ta_texture_malloc(int uvsize, int bitsize)
                 newchunk->prev = potential->prev;
                 potential->prev = newchunk;
 
+                if (newchunk->prev != 0)
+                {
+                    newchunk->prev->next = newchunk;
+                }
+
                 // Since we added this to the beginning, its possible that head points at potential
                 // so in that case we need it to point at us instead.
                 if (head == potential)
@@ -168,7 +173,7 @@ void *ta_texture_malloc(int uvsize, int bitsize)
                 uint32_t offset = potential->next ? potential->next->offset : TEXRAM_HIGH;
                 if (newchunk->offset + newchunk->size + potential->size != offset)
                 {
-                    _irq_display_invariant("texture allocator failure", "failed invariant check with current chunk size!");
+                    _irq_display_invariant("texture allocator failure", "failed invariant check on line %d with current chunk size!", __LINE__);
                 }
 
                 // Finally, return the memory managed by this chunk.
@@ -218,7 +223,7 @@ void ta_texture_free(void *texture)
                 // We can!
                 if (cur->offset + cur->size != collapsible->offset)
                 {
-                    _irq_display_invariant("texture allocator failure", "failed invariant check with current chunk size!");
+                    _irq_display_invariant("texture allocator failure", "failed invariant check on line %d with current chunk size!", __LINE__);
                 }
 
                 cur->next = collapsible->next;
@@ -234,7 +239,7 @@ void ta_texture_free(void *texture)
                 uint32_t offset = cur->next ? cur->next->offset : TEXRAM_HIGH;
                 if (cur->offset + cur->size != offset)
                 {
-                    _irq_display_invariant("texture allocator failure", "failed invariant check with current chunk size!");
+                    _irq_display_invariant("texture allocator failure", "failed invariant check on line %d with current chunk size!", __LINE__);
                 }
             }
         }
@@ -248,7 +253,7 @@ void ta_texture_free(void *texture)
                 // We can!
                 if (collapsible->offset + collapsible->size != cur->offset)
                 {
-                    _irq_display_invariant("texture allocator failure", "failed invariant check with current chunk size!");
+                    _irq_display_invariant("texture allocator failure", "failed invariant check on line %d with current chunk size!", __LINE__);
                 }
 
                 collapsible->next = cur->next;
@@ -264,12 +269,48 @@ void ta_texture_free(void *texture)
                 uint32_t offset = collapsible->next ? collapsible->next->offset : TEXRAM_HIGH;
                 if (collapsible->offset + collapsible->size != offset)
                 {
-                    _irq_display_invariant("texture allocator failure", "failed invariant check with current chunk size!");
+                    _irq_display_invariant("texture allocator failure", "failed invariant check on line %d with current chunk size!", __LINE__);
                 }
             }
         }
     }
     mutex_unlock(&texalloc_mutex);
+}
+
+struct mallinfo ta_texture_mallinfo()
+{
+    struct mallinfo info;
+    memset(&info, 0, sizeof(info));
+
+    if (head != 0)
+    {
+        mutex_lock(&texalloc_mutex);
+        info.arena = TEXRAM_HIGH - head->offset;
+
+        size_t uordblks = 0;
+        size_t fordblks = 0;
+
+        allocated_texture_t *cur = head;
+        while (cur != 0)
+        {
+            if ((cur->flags & FLAGS_IN_USE) == 0)
+            {
+                fordblks += cur->size;
+            }
+            else
+            {
+                uordblks += cur->size;
+            }
+
+            cur = cur->next;
+        }
+
+        info.uordblks = uordblks;
+        info.fordblks = fordblks;
+        mutex_unlock(&texalloc_mutex);
+    }
+
+    return info;
 }
 
 int ta_texture_load(void *offset, int uvsize, int bitsize, void *data)

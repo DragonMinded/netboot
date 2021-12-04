@@ -6,6 +6,7 @@ extern "C" {
 #endif
 
 #include <stdint.h>
+#include <malloc.h>
 
 /* Command: User clip */
 struct user_clip_list
@@ -258,6 +259,9 @@ void *ta_texture_malloc(int uvsize, int bitsize);
 
 // Free a previously allocated texture.
 void ta_texture_free(void *texture);
+
+// Get statistics about the allocations in texture memory.
+struct mallinfo ta_texture_mallinfo();
 
 // Given a raw offset into texture RAM and a texture size, load the texture into texture
 // RAM in twiddled format required by several video modes. Note that the texture size is
