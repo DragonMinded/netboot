@@ -346,13 +346,16 @@ extern uint32_t global_buffer_offset[3];
 #define BUFFER_ALIGNMENT 128
 #define ENSURE_ALIGNMENT(x) (((x) + (BUFFER_ALIGNMENT - 1)) & (~(BUFFER_ALIGNMENT - 1)))
 
+// Prototype from texture.c for managing textures in VRAM.
+void _ta_init_texture_allocator();
+
 void _ta_init_buffers()
 {
     // Where we start with our buffers. Its important that BUFLOC is aligned
     // to a 1MB boundary (masking with 0xFFFFF should give all 0's). It should
     // be safe to calculate where to put this based on the framebuffer locations,
     // but for some reason this results in stomped on texture RAM.
-    uint32_t bufloc = (((global_buffer_offset[2] & 0x00FFFFFF) | 0xA5000000) + 0xFFFFF) & 0xFFF00000;
+    uint32_t bufloc = (((global_buffer_offset[2] & VRAM_MASK) | UNCACHED_MIRROR | VRAM_BASE) + 0xFFFFF) & 0xFFF00000;
     uint32_t curbufloc = bufloc;
 
     // Clear our structure out.
@@ -392,7 +395,7 @@ void _ta_init_buffers()
     curbufloc = ENSURE_ALIGNMENT(curbufloc + (4 * (6 * ((MAX_H_TILE * MAX_V_TILE) + 1))));
 
     // Now, the remaining space can be used for texture RAM.
-    ta_working_buffers.texture_ram = (void *)((curbufloc & 0x00FFFFFF) | 0xA4000000);
+    ta_working_buffers.texture_ram = (void *)((curbufloc & VRAM_MASK) | UNCACHED_MIRROR | TEXRAM_BASE);
 
     // Clear the above memory so we don't get artifacts.
     if (hw_memset((void *)bufloc, 0, curbufloc - bufloc) == 0)
@@ -402,6 +405,9 @@ void _ta_init_buffers()
 
     // Finally, add a command to the command buffer that we will point at for the background polygon.
     _ta_set_background_color(&ta_working_buffers, ta_background_color);
+
+    // Now, ask the texture allocator to initialize based on our known texture location.
+    _ta_init_texture_allocator();
 }
 
 void ta_commit_begin()
@@ -479,9 +485,9 @@ void _ta_begin_render(struct ta_buffers *buffers, void *scrn, float zclip)
 {
     volatile unsigned int *videobase = (volatile unsigned int *)POWERVR2_BASE;
 
-    unsigned int cmdl = ((unsigned int)buffers->cmd_list) & 0x00FFFFFF;
-    unsigned int tls = ((unsigned int)buffers->tile_descriptors) & 0x00FFFFFF;
-    unsigned int scn = ((unsigned int)scrn) & 0x00FFFFFF;
+    unsigned int cmdl = ((unsigned int)buffers->cmd_list) & VRAM_MASK;
+    unsigned int tls = ((unsigned int)buffers->tile_descriptors) & VRAM_MASK;
+    unsigned int scn = ((unsigned int)scrn) & VRAM_MASK;
     unsigned int bgl = (unsigned int)buffers->background_list - cmdl;
 
     /* Actually populate the tile descriptors themselves, pointing at the object buffers we just allocated.

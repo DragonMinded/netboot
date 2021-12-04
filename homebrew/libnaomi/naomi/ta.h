@@ -250,6 +250,15 @@ void *ta_palette_bank(int size, int banknum);
 // Get a pointer to the base texture RAM that is safe to use.
 void *ta_texture_base();
 
+// Given a UVsize (allowed sizes are 8, 16, 32, 64, 128, 256, 512 or 1024), allocate space
+// in the texture RAM suitable for a texture of size UVsize * UVsize. If there is not enough
+// room in the texture RAM, returns a null pointer. Note that the returned pointer is in
+// texture RAM and as such must be accessed in 16-bit increments only.
+void *ta_texture_malloc(int uvsize, int bitsize);
+
+// Free a previously allocated texture.
+void ta_texture_free(void *texture);
+
 // Given a raw offset into texture RAM and a texture size, load the texture into texture
 // RAM in twiddled format required by several video modes. Note that the texture size is
 // the size in pixels of one side. The only allowed sizes are 8, 16, 32, 64, 128, 256, 512

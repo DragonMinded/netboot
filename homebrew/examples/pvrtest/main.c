@@ -123,15 +123,12 @@ void main()
     /* Create palettes for our grayscale (indexed) textures */
     init_palette();
 
-    /* TODO: We should really be able to ask the TA driver for a texture slot.
-     * For now, just allocate space for the 6 256x256x8 bit textures manually. */
+    /* Load our textures into texture RAM */
     uint16_t *tex[6];
-    tex[0] = (unsigned short *)ta_texture_base();
-    tex[1] = (void*)(((char *)tex[0])+256*256);
-    tex[2] = (void*)(((char *)tex[1])+256*256);
-    tex[3] = (void*)(((char *)tex[2])+256*256);
-    tex[4] = (void*)(((char *)tex[3])+256*256);
-    tex[5] = (void*)(((char *)tex[4])+256*256);
+    for (int i = 0; i < 6; i++)
+    {
+        tex[i] = ta_texture_malloc(256, 8);
+    }
     ta_texture_load(tex[0], 256, 8, tex1_png_data);
     ta_texture_load(tex[1], 256, 8, tex2_png_data);
     ta_texture_load(tex[2], 256, 8, tex3_png_data);
