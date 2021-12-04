@@ -70,7 +70,7 @@ void matrix_init_perspective(float fovy, float zNear, float zFar)
         float aspect = (float)halfheight / (float)halfwidth;
         float cot_fovy_2 = cos(fovrads / 2.0) / sin(fovrads / 2.0);
         float projection_matrix[4][4] = {
-            { cot_fovy_2 / aspect, 0.0, 0.0, 0.0 },
+            { -cot_fovy_2 / aspect, 0.0, 0.0, 0.0 },
             { 0.0, cot_fovy_2, 0.0, 0.0 },
             { 0.0, 0.0, (zFar+zNear)/(zNear-zFar), -1.0 },
             { 0.0, 0.0, 2*zFar*zNear/(zNear-zFar), 1.0 },
@@ -98,7 +98,7 @@ void matrix_init_perspective(float fovy, float zNear, float zFar)
         float aspect = (float)halfwidth / (float)halfheight;
         float cot_fovy_2 = cos(fovrads / 2.0) / sin(fovrads / 2.0);
         float projection_matrix[4][4] = {
-            { cot_fovy_2 / aspect, 0.0, 0.0, 0.0 },
+            { -cot_fovy_2 / aspect, 0.0, 0.0, 0.0 },
             { 0.0, cot_fovy_2, 0.0, 0.0 },
             { 0.0, 0.0, (zFar+zNear)/(zNear-zFar), -1.0 },
             { 0.0, 0.0, 2*zFar*zNear/(zNear-zFar), 1.0 },

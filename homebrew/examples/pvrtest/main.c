@@ -54,7 +54,7 @@ void draw_face(float *p1, float *p2, float *p3, float *p4, void *tex, int pal)
         TA_CMD_POLYGON_TEXTURED;
     mypoly.mode1 =
         TA_POLYMODE1_Z_ALWAYS |
-        TA_POLYMODE1_CULL_CCW;
+        TA_POLYMODE1_CULL_CW;
     mypoly.mode2 =
         TA_POLYMODE2_MIPMAP_D_1_00 |
         TA_POLYMODE2_TEXTURE_DECAL |
@@ -86,15 +86,15 @@ void draw_face(float *p1, float *p2, float *p3, float *p4, void *tex, int pal)
     myvertex.x = p2[0];
     myvertex.y = p2[1];
     myvertex.z = p2[2];
-    myvertex.u = 0.0;
-    myvertex.v = 0.0;
+    myvertex.u = 1.0;
+    myvertex.v = 1.0;
     ta_commit_list(&myvertex, TA_LIST_SHORT);
 
     myvertex.x = p3[0];
     myvertex.y = p3[1];
     myvertex.z = p3[2];
-    myvertex.u = 1.0;
-    myvertex.v = 1.0;
+    myvertex.u = 0.0;
+    myvertex.v = 0.0;
     ta_commit_list(&myvertex, TA_LIST_SHORT);
 
     myvertex.x = p4[0];

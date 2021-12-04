@@ -551,23 +551,23 @@ void ta_render()
 }
 
 static int twiddletab[1024];
-#define TWIDDLE(x, y) (twiddletab[(y)] | (twiddletab[(x)] << 1))
+#define TWIDDLE(u, v) (twiddletab[(v)] | (twiddletab[(u)] << 1))
 
 void _ta_init_twiddletab()
 {
-    for(int x = 0; x < 1024; x++)
+    for(int addr = 0; addr < 1024; addr++)
     {
-        twiddletab[x] = (
-            (x & 1) |
-            ((x & 2) << 1) |
-            ((x & 4) << 2) |
-            ((x & 8) << 3) |
-            ((x & 16) << 4) |
-            ((x & 32) << 5) |
-            ((x & 64) << 6) |
-            ((x & 128) << 7) |
-            ((x & 256) << 8) |
-            ((x & 512) << 9)
+        twiddletab[addr] = (
+            (addr & 1) |
+            ((addr & 2) << 1) |
+            ((addr & 4) << 2) |
+            ((addr & 8) << 3) |
+            ((addr & 16) << 4) |
+            ((addr & 32) << 5) |
+            ((addr & 64) << 6) |
+            ((addr & 128) << 7) |
+            ((addr & 256) << 8) |
+            ((addr & 512) << 9)
         );
     }
 }
@@ -730,11 +730,11 @@ int ta_texture_load(void *offset, int uvsize, int bitsize, void *data)
             uint16_t *tex = (uint16_t *)(((uint32_t)offset) | UNCACHED_MIRROR);
             uint8_t *src = (uint8_t *)data;
 
-            for(int y = 0; y < uvsize; y += 2)
+            for(int v = 0; v < uvsize; v+= 2)
             {
-                for(int x = 0; x < uvsize; x++)
+                for(int u = 0; u < uvsize; u++)
                 {
-                    tex[TWIDDLE(y >> 1, x)] = src[(x + (y * uvsize))] | (src[x + ((y + 1) * uvsize)] << 8);
+                    tex[TWIDDLE(u, v) >> 1] = src[(u + (v * uvsize))] | (src[u + ((v + 1) * uvsize)] << 8);
                 }
             }
             break;
