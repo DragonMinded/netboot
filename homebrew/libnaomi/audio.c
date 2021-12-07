@@ -25,6 +25,13 @@ static int initialized = 0;
 static uint32_t leftchannel = 0;
 static uint32_t rightchannel = 0;
 
+// Accumulation mini-buffers since we can only write 32 bits at a time to a 32-bit
+// aligned offset.
+static uint32_t leftaccum = 0;
+static uint32_t rightaccum = 0;
+static int leftaccumamount = 0;
+static int rightaccumamount = 0;
+
 // Ringbuffer information, such as the format and size and current writing position.
 static int ringformat = 0;
 static int ringsize = 0;
@@ -151,6 +158,10 @@ void audio_init()
         ringsize = 0;
         ringleftpos = 0;
         ringrightpos = 0;
+        leftaccum = 0;
+        rightaccum = 0;
+        leftaccumamount = 0;
+        rightaccumamount = 0;
         initialized = 1;
     }
 }
@@ -167,6 +178,10 @@ void audio_free()
         ringsize = 0;
         ringleftpos = 0;
         ringrightpos = 0;
+        leftaccum = 0;
+        rightaccum = 0;
+        leftaccumamount = 0;
+        rightaccumamount = 0;
         initialized = 0;
     }
 }
@@ -327,6 +342,10 @@ void audio_unregister_ringbuffer()
         ringsize = 0;
         ringleftpos = 0;
         ringrightpos = 0;
+        leftaccum = 0;
+        rightaccum = 0;
+        leftaccumamount = 0;
+        rightaccumamount = 0;
     }
 }
 
@@ -342,6 +361,22 @@ int audio_register_ringbuffer(int format, unsigned int samplerate, unsigned int 
     {
         // Not enough room in the ringbuffer to do anything!
         return -1;
+    }
+
+    // Make sure we can't end up with an invalid ringbuffer size.
+    if (format == AUDIO_FORMAT_16BIT)
+    {
+        if (num_samples & 0x1)
+        {
+            return -1;
+        }
+    }
+    else
+    {
+        if (num_samples & 0x3)
+        {
+            return -1;
+        }
     }
 
     // Now request a new stereo ringbuffer.
@@ -372,6 +407,12 @@ int audio_register_ringbuffer(int format, unsigned int samplerate, unsigned int 
     ringsize = num_samples;
     ringleftpos = RINGBUFFER_SAFETY_SIZE;
     ringrightpos = RINGBUFFER_SAFETY_SIZE;
+
+    // Set up mini accumulation buffers.
+    leftaccum = 0;
+    rightaccum = 0;
+    leftaccumamount = 0;
+    rightaccumamount = 0;
 
     // Success!
     return 0;
@@ -426,49 +467,67 @@ int audio_write_stereo_data(void *data, unsigned int num_samples)
     leftavailable -= RINGBUFFER_SAFETY_SIZE;
     rightavailable -= RINGBUFFER_SAFETY_SIZE;
 
-    int actualwritten = 0;
+    // Start by waiting for the FIFO to be ready.
     int byteswritten = 0;
-    while (num_samples > 0 && leftavailable > 0 && rightavailable > 0)
+    __aica_fifo_wait();
+
+    // Calculate how many actual samples we can copy over, since everything
+    // must be 32-bit aligned.
+    unsigned int actual_samples = num_samples;
+    if (leftavailable < actual_samples) { actual_samples = leftavailable; }
+    if (rightavailable < actual_samples) { actual_samples = rightavailable; }
+
+    unsigned int written = 0;
+    while (written < actual_samples)
     {
         // Don't overrun the FIFO or we could get flaky transfers.
-        if ((byteswritten & 0x1F) == 0)
+        if ((byteswritten > 0x1F))
         {
             __aica_fifo_wait();
+            byteswritten = 0;
         }
 
         if (ringformat == AUDIO_FORMAT_16BIT)
         {
-            uint16_t *leftringbuf = (uint16_t *)leftringbuffer;
-            uint16_t *rightringbuf = (uint16_t *)rightringbuffer;
             uint16_t *copybuf = (uint16_t *)data;
+            ((uint16_t *)&leftaccum)[leftaccumamount] = copybuf[written * 2];
+            leftaccumamount++;
+            written++;
 
-            leftringbuf[leftwriteposition] = copybuf[(actualwritten * 2)];
-            rightringbuf[rightwriteposition] = copybuf[(actualwritten * 2) + 1];
+            if (leftaccumamount == 2)
+            {
+                uint32_t *leftringpos = (uint32_t *)(((uint16_t *)leftringbuffer) + leftwriteposition);
+                if (((uint32_t)leftringpos & 0x3) != 0)
+                {
+                    _irq_display_invariant("ringbuffer failure", "somehow got a non-aligned ringbuffer write offset!");
+                }
 
-            actualwritten++;
-            byteswritten += 4;
-            leftwriteposition = (leftwriteposition + 1) % ringsize;
-            rightwriteposition = (rightwriteposition + 1) % ringsize;
-            num_samples--;
-            leftavailable--;
-            rightavailable--;
+                *leftringpos = leftaccum;
+                leftaccumamount = 0;
+                leftwriteposition = (leftwriteposition + 2) % ringsize;
+                byteswritten += 4;
+            }
         }
         else if (ringformat == AUDIO_FORMAT_8BIT)
         {
-            uint8_t *leftringbuf = (uint8_t *)leftringbuffer;
-            uint8_t *rightringbuf = (uint8_t *)rightringbuffer;
             uint8_t *copybuf = (uint8_t *)data;
+            ((uint8_t *)&leftaccum)[leftaccumamount] = copybuf[written * 2];
+            leftaccumamount++;
+            written++;
 
-            leftringbuf[leftwriteposition] = copybuf[(actualwritten * 2)];
-            rightringbuf[rightwriteposition] = copybuf[(actualwritten * 2) + 1];
+            if (leftaccumamount == 4)
+            {
+                uint32_t *leftringpos = (uint32_t *)(((uint8_t *)leftringbuffer) + leftwriteposition);
+                if (((uint32_t)leftringpos & 0x3) != 0)
+                {
+                    _irq_display_invariant("ringbuffer failure", "somehow got a non-aligned ringbuffer write offset!");
+                }
 
-            actualwritten++;
-            byteswritten += 2;
-            leftwriteposition = (leftwriteposition + 1) % ringsize;
-            rightwriteposition = (rightwriteposition + 1) % ringsize;
-            num_samples--;
-            leftavailable--;
-            rightavailable--;
+                *leftringpos = leftaccum;
+                leftaccumamount = 0;
+                leftwriteposition = (leftwriteposition + 4) % ringsize;
+                byteswritten += 4;
+            }
         }
         else
         {
@@ -476,10 +535,70 @@ int audio_write_stereo_data(void *data, unsigned int num_samples)
         }
     }
 
+    written = 0;
+    while (written < actual_samples)
+    {
+        // Don't overrun the FIFO or we could get flaky transfers.
+        if ((byteswritten > 0x1F))
+        {
+            __aica_fifo_wait();
+            byteswritten = 0;
+        }
+
+        if (ringformat == AUDIO_FORMAT_16BIT)
+        {
+            uint16_t *copybuf = (uint16_t *)data;
+            ((uint16_t *)&rightaccum)[rightaccumamount] = copybuf[(written * 2) + 1];
+            rightaccumamount++;
+            written++;
+
+            if (rightaccumamount == 2)
+            {
+                uint32_t *rightringpos = (uint32_t *)(((uint16_t *)rightringbuffer) + rightwriteposition);
+                if (((uint32_t)rightringpos & 0x3) != 0)
+                {
+                    _irq_display_invariant("ringbuffer failure", "somehow got a non-aligned ringbuffer write offset!");
+                }
+
+                *rightringpos = rightaccum;
+                rightaccumamount = 0;
+                rightwriteposition = (rightwriteposition + 2) % ringsize;
+                byteswritten += 4;
+            }
+        }
+        else if (ringformat == AUDIO_FORMAT_8BIT)
+        {
+            uint8_t *copybuf = (uint8_t *)data;
+            ((uint8_t *)&rightaccum)[rightaccumamount] = copybuf[(written * 2) + 1];
+            rightaccumamount++;
+            written++;
+
+            if (rightaccumamount == 4)
+            {
+                uint32_t *rightringpos = (uint32_t *)(((uint8_t *)rightringbuffer) + rightwriteposition);
+                if (((uint32_t)rightringpos & 0x3) != 0)
+                {
+                    _irq_display_invariant("ringbuffer failure", "somehow got a non-aligned ringbuffer write offset!");
+                }
+
+                *rightringpos = rightaccum;
+                rightaccumamount = 0;
+                rightwriteposition = (rightwriteposition + 4) % ringsize;
+                byteswritten += 4;
+            }
+        }
+        else
+        {
+            _irq_display_invariant("audio failure", "unrecognized ringbuffer format %d", ringformat);
+        }
+
+        byteswritten += 4;
+    }
+
     ringleftpos = leftwriteposition;
     ringrightpos = rightwriteposition;
 
-    return actualwritten;
+    return actual_samples;
 }
 
 int audio_write_mono_data(int channel, void *data, unsigned int num_samples)
@@ -493,18 +612,24 @@ int audio_write_mono_data(int channel, void *data, unsigned int num_samples)
     // First, we need to get the current playback position for this channel.
     int readposition = 0;
     int writeposition = 0;
+    uint32_t accum = 0;
+    int accumamount = 0;
     void *ringbuffer = 0;
     if (channel == AUDIO_CHANNEL_LEFT)
     {
         readposition = __audio_exchange_command(REQUEST_RINGBUFFER_POSITION, CHANNEL_LEFT, 0, 0, 0);
         writeposition = ringleftpos;
         ringbuffer = (void *)((SOUNDRAM_BASE | UNCACHED_MIRROR) + leftchannel);
+        accum = leftaccum;
+        accumamount = leftaccumamount;
     }
     else if (channel == AUDIO_CHANNEL_RIGHT)
     {
         readposition = __audio_exchange_command(REQUEST_RINGBUFFER_POSITION, CHANNEL_RIGHT, 0, 0, 0);
         writeposition = ringrightpos;
         ringbuffer = (void *)((SOUNDRAM_BASE | UNCACHED_MIRROR) + rightchannel);
+        accum = rightaccum;
+        accumamount = rightaccumamount;
     }
     else
     {
@@ -525,39 +650,66 @@ int audio_write_mono_data(int channel, void *data, unsigned int num_samples)
     }
     available -= RINGBUFFER_SAFETY_SIZE;
 
-    int actualwritten = 0;
+    // Start by waiting for the FIFO to be ready.
     int byteswritten = 0;
-    while (num_samples > 0 && available > 0)
+    __aica_fifo_wait();
+
+    // Calculate how many actual samples we can copy over, since everything
+    // must be 32-bit aligned.
+    unsigned int actual_samples = num_samples;
+    if (available < actual_samples) { actual_samples = available; }
+
+    unsigned int written = 0;
+    while (written < actual_samples)
     {
         // Don't overrun the FIFO or we could get flaky transfers.
-        if ((byteswritten & 0x1F) == 0)
+        if ((byteswritten > 0x1F))
         {
             __aica_fifo_wait();
+            byteswritten = 0;
         }
 
         if (ringformat == AUDIO_FORMAT_16BIT)
         {
-            uint16_t *ringbuf = (uint16_t *)ringbuffer;
             uint16_t *copybuf = (uint16_t *)data;
+            ((uint16_t *)&accum)[accumamount] = copybuf[written];
+            accumamount++;
+            written++;
 
-            ringbuf[writeposition] = copybuf[actualwritten];
-            actualwritten++;
-            byteswritten += 2;
-            writeposition = (writeposition + 1) % ringsize;
-            num_samples--;
-            available--;
+            if (accumamount == 2)
+            {
+                uint32_t *ringpos = (uint32_t *)(((uint16_t *)ringbuffer) + writeposition);
+                if (((uint32_t)ringpos & 0x3) != 0)
+                {
+                    _irq_display_invariant("ringbuffer failure", "somehow got a non-aligned ringbuffer write offset!");
+                }
+
+                *ringpos = accum;
+                accumamount = 0;
+                writeposition = (writeposition + 2) % ringsize;
+                byteswritten += 4;
+            }
         }
         else if (ringformat == AUDIO_FORMAT_8BIT)
         {
-            uint8_t *ringbuf = (uint8_t *)ringbuffer;
             uint8_t *copybuf = (uint8_t *)data;
+            ((uint8_t *)&accum)[accumamount] = copybuf[written];
+            accumamount++;
+            written++;
 
-            ringbuf[writeposition] = copybuf[actualwritten];
-            actualwritten++;
-            byteswritten += 1;
-            writeposition = (writeposition + 1) % ringsize;
-            num_samples--;
-            available--;
+            if (accumamount == 4)
+            {
+                uint32_t *ringpos = (uint32_t *)(((uint8_t *)ringbuffer) + writeposition);
+                if (((uint32_t)ringpos & 0x3) != 0)
+                {
+                    _irq_display_invariant("ringbuffer failure", "somehow got a non-aligned ringbuffer write offset!");
+                }
+
+                *ringpos = accum;
+                accumamount = 0;
+                writeposition = (writeposition + 4) % ringsize;
+                byteswritten += 4;
+            }
         }
         else
         {
@@ -568,11 +720,15 @@ int audio_write_mono_data(int channel, void *data, unsigned int num_samples)
     if (channel == AUDIO_CHANNEL_LEFT)
     {
         ringleftpos = writeposition;
+        leftaccum = accum;
+        leftaccumamount = accumamount;
     }
     else if (channel == AUDIO_CHANNEL_RIGHT)
     {
         ringrightpos = writeposition;
+        rightaccum = accum;
+        rightaccumamount = accumamount;
     }
 
-    return actualwritten;
+    return actual_samples;
 }

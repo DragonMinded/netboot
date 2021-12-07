@@ -86,6 +86,7 @@ int audio_clear_registered_sound_loop(int sound);
 // the format of data you will be writing later. The samplerate is the playback speed
 // of the buffer in hz. The num_samples is how many samples you want available in your
 // ringbuffer. Higher means less chance of underflow but higher latency on audio output.
+// Care should be taken to ensure that num_samples is always divisible by 4.
 int audio_register_ringbuffer(int format, unsigned int samplerate, unsigned int num_samples);
 
 // Frees up a previously registered stereo ringbuffer.
