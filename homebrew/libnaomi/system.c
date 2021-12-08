@@ -1683,7 +1683,7 @@ void __malloc_unlock (struct _reent *reent)
 {
     // Just in case, but we shouldn't have to worry about IRQs being enabled
     // if newlib is coded correctly.
-    irq_disable();
+    uint32_t old_irq = irq_disable();
 
     if (newlib_lock.owner != reent)
     {
@@ -1696,6 +1696,11 @@ void __malloc_unlock (struct _reent *reent)
         // Time to unlock here!
         newlib_lock.owner = 0;
         irq_restore(newlib_lock.old_irq);
+    }
+    else
+    {
+        // Technically this should do nothing, but at least it is symmetrical.
+        irq_restore(old_irq);
     }
 }
 
