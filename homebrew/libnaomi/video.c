@@ -372,15 +372,7 @@ void video_free()
     uint32_t old_interrupts = irq_disable();
     volatile unsigned int *videobase = (volatile unsigned int *)POWERVR2_BASE;
 
-    // Disable display
-    videobase[POWERVR2_SYNC_CFG] = (
-        0 << 8 |  // Disable video
-        0 << 6 |  // VGA mode
-        0 << 4 |  // Non-interlace
-        0 << 2 |  // Negative H-sync
-        0 << 1    // Negative V-sync
-    );
-
+    // We only want to restore the saved HVinterrupt values on the last free.
     if (initialized)
     {
         initialized = 0;
