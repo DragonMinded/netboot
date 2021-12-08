@@ -28,6 +28,7 @@ static int in_interrupt;
 // Definitions from sh-crt0.s that we use here.
 extern uint8_t *irq_stack;
 extern irq_state_t *irq_state;
+static irq_state_t *irq_freed_state = 0;
 
 #define TRA *((volatile uint32_t *)0xFF000020)
 #define EXPEVT *((volatile uint32_t *)0xFF000024)
@@ -602,6 +603,10 @@ void _irq_init()
     // Allow IRL1-2 interrupts so we can receive interrupts from HOLLY.
     INTC_IPRD = 0x0FF0;
 
+    // Keep track of the state that we free ourselves so that thread.c doesn't
+    // double-free it.
+    irq_freed_state = 0;
+
     // Now, enable interrupts for the whole system!
     _irq_enable();
 
@@ -653,6 +658,10 @@ void _irq_free()
     free(irq_stack);
     irq_stack = 0;
 
+    // Keep track of the state that we free ourselves so that thread.c doesn't
+    // double-free it.
+    irq_freed_state = irq_state;
+
     // Now, get rid of our interrupt state.
     free(irq_state);
     irq_state = 0;
@@ -686,7 +695,7 @@ irq_state_t *_irq_new_state(thread_func_t func, void *funcparam, void *stackptr,
 
 void _irq_free_state(irq_state_t *state)
 {
-    if (state != irq_state)
+    if (state != irq_state && state != irq_freed_state)
     {
         free(state);
     }

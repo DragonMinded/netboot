@@ -3,6 +3,7 @@
 #include <sys/types.h>
 #include <sys/reent.h>
 #include <sys/errno.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,6 +18,7 @@
 #include "naomi/audio.h"
 #include "naomi/video.h"
 #include "irqinternal.h"
+#include "irqstate.h"
 
 #define CCR (*(uint32_t *)0xFF00001C)
 #define QACR0 (*(uint32_t *)0xFF000038)
@@ -59,18 +61,32 @@ int __test()
 
 int test() __attribute__((weak, alias ("__test")));
 
+// Prototype for passing the signal on to GDB if it connects.
+void _gdb_set_haltreason(int reason);
+
+// Prototype for polling DIMM commands so we can keep the communication
+// channel open even in a halted state. This is so GDB can connect and
+// debug us properly.
+int _dimm_command_handler(int halted, irq_state_t *cur_state);
+
 void _exit(int status)
 {
-    // Run fini sections.
-    uint32_t *dtor_ptr = &__dtors;
-    while (dtor_ptr < &__dtors_end)
-    {
-        (*((func_ptr *)dtor_ptr))();
-        dtor_ptr++;
-    }
+    // TODO: Make sure if a user connects with GDB, the backtrace points at
+    // our function call here.
+    irq_state_t state;
+    memset(&state, 0, sizeof(state));
+    state.pc = (uint32_t)&_exit;
 
     // We don't have an OS to "go back to", so just infinite-loop.
-    while ( 1 ) { ; }
+    while( 1 )
+    {
+        int halted = _dimm_command_handler(halted, &state);
+        if (halted == 0)
+        {
+            // User continued, not valid, so re-raise the exception.
+            _gdb_set_haltreason(SIGTERM);
+        }
+    }
 }
 
 // Prototypes of functions that we don't want available in the public headers
@@ -86,6 +102,53 @@ void _fs_init();
 void _fs_free();
 void _romfs_init();
 void _romfs_free();
+
+void _startup()
+{
+    // Initialize things we promise are fully ready by the time main/test is called.
+    _timer_init();
+    _thread_init();
+    _maple_init();
+    _irq_init();
+    _fs_init();
+    _romfs_init();
+
+    // Initialize mutexes for hardware that needs exclusive access.
+    mutex_init(&queue_mutex);
+    mutex_init(&stdio_mutex);
+
+    // Run init sections.
+    uint32_t *ctor_ptr = &__ctors;
+    while (ctor_ptr < &__ctors_end)
+    {
+        (*((func_ptr *)ctor_ptr))();
+        ctor_ptr++;
+    }
+}
+
+void _shutdown()
+{
+    // Free anything that was possibly initialized by the user.
+    audio_free();
+    video_free();
+
+    // Free those things now that we're done. We should usually never get here
+    // because it would be unusual to exit from main/test by returning.
+    _romfs_free();
+    _fs_free();
+    _irq_free();
+    _maple_free();
+    _thread_free();
+    _timer_free();
+
+    // Run fini sections.
+    uint32_t *dtor_ptr = &__dtors;
+    while (dtor_ptr < &__dtors_end)
+    {
+        (*((func_ptr *)dtor_ptr))();
+        dtor_ptr++;
+    }
+}
 
 void _enter()
 {
@@ -116,25 +179,8 @@ void _enter()
     // denormalized numbers treated as zero.
     __set_fpscr(0x40000);
 
-    // Run init sections.
-    uint32_t *ctor_ptr = &__ctors;
-    while (ctor_ptr < &__ctors_end)
-    {
-        (*((func_ptr *)ctor_ptr))();
-        ctor_ptr++;
-    }
-
-    // Initialize things we promise are fully ready by the time main/test is called.
-    _timer_init();
-    _thread_init();
-    _maple_init();
-    _irq_init();
-    _fs_init();
-    _romfs_init();
-
-    // Initialize mutexes for hardware that needs exclusive access.
-    mutex_init(&queue_mutex);
-    mutex_init(&stdio_mutex);
+    // Start up the system kernel.
+    _startup();
 
     // Execute main/test executable based on boot variable set in
     // sh-crt0.s which comes from the entrypoint used to start the code.
@@ -148,18 +194,8 @@ void _enter()
         status = test();
     }
 
-    // Free anything that was possibly initialized by the user.
-    audio_free();
-    video_free();
-
-    // Free those things now that we're done. We should usually never get here
-    // because it would be unusual to exit from main/test by returning.
-    _romfs_free();
-    _fs_free();
-    _irq_free();
-    _maple_free();
-    _thread_free();
-    _timer_free();
+    // Shut everything down in reverse order.
+    _shutdown();
 
     // Finally, exit from the program.
     _exit(status);
@@ -357,19 +393,10 @@ int hw_memcpy(void *dest, void *src, unsigned int amount)
 
 void call_unmanaged(void (*call)())
 {
-    // Free anything that was possibly initialized by the user.
-    audio_free();
-    video_free();
+    // Initiate kernel shutdown.
+    _shutdown();
 
-    // Shut down everything since we're leaving our executable.
-    _romfs_free();
-    _fs_free();
-    _irq_free();
-    _maple_free();
-    _thread_free();
-    _timer_free();
-
-    // Call it.
+    // Call the unmanaged function.
     call();
 
     // Finally, exit from the program if it ever returns.
