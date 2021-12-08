@@ -2227,7 +2227,7 @@ unsigned int configuration(state_t *state, int reinit)
             // Draw cursor itself.
             if (option == cursor && locked == -1)
             {
-                video_draw_sprite(24, 24 + 21 + ((option - top) * 21), cursor_png_width, cursor_png_height, cursor_png_data);
+                video_draw_sprite(24, 24 + 21 + 21 + ((option - top) * 21), cursor_png_width, cursor_png_height, cursor_png_data);
             }
 
             // Draw option, highlighted if it is selected.
@@ -2337,7 +2337,7 @@ unsigned int configuration(state_t *state, int reinit)
 
             video_draw_text(
                 48,
-                22 + 21 + ((option - top) * 21),
+                22 + 21 + 21 + ((option - top) * 21),
                 state->font_18pt,
                 disabled[option] ? rgb(128, 128, 128) : (option == cursor ? (cursor == locked ? rgb(0, 255, 0) : rgb(255, 255, 20)) : rgb(255, 255, 255)),
                 buffer
