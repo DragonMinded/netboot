@@ -385,6 +385,18 @@ void enter_test_mode()
     call_unmanaged((void (*)())test_mode_syscall);
 }
 
+void __assert_func(const char * file, int line, const char *func, const char *failedexpr)
+{
+    _irq_display_invariant(
+        "assertion failure",
+        "assertion \"%s\" failed: file \"%s\", line %d%s%s\n",
+        failedexpr,
+        file,
+        line,
+        func ? ", function: " : "", func ? func : ""
+    );
+}
+
 // Currently hooked stdio calls.
 typedef struct stdio_registered_hooks
 {
@@ -770,7 +782,7 @@ char *realpath(const char *restrict path, char *restrict resolved_path)
 
         if (fullpath[0] != 0)
         {
-            char **parts = malloc(sizeof(char *));
+            char **parts = malloc(sizeof(char **));
             if (parts == 0)
             {
                 if (allocated)
@@ -811,7 +823,7 @@ char *realpath(const char *restrict path, char *restrict resolved_path)
                     {
                         // Need to allocate more for parts.
                         partscount++;
-                        parts = realloc(parts, sizeof(char *) * partscount);
+                        parts = realloc(parts, sizeof(char **) * partscount);
                         parts[partscount - 1] = malloc(PATH_MAX + 1);
                         if (parts[partscount - 1] == 0)
                         {
@@ -844,7 +856,7 @@ char *realpath(const char *restrict path, char *restrict resolved_path)
 
             // At this point we have a string of path parts. Now we need to rejoin
             // them all canonicalized. First, take care of . and .. in the path.
-            char **newparts = malloc(sizeof(char *) * partscount);
+            char **newparts = malloc(sizeof(char **) * partscount);
             if (newparts == 0)
             {
                 if (allocated)

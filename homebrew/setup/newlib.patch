@@ -4,7 +4,7 @@
  	;;
    sh | sh64)
  	machine_dir=sh
-+	newlib_cflags="${newlib_cflags} -DREENTRANT_SYSCALLS_PROVIDED -ffunction-sections -fdata-sections"
++	newlib_cflags="${newlib_cflags} -DREENTRANT_SYSCALLS_PROVIDED -DHAVE_ASSERT_FUNC -ffunction-sections -fdata-sections"
  	;;
    sparc*)
  	machine_dir=sparc
