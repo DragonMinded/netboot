@@ -165,6 +165,7 @@ MESSAGE_LOAD_SETTINGS_DATA: int = 0x1005
 MESSAGE_SAVE_SETTINGS_DATA: int = 0x1007
 MESSAGE_SAVE_SETTINGS_ACK: int = 0x1008
 MESSAGE_LOAD_PROGRESS: int = 0x1009
+MESSAGE_UNPACK_PROGRESS: int = 0x100A
 
 SETTINGS_SIZE: int = 64
 
@@ -421,7 +422,16 @@ def main() -> int:
                                 settings.last_game_file = filename
                                 settings_save(args.menu_settings_file, args.ip, settings)
 
-                                # Wait a second for animation on the Naomi.
+                                # Wait a second for animation on the Naomi. This assumes that the
+                                # below section takes a relatively short amount of time (well below
+                                # about 1 second) to patch and such. If you are on a platform with
+                                # limited speed and attempting to do extra stuff such as unzipping,
+                                # this can fail. It is recommended in this case to spawn off a new
+                                # thread that sends a MESSAGE_UNPACK_PROGRESS with no data once a
+                                # second starting directly after this time.sleep() call. When you
+                                # are finished patching and ready to send, kill the thread before
+                                # the MESSAGE_LOAD_PROGRESS message is sent below and then let the
+                                # message send normally.
                                 time.sleep(1.0)
 
                                 # First, grab a handle to the data itself.

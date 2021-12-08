@@ -517,6 +517,7 @@ void send_game_options(game_options_t *parsed_options)
 #define SCREEN_CONFIGURATION 5
 #define SCREEN_CONFIGURATION_SAVE 6
 #define SCREEN_GAME_LOAD 7
+#define SCREEN_GAME_UNPACK 8
 
 #define MAX_WAIT_FOR_COMMS 5.0
 #define MAX_WAIT_FOR_SAVE 8.0
@@ -723,8 +724,18 @@ unsigned int main_menu(state_t *state, int reinit)
             if (type == MESSAGE_LOAD_PROGRESS && length == 8)
             {
                 // Grab the current progress so we can display it.
+                // The controlling host decided to directly start
+                // sending a game to us without displaying an extraction
+                // screen first.
                 memcpy(&sending_game_size, &data[0], 4);
                 new_screen = SCREEN_GAME_LOAD;
+            }
+            else if (type == MESSAGE_UNPACK_PROGRESS && length == 0)
+            {
+                // Display an in-between screen for extracting a game.
+                // The game needs to be processed heavily before sending
+                // and so we display a message to the user as such.
+                new_screen = SCREEN_GAME_UNPACK;
             }
             else
             {
@@ -755,7 +766,7 @@ unsigned int main_menu(state_t *state, int reinit)
             {
                 // Held for 1 second, so lets go to game settings.
                 selected_game = cursor;
-                if (new_screen != SCREEN_GAME_LOAD)
+                if (new_screen != SCREEN_GAME_LOAD && new_screen != SCREEN_GAME_UNPACK)
                 {
                     new_screen = SCREEN_GAME_SETTINGS_LOAD;
                 }
@@ -764,7 +775,7 @@ unsigned int main_menu(state_t *state, int reinit)
             cursor_offset = cursor_move_amount[which];
         }
 
-        if (booting > 0 && new_screen != SCREEN_GAME_LOAD)
+        if (booting > 0 && new_screen != SCREEN_GAME_LOAD && new_screen != SCREEN_GAME_UNPACK)
         {
             if ((state->animation_counter - holding_animation) >= MAX_WAIT_FOR_COMMS)
             {
@@ -902,6 +913,11 @@ unsigned int game_settings_load(state_t *state, int reinit)
                 // Grab the current progress so we can display it.
                 memcpy(&sending_game_size, &data[0], 4);
                 new_screen = SCREEN_GAME_LOAD;
+            }
+            else if (type == MESSAGE_UNPACK_PROGRESS && length == 0)
+            {
+                // Display an in-between screen for extracting a game.
+                new_screen = SCREEN_GAME_UNPACK;
             }
             else
             {
@@ -1370,6 +1386,13 @@ unsigned int game_settings(state_t *state, int reinit)
                 memcpy(&sending_game_size, &data[0], 4);
                 new_screen = SCREEN_GAME_LOAD;
             }
+            else if (type == MESSAGE_UNPACK_PROGRESS && length == 0)
+            {
+                // Display an in-between screen for extracting a game.
+                // The game needs to be processed heavily before sending
+                // and so we display a message to the user as such.
+                new_screen = SCREEN_GAME_UNPACK;
+            }
             else
             {
                 // Unexpected packet?
@@ -1737,6 +1760,13 @@ unsigned int game_settings_save(state_t *state, int reinit)
                 // Grab the current progress so we can display it.
                 memcpy(&sending_game_size, &data[0], 4);
                 new_screen = SCREEN_GAME_LOAD;
+            }
+            else if (type == MESSAGE_UNPACK_PROGRESS && length == 0)
+            {
+                // Display an in-between screen for extracting a game.
+                // The game needs to be processed heavily before sending
+                // and so we display a message to the user as such.
+                new_screen = SCREEN_GAME_UNPACK;
             }
             else
             {
@@ -2159,6 +2189,13 @@ unsigned int configuration(state_t *state, int reinit)
                 memcpy(&sending_game_size, &data[0], 4);
                 new_screen = SCREEN_GAME_LOAD;
             }
+            else if (type == MESSAGE_UNPACK_PROGRESS && length == 0)
+            {
+                // Display an in-between screen for extracting a game.
+                // The game needs to be processed heavily before sending
+                // and so we display a message to the user as such.
+                new_screen = SCREEN_GAME_UNPACK;
+            }
             else
             {
                 // Unexpected packet?
@@ -2352,6 +2389,13 @@ unsigned int configuration_save(state_t *state, int reinit)
                 memcpy(&sending_game_size, &data[0], 4);
                 new_screen = SCREEN_GAME_LOAD;
             }
+            else if (type == MESSAGE_UNPACK_PROGRESS && length == 0)
+            {
+                // Display an in-between screen for extracting a game.
+                // The game needs to be processed heavily before sending
+                // and so we display a message to the user as such.
+                new_screen = SCREEN_GAME_UNPACK;
+            }
             else
             {
                 // Unexpected packet?
@@ -2478,6 +2522,83 @@ unsigned int game_load(state_t *state, int reinit)
     return new_screen;
 }
 
+unsigned int game_unpack(state_t *state, int reinit)
+{
+    static double unpack_start = 0.0;
+
+    if (reinit)
+    {
+        // Wait for the host to extract the game (could be awhile on a RPI).
+        unpack_start = state->animation_counter;
+    }
+
+    // If we need to switch screens.
+    unsigned int new_screen = SCREEN_GAME_UNPACK;
+
+    controls_t controls = get_controls(state, reinit);
+    if (controls.test_pressed)
+    {
+        // Display error message about not going into settings now.
+        state->test_error_counter = state->animation_counter;
+    }
+
+    // Check to see if we got a response in time.
+    {
+        uint16_t type = 0;
+        uint8_t *data = 0;
+        unsigned int length = 0;
+        if (message_recv(&type, (void *)&data, &length) == 0)
+        {
+            if (type == MESSAGE_UNPACK_PROGRESS && length == 0)
+            {
+                // We got a positive acknowledgement that the host is still
+                // unpacking. So, reset our timer.
+                unpack_start = state->animation_counter;
+            }
+            else if (type == MESSAGE_LOAD_PROGRESS && length == 8)
+            {
+                // We are officially sending the game!
+                memcpy(&sending_game_size, &data[0], 4);
+                new_screen = SCREEN_GAME_LOAD;
+            }
+            else
+            {
+                // Unexpected packet?
+                printf("Unexpected packet %04X!\n", type);
+            }
+
+            // Wipe any data that we need.
+            if (data != 0)
+            {
+                free(data);
+            }
+        }
+
+        if (((state->animation_counter - unpack_start) >= MAX_WAIT_FOR_COMMS))
+        {
+            // Uh oh, no ack.
+            new_screen = SCREEN_COMM_ERROR;
+        }
+    }
+
+    // Draw the progress bar and percentage.
+    {
+        char *loading_game = "Loading game...";
+        font_metrics_t metrics = video_get_text_metrics(state->font_18pt, loading_game);
+        video_draw_text((video_width() - metrics.width) / 2, 100, state->font_18pt, rgb(255, 255, 255), loading_game);
+
+        char *message = (
+            "Host is currently extracting game so that it\n"
+            "can be patched and uploaded! Please hold tight!"
+        );
+
+        metrics = video_get_text_metrics(state->font_12pt, message);
+        video_draw_text((video_width() - metrics.width) / 2, 130, state->font_12pt, rgb(255, 255, 255), message);
+    }
+
+    return new_screen;
+}
+
 void display_error_dialogs(state_t *state)
 {
     if (state->test_error_counter > 0.0)
@@ -2528,6 +2649,9 @@ void draw_screen(state_t *state)
             break;
         case SCREEN_GAME_LOAD:
             newscreen = game_load(state, curscreen != oldscreen);
+            break;
+        case SCREEN_GAME_UNPACK:
+            newscreen = game_unpack(state, curscreen != oldscreen);
             break;
         default:
             // Should never happen, but still, whatever.
