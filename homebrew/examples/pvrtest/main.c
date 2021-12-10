@@ -42,69 +42,16 @@ void init_palette()
 }
 
 /* Draw a textured polygon for one of the faces of the cube */
-void draw_face(vertex_t p1, vertex_t p2, vertex_t p3, vertex_t p4, void *tex, int pal)
+void draw_face(vertex_t p1, vertex_t p2, vertex_t p3, vertex_t p4, texture_description_t *tex)
 {
-    struct polygon_list_packed_color mypoly;
-    struct vertex_list_packed_color_32bit_uv myvertex;
+    textured_vertex_t verticies[4] = {
+        { p1.x, p1.y, p1.z, 0.0, 1.0 },
+        { p2.x, p2.y, p2.z, 1.0, 1.0 },
+        { p3.x, p3.y, p3.z, 0.0, 0.0 },
+        { p4.x, p4.y, p4.z, 1.0, 0.0 },
+    };
 
-    mypoly.cmd =
-        TA_CMD_POLYGON |
-        TA_CMD_POLYGON_TYPE_OPAQUE |
-        TA_CMD_POLYGON_SUBLIST |
-        TA_CMD_POLYGON_STRIPLENGTH_2 |
-        TA_CMD_POLYGON_PACKED_COLOR |
-        TA_CMD_POLYGON_TEXTURED;
-    mypoly.mode1 =
-        TA_POLYMODE1_Z_ALWAYS |
-        TA_POLYMODE1_CULL_CW;
-    mypoly.mode2 =
-        TA_POLYMODE2_MIPMAP_D_1_00 |
-        TA_POLYMODE2_TEXTURE_DECAL |
-        TA_POLYMODE2_U_SIZE_256 |
-        TA_POLYMODE2_V_SIZE_256 |
-        TA_POLYMODE2_TEXTURE_CLAMP_U |
-        TA_POLYMODE2_TEXTURE_CLAMP_V |
-        TA_POLYMODE2_FOG_DISABLED |
-        TA_POLYMODE2_SRC_BLEND_ONE |
-        TA_POLYMODE2_DST_BLEND_ZERO;
-    mypoly.texture =
-        TA_TEXTUREMODE_CLUT8 |
-        TA_TEXTUREMODE_CLUTBANK8(pal) |
-        TA_TEXTUREMODE_ADDRESS(tex);
-    ta_commit_list(&mypoly, TA_LIST_SHORT);
-
-    myvertex.cmd = TA_CMD_VERTEX;
-    myvertex.mult_color = 0xffffffff;
-    myvertex.add_color = 0;
-
-    myvertex.x = p1.x;
-    myvertex.y = p1.y;
-    myvertex.z = p1.z;
-    myvertex.u = 0.0;
-    myvertex.v = 1.0;
-    ta_commit_list(&myvertex, TA_LIST_SHORT);
-
-    myvertex.x = p2.x;
-    myvertex.y = p2.y;
-    myvertex.z = p2.z;
-    myvertex.u = 1.0;
-    myvertex.v = 1.0;
-    ta_commit_list(&myvertex, TA_LIST_SHORT);
-
-    myvertex.x = p3.x;
-    myvertex.y = p3.y;
-    myvertex.z = p3.z;
-    myvertex.u = 0.0;
-    myvertex.v = 0.0;
-    ta_commit_list(&myvertex, TA_LIST_SHORT);
-
-    myvertex.x = p4.x;
-    myvertex.y = p4.y;
-    myvertex.z = p4.z;
-    myvertex.u = 1.0;
-    myvertex.v = 0.0;
-    myvertex.cmd |= TA_CMD_VERTEX_END_OF_STRIP;
-    ta_commit_list(&myvertex, TA_LIST_SHORT);
+    ta_draw_triangle_strip(TA_CMD_POLYGON_TYPE_OPAQUE, TA_CMD_POLYGON_STRIPLENGTH_2, verticies, tex);
 }
 
 // 8-bit textures that we're loading per side.
@@ -125,17 +72,13 @@ void main()
     init_palette();
 
     /* Load our textures into texture RAM */
-    uint16_t *tex[6];
-    for (int i = 0; i < 6; i++)
-    {
-        tex[i] = ta_texture_malloc(256, 8);
-    }
-    ta_texture_load(tex[0], 256, 8, tex1_png_data);
-    ta_texture_load(tex[1], 256, 8, tex2_png_data);
-    ta_texture_load(tex[2], 256, 8, tex3_png_data);
-    ta_texture_load(tex[3], 256, 8, tex4_png_data);
-    ta_texture_load(tex[4], 256, 8, tex5_png_data);
-    ta_texture_load(tex[5], 256, 8, tex6_png_data);
+    texture_description_t *tex[6];
+    tex[0] = ta_texture_desc_malloc_paletted(256, tex1_png_data, TA_PALETTE_CLUT8, 0);
+    tex[1] = ta_texture_desc_malloc_paletted(256, tex2_png_data, TA_PALETTE_CLUT8, 1);
+    tex[2] = ta_texture_desc_malloc_paletted(256, tex3_png_data, TA_PALETTE_CLUT8, 2);
+    tex[3] = ta_texture_desc_malloc_paletted(256, tex4_png_data, TA_PALETTE_CLUT8, 3);
+    tex[4] = ta_texture_desc_malloc_paletted(256, tex5_png_data, TA_PALETTE_CLUT8, 1);
+    tex[5] = ta_texture_desc_malloc_paletted(256, tex6_png_data, TA_PALETTE_CLUT8, 2);
 
     /* x/y/z rotation amount in degrees */
     int i = 45;
@@ -203,12 +146,12 @@ void main()
         ta_commit_begin();
 
         /* Draw the 6 faces of the cube */
-        draw_face(coords[0], coords[1], coords[2], coords[3], tex[0], 0);
-        draw_face(coords[1], coords[5], coords[3], coords[7], tex[1], 1);
-        draw_face(coords[4], coords[5], coords[0], coords[1], tex[2], 2);
-        draw_face(coords[5], coords[4], coords[7], coords[6], tex[3], 3);
-        draw_face(coords[4], coords[0], coords[6], coords[2], tex[4], 1);
-        draw_face(coords[2], coords[3], coords[6], coords[7], tex[5], 2);
+        draw_face(coords[0], coords[1], coords[2], coords[3], tex[0]);
+        draw_face(coords[1], coords[5], coords[3], coords[7], tex[1]);
+        draw_face(coords[4], coords[5], coords[0], coords[1], tex[2]);
+        draw_face(coords[5], coords[4], coords[7], coords[6], tex[3]);
+        draw_face(coords[4], coords[0], coords[6], coords[2], tex[4]);
+        draw_face(coords[2], coords[3], coords[6], coords[7], tex[5]);
 
         /* Draw a box */
         vertex_t box[4] = {

@@ -703,6 +703,181 @@ void *ta_texture_base()
     return ta_working_buffers.texture_ram;
 }
 
+uint32_t _ta_texture_desc_uvsize(int uvsize)
+{
+    switch(uvsize)
+    {
+        case 8:
+            return TA_POLYMODE2_U_SIZE_8 | TA_POLYMODE2_V_SIZE_8;
+        case 16:
+            return TA_POLYMODE2_U_SIZE_16 | TA_POLYMODE2_V_SIZE_16;
+        case 32:
+            return TA_POLYMODE2_U_SIZE_32 | TA_POLYMODE2_V_SIZE_32;
+        case 64:
+            return TA_POLYMODE2_U_SIZE_64 | TA_POLYMODE2_V_SIZE_64;
+        case 128:
+            return TA_POLYMODE2_U_SIZE_128 | TA_POLYMODE2_V_SIZE_128;
+        case 256:
+            return TA_POLYMODE2_U_SIZE_256 | TA_POLYMODE2_V_SIZE_256;
+        case 512:
+            return TA_POLYMODE2_U_SIZE_512 | TA_POLYMODE2_V_SIZE_512;
+        case 1024:
+            return TA_POLYMODE2_U_SIZE_1024 | TA_POLYMODE2_V_SIZE_1024;
+        default:
+            return 0xFFFFFFFF;
+    }
+}
+
+texture_description_t *ta_texture_desc_paletted(void *offset, int uvsize, int size, int banknum)
+{
+    texture_description_t *desc = malloc(sizeof(texture_description_t));
+    if (desc)
+    {
+        desc->vram_location = offset;
+        desc->uvsize = _ta_texture_desc_uvsize(uvsize);
+        if (desc->uvsize == 0xFFFFFFFF)
+        {
+            free(desc);
+            return 0;
+        }
+        desc->vram_owned = 0;
+
+        switch(size)
+        {
+            case TA_PALETTE_CLUT4:
+                desc->texture_mode = TA_TEXTUREMODE_CLUT4 | TA_TEXTUREMODE_CLUTBANK4(banknum);
+                break;
+            case TA_PALETTE_CLUT8:
+                desc->texture_mode = TA_TEXTUREMODE_CLUT8 | TA_TEXTUREMODE_CLUTBANK8(banknum);
+                break;
+            default:
+                free(desc);
+                return 0;
+        }
+    }
+
+    return desc;
+}
+
+texture_description_t *ta_texture_desc_direct(void *offset, int uvsize, uint32_t mode)
+{
+    texture_description_t *desc = malloc(sizeof(texture_description_t));
+    if (desc)
+    {
+        desc->vram_location = offset;
+        desc->uvsize = _ta_texture_desc_uvsize(uvsize);
+        if (desc->uvsize == 0xFFFFFFFF)
+        {
+            free(desc);
+            return 0;
+        }
+        desc->vram_owned = 0;
+
+        switch(mode)
+        {
+            case TA_TEXTUREMODE_ARGB1555:
+                desc->texture_mode = TA_TEXTUREMODE_ARGB1555;
+                break;
+            case TA_TEXTUREMODE_RGB565:
+                desc->texture_mode = TA_TEXTUREMODE_RGB565;
+                break;
+            case TA_TEXTUREMODE_ARGB4444:
+                desc->texture_mode = TA_TEXTUREMODE_ARGB4444;
+                break;
+            default:
+                free(desc);
+                return 0;
+        }
+    }
+
+    return desc;
+}
+
+texture_description_t *ta_texture_desc_malloc_paletted(int uvsize, void *data, int size, int banknum)
+{
+    texture_description_t *desc = malloc(sizeof(texture_description_t));
+    if (desc)
+    {
+        desc->uvsize = _ta_texture_desc_uvsize(uvsize);
+        if (desc->uvsize == 0xFFFFFFFF)
+        {
+            free(desc);
+            return 0;
+        }
+        desc->vram_owned = 1;
+
+        switch(size)
+        {
+            case TA_PALETTE_CLUT4:
+                desc->texture_mode = TA_TEXTUREMODE_CLUT4 | TA_TEXTUREMODE_CLUTBANK4(banknum);
+                desc->vram_location = ta_texture_malloc(uvsize, 4);
+                ta_texture_load(desc->vram_location, uvsize, 4, data);
+                break;
+            case TA_PALETTE_CLUT8:
+                desc->texture_mode = TA_TEXTUREMODE_CLUT8 | TA_TEXTUREMODE_CLUTBANK8(banknum);
+                desc->vram_location = ta_texture_malloc(uvsize, 8);
+                ta_texture_load(desc->vram_location, uvsize, 8, data);
+                break;
+            default:
+                free(desc);
+                return 0;
+        }
+    }
+
+    return desc;
+}
+
+texture_description_t *ta_texture_desc_malloc_direct(int uvsize, void *data, uint32_t mode)
+{
+    texture_description_t *desc = malloc(sizeof(texture_description_t));
+    if (desc)
+    {
+        desc->uvsize = _ta_texture_desc_uvsize(uvsize);
+        if (desc->uvsize == 0xFFFFFFFF)
+        {
+            free(desc);
+            return 0;
+        }
+        desc->vram_owned = 1;
+
+        switch(mode)
+        {
+            case TA_TEXTUREMODE_ARGB1555:
+                desc->texture_mode = TA_TEXTUREMODE_ARGB1555;
+                desc->vram_location = ta_texture_malloc(uvsize, 16);
+                ta_texture_load(desc->vram_location, uvsize, 16, data);
+                break;
+            case TA_TEXTUREMODE_RGB565:
+                desc->texture_mode = TA_TEXTUREMODE_RGB565;
+                desc->vram_location = ta_texture_malloc(uvsize, 16);
+                ta_texture_load(desc->vram_location, uvsize, 16, data);
+                break;
+            case TA_TEXTUREMODE_ARGB4444:
+                desc->texture_mode = TA_TEXTUREMODE_ARGB4444;
+                desc->vram_location = ta_texture_malloc(uvsize, 16);
+                ta_texture_load(desc->vram_location, uvsize, 16, data);
+                break;
+            default:
+                free(desc);
+                return 0;
+        }
+    }
+
+    return desc;
+}
+
+void ta_texture_desc_free(texture_description_t *desc)
+{
+    if (desc->vram_owned)
+    {
+        ta_texture_free(desc->vram_location);
+    }
+
+    // Attempt to avoid use-afrer-free issues.
+    memset(desc, 0, sizeof(desc));
+    free(desc);
+}
+
 void ta_fill_box(uint32_t type, vertex_t *verticies, color_t color)
 {
     struct polygon_list_sprite mypoly;
@@ -743,12 +918,127 @@ void ta_fill_box(uint32_t type, vertex_t *verticies, color_t color)
     ta_commit_list(&myvertex, TA_LIST_LONG);
 }
 
-void ta_draw_sprite(uint32_t type, textured_vertex_t *verticies, texture_t texture)
+void ta_draw_triangle_strip(uint32_t type, uint32_t striplen, textured_vertex_t *verticies, texture_description_t *texture)
+{
+    struct polygon_list_packed_color mypoly;
+    struct vertex_list_packed_color_32bit_uv myvertex;
+
+    mypoly.cmd =
+        TA_CMD_POLYGON |
+        type |
+        TA_CMD_POLYGON_SUBLIST |
+        striplen |
+        TA_CMD_POLYGON_PACKED_COLOR |
+        TA_CMD_POLYGON_TEXTURED;
+    mypoly.mode1 =
+        TA_POLYMODE1_Z_ALWAYS |
+        TA_POLYMODE1_CULL_CW;
+    mypoly.mode2 =
+        TA_POLYMODE2_MIPMAP_D_1_00 |
+        TA_POLYMODE2_TEXTURE_DECAL |
+        texture->uvsize |
+        TA_POLYMODE2_TEXTURE_CLAMP_U |
+        TA_POLYMODE2_TEXTURE_CLAMP_V |
+        TA_POLYMODE2_FOG_DISABLED |
+        TA_POLYMODE2_SRC_BLEND_SRC_ALPHA |
+        TA_POLYMODE2_DST_BLEND_INV_SRC_ALPHA;
+    mypoly.texture =
+        texture->texture_mode |
+        TA_TEXTUREMODE_ADDRESS(texture->vram_location);
+    ta_commit_list(&mypoly, TA_LIST_SHORT);
+
+    myvertex.cmd = TA_CMD_VERTEX;
+    myvertex.mult_color = 0xffffffff;
+    myvertex.add_color = 0;
+
+    myvertex.x = verticies[0].x;
+    myvertex.y = verticies[0].y;
+    myvertex.z = verticies[0].z;
+    myvertex.u = verticies[0].u;
+    myvertex.v = verticies[0].v;
+    ta_commit_list(&myvertex, TA_LIST_SHORT);
+
+    myvertex.x = verticies[1].x;
+    myvertex.y = verticies[1].y;
+    myvertex.z = verticies[1].z;
+    myvertex.u = verticies[1].u;
+    myvertex.v = verticies[1].v;
+    ta_commit_list(&myvertex, TA_LIST_SHORT);
+
+    myvertex.x = verticies[2].x;
+    myvertex.y = verticies[2].y;
+    myvertex.z = verticies[2].z;
+    myvertex.u = verticies[2].u;
+    myvertex.v = verticies[2].v;
+    if (striplen == TA_CMD_POLYGON_STRIPLENGTH_1)
+    {
+        myvertex.cmd |= TA_CMD_VERTEX_END_OF_STRIP;
+        ta_commit_list(&myvertex, TA_LIST_SHORT);
+    }
+    else
+    {
+        ta_commit_list(&myvertex, TA_LIST_SHORT);
+
+        myvertex.x = verticies[3].x;
+        myvertex.y = verticies[3].y;
+        myvertex.z = verticies[3].z;
+        myvertex.u = verticies[3].u;
+        myvertex.v = verticies[3].v;
+        if (striplen == TA_CMD_POLYGON_STRIPLENGTH_2)
+        {
+            myvertex.cmd |= TA_CMD_VERTEX_END_OF_STRIP;
+            ta_commit_list(&myvertex, TA_LIST_SHORT);
+        }
+        else
+        {
+            ta_commit_list(&myvertex, TA_LIST_SHORT);
+
+            myvertex.x = verticies[4].x;
+            myvertex.y = verticies[4].y;
+            myvertex.z = verticies[4].z;
+            myvertex.u = verticies[4].u;
+            myvertex.v = verticies[4].v;
+            ta_commit_list(&myvertex, TA_LIST_SHORT);
+
+            myvertex.x = verticies[5].x;
+            myvertex.y = verticies[5].y;
+            myvertex.z = verticies[5].z;
+            myvertex.u = verticies[5].u;
+            myvertex.v = verticies[5].v;
+            if (striplen == TA_CMD_POLYGON_STRIPLENGTH_4)
+            {
+                myvertex.cmd |= TA_CMD_VERTEX_END_OF_STRIP;
+                ta_commit_list(&myvertex, TA_LIST_SHORT);
+            }
+            else
+            {
+                ta_commit_list(&myvertex, TA_LIST_SHORT);
+
+                myvertex.x = verticies[6].x;
+                myvertex.y = verticies[6].y;
+                myvertex.z = verticies[6].z;
+                myvertex.u = verticies[6].u;
+                myvertex.v = verticies[6].v;
+                ta_commit_list(&myvertex, TA_LIST_SHORT);
+
+                myvertex.x = verticies[7].x;
+                myvertex.y = verticies[7].y;
+                myvertex.z = verticies[7].z;
+                myvertex.u = verticies[7].u;
+                myvertex.v = verticies[7].v;
+                myvertex.cmd |= TA_CMD_VERTEX_END_OF_STRIP;
+                ta_commit_list(&myvertex, TA_LIST_SHORT);
+            }
+        }
+    }
+}
+
+void ta_draw_sprite(uint32_t type, textured_vertex_t *verticies, texture_description_t *texture)
 {
 
 }
 
-void ta_draw_sprite_uv(uint32_t type, vertex_t *verticies, uv_t *texcoords, texture_t texture)
+void ta_draw_sprite_uv(uint32_t type, vertex_t *verticies, uv_t *texcoords, texture_description_t *texture)
 {
 
 }

@@ -357,8 +357,33 @@ typedef struct
 {
     void *vram_location;
     uint32_t texture_mode;
-    int banknum;
-} texture_t;
+    uint32_t uvsize;
+    int vram_owned;
+} texture_description_t;
+
+// Constructor functions for the above texture_description_t datatype. For paletted
+// entries, the size should be one of TA_PALETTE_CLUT4 or TA_PALETTE_CLUT8. The bank
+// number should be identical to the value you give to ta_palette_bank(). For direct
+// texture entries, the mode should be one of TA_TEXTUREMODE_ARGB1555,
+// TA_TEXTUREMODE_RGB565 or TA_TEXTUREMODE_ARGB4444. In both cases, the offset should
+// be the VRAM offset of the texture you got from a ta_texture_malloc() and filled
+// with a ta_texture_load(). Also, in both cases, the uvsize is the size in pixels
+// of the texture in both the U and V direction, similar to what you would give to
+// a ta_texture_malloc() call.
+texture_description_t *ta_texture_desc_paletted(void *offset, int uvsize, int size, int banknum);
+texture_description_t *ta_texture_desc_direct(void *offset, int uvsize, uint32_t mode);
+
+// The following functions work identical to the above functions. However, they instead
+// take a data offset in main RAM, allocate a new texture using ta_texture_malloc(), then
+// load the texture using ta_texture_load() and finally initialize the description.
+texture_description_t *ta_texture_desc_malloc_paletted(int uvsize, void *data, int size, int banknum);
+texture_description_t *ta_texture_desc_malloc_direct(int uvsize, void *data, uint32_t mode);
+
+// Frees the memory returned by one of the above four functions. Note that if you passed
+// in an offset to a previously allocated texture, you are responsible for freeing that
+// texture as well using ta_texture_free(). It is only done for you in functions where
+// the allocation is also performed for you!
+void ta_texture_desc_free(texture_description_t *desc);
 
 // Given a box bounded by 4 verticies, draw it to the screen with the particular color.
 // The type shold be one of TA_CMD_POLYGON_TYPE_OPAQUE, TA_CMD_POLYGON_TYPE_TRANSPARENT
@@ -366,6 +391,13 @@ typedef struct
 // left, upper left, upper right, lower right. However, they may have affine transformations
 // applied to them using matrix math should you wish to scale/rotate/shear the box.
 void ta_fill_box(uint32_t type, vertex_t *verticies, color_t color);
+
+// Draw a triangle strip consisting of striplen TA_CMD_POLYGON_STRIPLENGTH_1,
+// TA_CMD_POLYGON_STRIPLENGTH_2, TA_CMD_POLYGON_STRIPLENGTH_4 or TA_CMD_POLYGON_STRIPLENGTH_6.
+// The type is the same as ta_fill_box()'s type, specifying whether the triangle is opaque,
+// transparent or punchthru. The verticies should be in order of bottom left, top left, bottom
+// right for the first triangle, and then alternating up and down for the strip beyond that.
+void ta_draw_triangle_strip(uint32_t type, uint32_t striplen, textured_vertex_t *verticies, texture_description_t *texture);
 
 #ifdef __cplusplus
 }
