@@ -6,7 +6,7 @@
 #define MAX_MATRIXES 16
 
 static int matrixpos = 0;
-static float sysmatrix[MAX_MATRIXES][4][4];
+static matrix_t sysmatrix[MAX_MATRIXES];
 
 void matrix_init_identity()
 {
@@ -58,22 +58,22 @@ void matrix_init_perspective(float fovy, float zNear, float zFar)
         // Adjust coordinates so that the screen goes from -1.0 to 1.0 in both x and y direction.
         float halfheight = video_width() / 2.0;
         float halfwidth = video_height() / 2.0;
-        float screenview_matrix[4][4] = {
-            { halfwidth, 0.0, 0.0, 0.0 },
-            { 0.0, halfheight, 0.0, 0.0 },
-            { 0.0, 0.0, 1.0, 0.0 },
-            { halfwidth, halfheight, 0.0, 1.0 },
+        matrix_t screenview_matrix = {
+            halfwidth, 0.0, 0.0, 0.0,
+            0.0, halfheight, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            halfwidth, halfheight, 0.0, 1.0
         };
 
         // Create a projection matrix which allows for perspective projection.
         float fovrads = (fovy / 180.0) * M_PI;
         float aspect = (float)halfheight / (float)halfwidth;
         float cot_fovy_2 = cos(fovrads / 2.0) / sin(fovrads / 2.0);
-        float projection_matrix[4][4] = {
-            { -cot_fovy_2 / aspect, 0.0, 0.0, 0.0 },
-            { 0.0, cot_fovy_2, 0.0, 0.0 },
-            { 0.0, 0.0, (zFar+zNear)/(zNear-zFar), -1.0 },
-            { 0.0, 0.0, 2*zFar*zNear/(zNear-zFar), 1.0 },
+        matrix_t projection_matrix = {
+            -cot_fovy_2 / aspect, 0.0, 0.0, 0.0,
+            0.0, cot_fovy_2, 0.0, 0.0,
+            0.0, 0.0, (zFar+zNear)/(zNear-zFar), -1.0,
+            0.0, 0.0, 2*zFar*zNear/(zNear-zFar), 1.0
         };
 
         matrix_init_identity();
@@ -86,22 +86,22 @@ void matrix_init_perspective(float fovy, float zNear, float zFar)
         // Adjust coordinates so that the screen goes from -1.0 to 1.0 in both x and y direction.
         float halfwidth = video_width() / 2.0;
         float halfheight = video_height() / 2.0;
-        float screenview_matrix[4][4] = {
-            { halfwidth, 0.0, 0.0, 0.0 },
-            { 0.0, halfheight, 0.0, 0.0 },
-            { 0.0, 0.0, 1.0, 0.0 },
-            { halfwidth, halfheight, 0.0, 1.0 },
+        matrix_t screenview_matrix = {
+            halfwidth, 0.0, 0.0, 0.0,
+            0.0, halfheight, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            halfwidth, halfheight, 0.0, 1.0
         };
 
         // Create a projection matrix which allows for perspective projection.
         float fovrads = (fovy / 180.0) * M_PI;
         float aspect = (float)halfwidth / (float)halfheight;
         float cot_fovy_2 = cos(fovrads / 2.0) / sin(fovrads / 2.0);
-        float projection_matrix[4][4] = {
-            { -cot_fovy_2 / aspect, 0.0, 0.0, 0.0 },
-            { 0.0, cot_fovy_2, 0.0, 0.0 },
-            { 0.0, 0.0, (zFar+zNear)/(zNear-zFar), -1.0 },
-            { 0.0, 0.0, 2*zFar*zNear/(zNear-zFar), 1.0 },
+        matrix_t projection_matrix = {
+            -cot_fovy_2 / aspect, 0.0, 0.0, 0.0,
+            0.0, cot_fovy_2, 0.0, 0.0,
+            0.0, 0.0, (zFar+zNear)/(zNear-zFar), -1.0,
+            0.0, 0.0, 2*zFar*zNear/(zNear-zFar), 1.0
         };
 
         matrix_init_identity();
@@ -110,12 +110,12 @@ void matrix_init_perspective(float fovy, float zNear, float zFar)
     }
 }
 
-void matrix_apply(float (*matrix)[4][4])
+void matrix_apply(matrix_t *matrix)
 {
     uint32_t old_irq = irq_disable();
 
     // Apply a 4x4 matrix in the input to the XMTRX accumulated viewport matrix.
-    register float (*matrix_param)[4][4] asm("r4") = matrix;
+    register matrix_t *matrix_param asm("r4") = matrix;
     asm(" \
         fmov.s @r4+,fr0\n \
         fmov.s @r4+,fr1\n \
@@ -156,12 +156,12 @@ void matrix_apply(float (*matrix)[4][4])
     irq_restore(old_irq);
 }
 
-void matrix_set(float (*matrix)[4][4])
+void matrix_set(matrix_t *matrix)
 {
     uint32_t old_irq = irq_disable();
 
     // Set a 4x4 matrix into the XMTRX register.
-    register float (*matrix_param)[4][4] asm("r4") = matrix;
+    register matrix_t *matrix_param asm("r4") = matrix;
     asm(" \
         fmov.s @r4+,fr0\n \
         fmov.s @r4+,fr1\n \
@@ -198,12 +198,12 @@ void matrix_set(float (*matrix)[4][4])
     irq_restore(old_irq);
 }
 
-void matrix_get(float (*matrix)[4][4])
+void matrix_get(matrix_t *matrix)
 {
     uint32_t old_irq = irq_disable();
 
     // Set a 4x4 matrix into the XMTRX register.
-    register float (*matrix_param)[4][4] asm("r4") = matrix;
+    register matrix_t *matrix_param asm("r4") = matrix;
     asm(" \
         fschg\n \
         fmov xd0,dr0\n \
@@ -259,7 +259,7 @@ void matrix_pop()
     }
 }
 
-void matrix_affine_transform_coords(float (*src)[3], float (*dest)[3], int n)
+void matrix_affine_transform_vertex(vertex_t *src, vertex_t *dest, int n)
 {
     // Let's do some bounds checking!
     if (n <= 0) { return; }
@@ -269,8 +269,8 @@ void matrix_affine_transform_coords(float (*src)[3], float (*dest)[3], int n)
     // Given a pre-set XMTRX (use matrix_clear() and matrix_apply() to get here),
     // multiply it by a set of points to transform them from world space to screen space.
     // These are extended to homogenous coordinates by assuming a "w" value of 1.0.
-    register float (*src_param)[3] asm("r4") = src;
-    register float (*dst_param)[3] asm("r5") = dest;
+    register vertex_t *src_param asm("r4") = src;
+    register vertex_t *dst_param asm("r5") = dest;
     register int n_param asm("r6") = n;
     asm(" \
     .affineloop:\n \
@@ -297,7 +297,7 @@ void matrix_affine_transform_coords(float (*src)[3], float (*dest)[3], int n)
     irq_restore(old_irq);
 }
 
-void matrix_perspective_transform_coords(float (*src)[3], float (*dest)[3], int n)
+void matrix_perspective_transform_vertex(vertex_t *src, vertex_t *dest, int n)
 {
     // Let's do some bounds checking!
     if (n <= 0) { return; }
@@ -307,8 +307,8 @@ void matrix_perspective_transform_coords(float (*src)[3], float (*dest)[3], int 
     // Given a pre-set XMTRX (use matrix_clear() and matrix_apply() to get here),
     // multiply it by a set of points to transform them from world space to screen space.
     // These are extended to homogenous coordinates by assuming a "w" value of 1.0.
-    register float (*src_param)[3] asm("r4") = src;
-    register float (*dst_param)[3] asm("r5") = dest;
+    register vertex_t *src_param asm("r4") = src;
+    register vertex_t *dst_param asm("r5") = dest;
     register int n_param asm("r6") = n;
     asm(" \
     .perspectiveloop:\n \
@@ -340,111 +340,111 @@ void matrix_perspective_transform_coords(float (*src)[3], float (*dest)[3], int 
 
 void matrix_rotate_x(float degrees)
 {
-    static float matrix[4][4] = {
-        { 1.0, 0.0, 0.0, 0.0 },
-        { 0.0, 1.0, 0.0, 0.0 },
-        { 0.0, 0.0, 1.0, 0.0 },
-        { 0.0, 0.0, 0.0, 1.0 },
+    matrix_t matrix = {
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0
     };
-    matrix[1][1] = matrix[2][2] = cos((degrees / 180.0) * M_PI);
-    matrix[1][2] = -(matrix[2][1] = sin((degrees / 180.0) * M_PI));
+    matrix.a22 = matrix.a33 = cos((degrees / 180.0) * M_PI);
+    matrix.a23 = -(matrix.a32 = sin((degrees / 180.0) * M_PI));
     matrix_apply(&matrix);
 }
 
 void matrix_rotate_y(float degrees)
 {
-    static float matrix[4][4] = {
-        { 1.0, 0.0, 0.0, 0.0 },
-        { 0.0, 1.0, 0.0, 0.0 },
-        { 0.0, 0.0, 1.0, 0.0 },
-        { 0.0, 0.0, 0.0, 1.0 },
+    matrix_t matrix = {
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0
     };
-    matrix[0][0] = matrix[2][2] = cos((degrees / 180.0) * M_PI);
-    matrix[2][0] = -(matrix[0][2] = sin((degrees / 180.0) * M_PI));
+    matrix.a11 = matrix.a33 = cos((degrees / 180.0) * M_PI);
+    matrix.a31 = -(matrix.a13 = sin((degrees / 180.0) * M_PI));
     matrix_apply(&matrix);
 }
 
 void matrix_rotate_z(float degrees)
 {
-    static float matrix[4][4] = {
-        { 1.0, 0.0, 0.0, 0.0 },
-        { 0.0, 1.0, 0.0, 0.0 },
-        { 0.0, 0.0, 1.0, 0.0 },
-        { 0.0, 0.0, 0.0, 1.0 },
+    matrix_t matrix = {
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0
     };
-    matrix[0][0] = matrix[1][1] = cos((degrees / 180.0) * M_PI);
-    matrix[0][1] = -(matrix[1][0] = sin((degrees / 180.0) * M_PI));
+    matrix.a11 = matrix.a22 = cos((degrees / 180.0) * M_PI);
+    matrix.a12 = -(matrix.a21 = sin((degrees / 180.0) * M_PI));
     matrix_apply(&matrix);
 }
 
 void matrix_scale_x(float amount)
 {
-    static float matrix[4][4] = {
-        { 1.0, 0.0, 0.0, 0.0 },
-        { 0.0, 1.0, 0.0, 0.0 },
-        { 0.0, 0.0, 1.0, 0.0 },
-        { 0.0, 0.0, 0.0, 1.0 },
+    matrix_t matrix = {
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0
     };
-    matrix[0][0] = amount;
+    matrix.a11 = amount;
     matrix_apply(&matrix);
 }
 
 void matrix_scale_y(float amount)
 {
-    static float matrix[4][4] = {
-        { 1.0, 0.0, 0.0, 0.0 },
-        { 0.0, 1.0, 0.0, 0.0 },
-        { 0.0, 0.0, 1.0, 0.0 },
-        { 0.0, 0.0, 0.0, 1.0 },
+    matrix_t matrix = {
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0
     };
-    matrix[1][1] = amount;
+    matrix.a22 = amount;
     matrix_apply(&matrix);
 }
 
 void matrix_scale_z(float amount)
 {
-    static float matrix[4][4] = {
-        { 1.0, 0.0, 0.0, 0.0 },
-        { 0.0, 1.0, 0.0, 0.0 },
-        { 0.0, 0.0, 1.0, 0.0 },
-        { 0.0, 0.0, 0.0, 1.0 },
+    matrix_t matrix = {
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0
     };
-    matrix[2][2] = amount;
+    matrix.a33 = amount;
     matrix_apply(&matrix);
 }
 
 void matrix_translate_x(float amount)
 {
-    static float matrix[4][4] = {
-        { 1.0, 0.0, 0.0, 0.0 },
-        { 0.0, 1.0, 0.0, 0.0 },
-        { 0.0, 0.0, 1.0, 0.0 },
-        { 0.0, 0.0, 0.0, 1.0 },
+    matrix_t matrix = {
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0
     };
-    matrix[3][0] = amount;
+    matrix.a41 = amount;
     matrix_apply(&matrix);
 }
 
 void matrix_translate_y(float amount)
 {
-    static float matrix[4][4] = {
-        { 1.0, 0.0, 0.0, 0.0 },
-        { 0.0, 1.0, 0.0, 0.0 },
-        { 0.0, 0.0, 1.0, 0.0 },
-        { 0.0, 0.0, 0.0, 1.0 },
+    matrix_t matrix = {
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0
     };
-    matrix[3][1] = amount;
+    matrix.a42 = amount;
     matrix_apply(&matrix);
 }
 
 void matrix_translate_z(float amount)
 {
-    static float matrix[4][4] = {
-        { 1.0, 0.0, 0.0, 0.0 },
-        { 0.0, 1.0, 0.0, 0.0 },
-        { 0.0, 0.0, 1.0, 0.0 },
-        { 0.0, 0.0, 0.0, 1.0 },
+    matrix_t matrix = {
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0
     };
-    matrix[3][2] = amount;
+    matrix.a43 = amount;
     matrix_apply(&matrix);
 }

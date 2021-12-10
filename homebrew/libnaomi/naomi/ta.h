@@ -19,18 +19,23 @@ struct user_clip_list
     float ymax;
 };
 
-/* Command: Polygon / Modifier volume */
-struct polygon_list
+/*
+ * Command: Polygon / Modifier volume
+ *
+ * Usable with used with packed color and intensity type color textured and untextured polygons.
+ */
+struct polygon_list_packed_color
 {
-  unsigned int cmd;
-  unsigned int mode1;
-  unsigned int mode2;
-  unsigned int texture;
-  /* used with intensity type color */
-  float alpha;
-  float red;
-  float green;
-  float blue;
+    unsigned int cmd;
+    unsigned int mode1;
+    unsigned int mode2;
+    /* When using untextured polygons, the texture word is left at 0 */
+    unsigned int texture;
+    /* In packed color mode, these are completely ignored and should be left at 0 */
+    float alpha;
+    float red;
+    float green;
+    float blue;
 };
 		    
 /* Command: Modifier list */
@@ -41,8 +46,12 @@ struct modifier_list
     int not_used[6];
 };
 
-/* Command: Vertex */
-struct packed_color_vertex_list
+/*
+ * Command: Vertex
+ *
+ * Usable with packed color polygons as well as intensity polygons.
+ */
+struct vertex_list_packed_color_32bit_uv
 {
     unsigned int cmd;
     float x;
@@ -50,8 +59,37 @@ struct packed_color_vertex_list
     float z;
     float u;
     float v;
-    unsigned int color;
-    unsigned int ocolor;
+    /* Depending on the color mode, neither, just base_color or both base_color
+     * and offset_color will be used. */
+    unsigned int mult_color;
+    unsigned int add_color;
+};
+
+/*
+ * Command: Vertex
+ *
+ * Usable with both textured and untextured sprites.
+ */
+struct vertex_list_sprite
+{
+    unsigned int cmd;
+    float ax;
+    float ay;
+    float az;
+    float bx;
+    float by;
+    float bz;
+    float cx;
+    float cy;
+    float cz;
+    float dx;
+    float dy;
+    /* Only used for textured sprites. For untextured,
+     * these four are ignored. */
+    int not_used;
+    unsigned int au_av;
+    unsigned int bu_bv;
+    unsigned int cu_cv;
 };
 
 // Defines for the high byte of the TA cmd.

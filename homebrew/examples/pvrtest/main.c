@@ -40,10 +40,10 @@ void init_palette()
 }
 
 /* Draw a textured polygon for one of the faces of the cube */
-void draw_face(float *p1, float *p2, float *p3, float *p4, void *tex, int pal)
+void draw_face(vertex_t p1, vertex_t p2, vertex_t p3, vertex_t p4, void *tex, int pal)
 {
-    struct polygon_list mypoly;
-    struct packed_color_vertex_list myvertex;
+    struct polygon_list_packed_color mypoly;
+    struct vertex_list_packed_color_32bit_uv myvertex;
 
     mypoly.cmd =
         TA_CMD_POLYGON |
@@ -73,33 +73,33 @@ void draw_face(float *p1, float *p2, float *p3, float *p4, void *tex, int pal)
     ta_commit_list(&mypoly, TA_LIST_SHORT);
 
     myvertex.cmd = TA_CMD_VERTEX;
-    myvertex.color = 0xffffffff;
-    myvertex.ocolor = 0;
+    myvertex.mult_color = 0xffffffff;
+    myvertex.add_color = 0;
 
-    myvertex.x = p1[0];
-    myvertex.y = p1[1];
-    myvertex.z = p1[2];
+    myvertex.x = p1.x;
+    myvertex.y = p1.y;
+    myvertex.z = p1.z;
     myvertex.u = 0.0;
     myvertex.v = 1.0;
     ta_commit_list(&myvertex, TA_LIST_SHORT);
 
-    myvertex.x = p2[0];
-    myvertex.y = p2[1];
-    myvertex.z = p2[2];
+    myvertex.x = p2.x;
+    myvertex.y = p2.y;
+    myvertex.z = p2.z;
     myvertex.u = 1.0;
     myvertex.v = 1.0;
     ta_commit_list(&myvertex, TA_LIST_SHORT);
 
-    myvertex.x = p3[0];
-    myvertex.y = p3[1];
-    myvertex.z = p3[2];
+    myvertex.x = p3.x;
+    myvertex.y = p3.y;
+    myvertex.z = p3.z;
     myvertex.u = 0.0;
     myvertex.v = 0.0;
     ta_commit_list(&myvertex, TA_LIST_SHORT);
 
-    myvertex.x = p4[0];
-    myvertex.y = p4[1];
-    myvertex.z = p4[2];
+    myvertex.x = p4.x;
+    myvertex.y = p4.y;
+    myvertex.z = p4.z;
     myvertex.u = 1.0;
     myvertex.v = 0.0;
     myvertex.cmd |= TA_CMD_VERTEX_END_OF_STRIP;
@@ -172,9 +172,9 @@ void main()
             k--;
         }
 
-        /* Set up our cube. */
+        /* Set up our throbbing cube. */
         float val = 1.0 + (sin((count / 30.0) * M_PI) / 32.0);
-        float coords[8][3] = {
+        vertex_t coords[8] = {
             { -val, -val, -val },
             {  val, -val, -val },
             { -val,  val, -val },
@@ -196,7 +196,7 @@ void main()
 
         /* Apply the transformation to all the coordinates, and normalize the
            resulting homogenous coordinates into normal 3D coordinates again. */
-        matrix_perspective_transform_coords(coords, coords, 8);
+        matrix_perspective_transform_vertex(coords, coords, 8);
 
         /* Begin sending commands to the TA to draw stuff */
         ta_commit_begin();
