@@ -315,13 +315,14 @@ void ta_set_background_color(color_t color);
 #define TA_LIST_LONG 64
 
 // Given a particular palette lookup size and a bank, return the palette RAM pointer.
+#define TA_PALETTE_NONE 0
+#define TA_PALETTE_CLUT4 1
+#define TA_PALETTE_CLUT8 2
+
 void *ta_palette_bank(int size, int banknum);
 
 // Given an RGBA value, return a packed color suitable for palettes.
 uint32_t ta_palette_entry(color_t color);
-
-#define TA_PALETTE_CLUT4 1
-#define TA_PALETTE_CLUT8 2
 
 // Get a pointer to the base texture RAM that is safe to use.
 void *ta_texture_base();
@@ -343,6 +344,28 @@ struct mallinfo ta_texture_mallinfo();
 // the size in pixels of one side. The only allowed sizes are 8, 16, 32, 64, 128, 256, 512
 // and 1024.
 int ta_texture_load(void *offset, int uvsize, int bitsize, void *data);
+
+// Data type for standalone UV coordinates.
+typedef struct
+{
+    float u;
+    float v;
+} uv_t;
+
+// Data type for tracking a texture and its attributes.
+typedef struct
+{
+    void *vram_location;
+    uint32_t texture_mode;
+    int banknum;
+} texture_t;
+
+// Given a box bounded by 4 verticies, draw it to the screen with the particular color.
+// The type shold be one of TA_CMD_POLYGON_TYPE_OPAQUE, TA_CMD_POLYGON_TYPE_TRANSPARENT
+// or TA_CMD_POLYGON_TYPE_PUNCHTHRU. The verticies should be specified in order of lower
+// left, upper left, upper right, lower right. However, they may have affine transformations
+// applied to them using matrix math should you wish to scale/rotate/shear the box.
+void ta_fill_box(uint32_t type, vertex_t *verticies, color_t color);
 
 #ifdef __cplusplus
 }

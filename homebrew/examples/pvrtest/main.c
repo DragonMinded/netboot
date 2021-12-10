@@ -210,6 +210,27 @@ void main()
         draw_face(coords[4], coords[0], coords[6], coords[2], tex[4], 1);
         draw_face(coords[2], coords[3], coords[6], coords[7], tex[5], 2);
 
+        /* Draw a box */
+        vertex_t box[4] = {
+            { 30.0, 450.0, 0.0 },
+            { 30.0, 350.0, 0.0 },
+            { 130.0, 350.0, 0.0 },
+            { 130.0, 450.0, 0.0 },
+        };
+
+        /* Rotate the box about its own axis. Remember that this is from the world
+         * perspective, so build it backwards. */
+        matrix_init_identity();
+        matrix_translate_x(80.0);
+        matrix_translate_y(400.0);
+        matrix_rotate_z(-(float)count);
+        matrix_translate_x(-80.0);
+        matrix_translate_y(-400.0);
+        matrix_affine_transform_vertex(box, box, 4);
+
+        /* Draw the box to the screen. */
+        ta_fill_box(TA_CMD_POLYGON_TYPE_OPAQUE, box, rgb(255, 255, 0));
+
         /* Mark the end of the command list */
         ta_commit_end();
 

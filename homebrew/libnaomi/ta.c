@@ -702,3 +702,53 @@ void *ta_texture_base()
 {
     return ta_working_buffers.texture_ram;
 }
+
+void ta_fill_box(uint32_t type, vertex_t *verticies, color_t color)
+{
+    struct polygon_list_sprite mypoly;
+    struct vertex_list_sprite myvertex;
+
+    mypoly.cmd =
+        TA_CMD_SPRITE |
+        type |
+        TA_CMD_POLYGON_SUBLIST |
+        TA_CMD_POLYGON_STRIPLENGTH_2 |
+        TA_CMD_POLYGON_PACKED_COLOR |
+        TA_CMD_POLYGON_16BIT_UV;
+    mypoly.mode1 =
+        TA_POLYMODE1_Z_ALWAYS |
+        TA_POLYMODE1_CULL_DISABLED;
+    mypoly.mode2 =
+        TA_POLYMODE2_MIPMAP_D_1_00 |
+        TA_POLYMODE2_FOG_DISABLED |
+        TA_POLYMODE2_SRC_BLEND_SRC_ALPHA |
+        TA_POLYMODE2_DST_BLEND_INV_SRC_ALPHA;
+    mypoly.texture = 0;
+    mypoly.mult_color = RGB8888(color.r, color.g, color.b, color.a);
+    mypoly.add_color = 0;
+    ta_commit_list(&mypoly, TA_LIST_SHORT);
+
+    myvertex.cmd = TA_CMD_VERTEX | TA_CMD_VERTEX_END_OF_STRIP;
+    myvertex.ax = verticies[0].x;
+    myvertex.ay = verticies[0].y;
+    myvertex.az = verticies[0].z;
+    myvertex.bx = verticies[1].x;
+    myvertex.by = verticies[1].y;
+    myvertex.bz = verticies[1].z;
+    myvertex.cx = verticies[2].x;
+    myvertex.cy = verticies[2].y;
+    myvertex.cz = verticies[2].z;
+    myvertex.dx = verticies[3].x;
+    myvertex.dy = verticies[3].y;
+    ta_commit_list(&myvertex, TA_LIST_LONG);
+}
+
+void ta_draw_sprite(uint32_t type, textured_vertex_t *verticies, texture_t texture)
+{
+
+}
+
+void ta_draw_sprite_uv(uint32_t type, vertex_t *verticies, uv_t *texcoords, texture_t texture)
+{
+
+}
