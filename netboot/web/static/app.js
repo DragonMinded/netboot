@@ -39,6 +39,7 @@ Vue.component('state', {
     template: `
         <span>
             <span v-if="status == 'startup' || status == 'wait_power_on'">waiting for cabinet</span>
+            <span v-if="status == 'disabled'">disabled</span>
             <span v-if="status == 'wait_power_off'">running game</span>
             <span v-if="status == 'check_game'">verifying game crc</span>
             <span v-if="status == 'send_game'">sending game ({{ progress }}% complete)</span>
@@ -346,6 +347,10 @@ Vue.component('cabinetconfig', {
                             <option v-for="version in versions" v-bind:value="version">{{ version }}</option>
                         </select>
                     </dd>
+                    <dt>Enabled</dt><dd>
+                        <input id="enabled" type="checkbox" v-model="cabinet.enabled" />
+                        <label for="enabled">allow management of this cabinet</label>
+                    </dd>
                 </dl>
                 <div class="update">
                     <button v-on:click="save">Update Properties</button>
@@ -369,7 +374,7 @@ Vue.component('cabinetconfig', {
                     <dd v-if="info.available">{{ info.memavail }} MB</dd>
                 </dl>
                 <div class="query">
-                    <button v-on:click="query" :disabled="info.status == 'send_game' || info.status == 'startup' || info.status == 'wait_power_on'">Query Firmware Information</button>
+                    <button v-on:click="query" :disabled="info.status == 'send_game' || info.status == 'startup' || info.status == 'disabled' || info.status == 'wait_power_on'">Query Firmware Information</button>
                     <span class="queryindicator" v-if="querying">querying...</span>
                 </div>
                 <div class="information">

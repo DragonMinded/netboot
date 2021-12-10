@@ -22,6 +22,7 @@ class CabinetStateEnum(Enum):
     STATE_SEND_CURRENT_GAME = "send_game"
     STATE_CHECK_CURRENT_GAME = "check_game"
     STATE_WAIT_FOR_CABINET_POWER_OFF = "wait_power_off"
+    STATE_DISABLED = "disabled"
 
 
 class CabinetRegionEnum(Enum):
@@ -44,6 +45,7 @@ class Cabinet:
         settings: Dict[str, Optional[bytes]],
         target: Optional[TargetEnum] = None,
         version: Optional[NetDimmVersionEnum] = None,
+        enabled: bool = True,
         quiet: bool = False,
     ) -> None:
         self.description: str = description
@@ -51,6 +53,7 @@ class Cabinet:
         self.patches: Dict[str, List[str]] = {rom: [p for p in patches[rom]] for rom in patches}
         self.settings: Dict[str, Optional[bytes]] = {rom: settings[rom] for rom in settings}
         self.quiet = quiet
+        self.__enabled = enabled
         self.__host: Host = Host(ip, target=target, version=version, quiet=self.quiet)
         self.__lock: threading.Lock = threading.Lock()
         self.__current_filename: Optional[str] = filename
@@ -58,7 +61,8 @@ class Cabinet:
         self.__state: Tuple[CabinetStateEnum, int] = (CabinetStateEnum.STATE_STARTUP, 0)
 
     def __repr__(self) -> str:
-        return f"Cabinet(ip={repr(self.ip)}, description={repr(self.description)}, filename={repr(self.filename)}, patches={repr(self.patches)} settings={repr(self.settings)}, target={repr(self.target)}, version={repr(self.version)})"
+        with self.__lock:
+            return f"Cabinet(ip={repr(self.ip)}, enabled={repr(self.__enabled)} description={repr(self.description)}, filename={repr(self.filename)}, patches={repr(self.patches)} settings={repr(self.settings)}, target={repr(self.target)}, version={repr(self.version)})"
 
     @property
     def ip(self) -> str:
@@ -90,6 +94,16 @@ class Cabinet:
         with self.__lock:
             self.__new_filename = new_filename
 
+    @property
+    def enabled(self) -> bool:
+        with self.__lock:
+            return self.__enabled
+
+    @enabled.setter
+    def enabled(self, enabled: bool) -> None:
+        with self.__lock:
+            self.__enabled = enabled
+
     def __print(self, string: str, newline: bool = True) -> None:
         if not self.quiet:
             log(string, newline=newline)
@@ -105,14 +119,18 @@ class Cabinet:
 
             # Startup state, only one transition to waiting for cabinet
             if current_state == CabinetStateEnum.STATE_STARTUP:
-                self.__print(f"Cabinet {self.ip} waiting for power on.")
-                self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
+                if self.__enabled:
+                    self.__print(f"Cabinet {self.ip} waiting for power on.")
+                    self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
                 return
 
             # Wait for cabinet to power on state, transition to sending game
             # if the cabinet is active, transition to self if cabinet is not.
             if current_state == CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON:
-                if self.__host.alive:
+                if not self.__enabled:
+                    self.__print(f"Cabinet {self.ip} has been disabled.")
+                    self.__state = (CabinetStateEnum.STATE_STARTUP, 0)
+                elif self.__host.alive:
                     if self.__new_filename is None:
                         # Skip sending game, there's nothing to send
                         self.__print(f"Cabinet {self.ip} has no associated game, waiting for power off.")
@@ -150,6 +168,9 @@ class Cabinet:
             if current_state == CabinetStateEnum.STATE_SEND_CURRENT_GAME:
                 if self.__host.status == HostStatusEnum.STATUS_INACTIVE:
                     raise Exception("State error, shouldn't be possible!")
+                elif not self.__enabled:
+                    self.__print(f"Cabinet {self.ip} has been disabled.")
+                    self.__state = (CabinetStateEnum.STATE_STARTUP, 0)
                 elif self.__host.status == HostStatusEnum.STATUS_TRANSFERRING:
                     current, total = self.__host.progress
                     self.__state = (CabinetStateEnum.STATE_SEND_CURRENT_GAME, int(float(current * 100) / float(total)))
@@ -168,7 +189,10 @@ class Cabinet:
             # is turned off or the game is changed, also move back to waiting for
             # power on to send a new game.
             if current_state == CabinetStateEnum.STATE_CHECK_CURRENT_GAME:
-                if not self.__host.alive:
+                if not self.__enabled:
+                    self.__print(f"Cabinet {self.ip} has been disabled.")
+                    self.__state = (CabinetStateEnum.STATE_STARTUP, 0)
+                elif not self.__host.alive:
                     self.__print(f"Cabinet {self.ip} turned off, waiting for power on.")
                     self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
                 elif self.__current_filename != self.__new_filename:
@@ -200,7 +224,10 @@ class Cabinet:
             # waiting for power to come on if game changes. Stay in state
             # if cabinet stays on.
             if current_state == CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_OFF:
-                if not self.__host.alive:
+                if not self.__enabled:
+                    self.__print(f"Cabinet {self.ip} has been disabled.")
+                    self.__state = (CabinetStateEnum.STATE_STARTUP, 0)
+                elif not self.__host.alive:
                     self.__print(f"Cabinet {self.ip} turned off, waiting for power on.")
                     self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
                 elif self.__current_filename != self.__new_filename:
@@ -218,11 +245,17 @@ class Cabinet:
         as an integer, bounded between 0-100.
         """
         with self.__lock:
-            return self.__state
+            if self.__enabled:
+                return self.__state
+            else:
+                return (CabinetStateEnum.STATE_DISABLED, 0)
 
     def info(self) -> Optional[NetDimmInfo]:
         with self.__lock:
-            return self.__host.info()
+            if self.__enabled:
+                return self.__host.info()
+            else:
+                return None
 
 
 class CabinetManager:
@@ -279,6 +312,7 @@ class CabinetManager:
                 settings={str(rom): (bytes(data) or None) for (rom, data) in cab.get('settings', {}).items()},
                 target=TargetEnum(str(cab['target'])) if 'target' in cab else None,
                 version=NetDimmVersionEnum(str(cab['version'])) if 'version' in cab else None,
+                enabled=(True if 'disabled' not in cab else (not cab['disabled'])),
             )
             if cabinet.target == TargetEnum.TARGET_NAOMI:
                 # Make sure that the settings are correct for one of the possible patch types
@@ -294,7 +328,7 @@ class CabinetManager:
         return CabinetManager(cabinets)
 
     def to_yaml(self, yaml_file: str) -> None:
-        data: Dict[str, Dict[str, Optional[Union[str, Dict[str, List[str]], Dict[str, List[int]]]]]] = {}
+        data: Dict[str, Dict[str, Optional[Union[bool, str, Dict[str, List[str]], Dict[str, List[int]]]]]] = {}
 
         with self.__lock:
             cabinets: List[Cabinet] = sorted([cab for _, cab in self.__cabinets.items()], key=lambda cab: cab.ip)
@@ -311,6 +345,8 @@ class CabinetManager:
                 # None for a ROM, serialize it as an empty list.
                 'settings': {rom: [x for x in (settings or [])] for (rom, settings) in cab.settings.items()},
             }
+            if not cab.enabled:
+                data[cab.ip]['disabled'] = True
 
         with open(yaml_file, "w") as fp:
             yaml.dump(data, fp)
@@ -362,6 +398,7 @@ class CabinetManager:
             existing_cab.patches = cab.patches
             existing_cab.settings = cab.settings
             existing_cab.filename = cab.filename
+            existing_cab.enabled = cab.enabled
 
     def cabinet_exists(self, ip: str) -> bool:
         with self.__lock:

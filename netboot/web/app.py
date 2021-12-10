@@ -61,6 +61,7 @@ def cabinet_to_dict(cab: Cabinet, dirmanager: DirectoryManager) -> Dict[str, Any
         'version': cab.version.value,
         'status': status.value,
         'progress': progress,
+        'enabled': cab.enabled,
     }
 
 
@@ -360,6 +361,7 @@ def createcabinet(ip: str) -> Dict[str, Any]:
         settings={rom: None for rom in roms},
         target=TargetEnum(request.json['target']),
         version=NetDimmVersionEnum(request.json['version']),
+        enabled=True,
     )
     cabman.add_cabinet(new_cabinet)
     serialize_app(app)
@@ -383,6 +385,7 @@ def updatecabinet(ip: str) -> Dict[str, Any]:
         settings=old_cabinet.settings,
         target=TargetEnum(request.json['target']),
         version=NetDimmVersionEnum(request.json['version']),
+        enabled=request.json['enabled'],
     )
     cabman.update_cabinet(new_cabinet)
     serialize_app(app)
