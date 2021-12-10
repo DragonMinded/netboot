@@ -82,7 +82,6 @@ typedef struct
     float x;
     float y;
     float z;
-    void *texture;
     float u;
     float v;
 } textured_vertex_t;
@@ -91,14 +90,19 @@ typedef struct
 // rotating/transforming/scaling objects in worldspace) by extending them to homogenous
 // coordinates and then multiplying them by the system matrix. Note that this does not
 // divide the resulting coordinates by w and it is simply discarded, so this should not
-// be used to calcualte final screen coordinates of some coordinate list.
+// be used to calcualte final screen coordinates of some coordinate list. The only difference
+// between the two functions is whether the coordinates include texture information or not.
 void matrix_affine_transform_vertex(vertex_t *src, vertex_t *dest, int n);
+void matrix_affine_transform_textured_vertex(textured_vertex_t *src, textured_vertex_t *dest, int n);
 
 // Transform a series of x, y, z coordinates from worldspace to system matrix space
 // by extending them to homogenous coordinates and then multiplying them by the
 // system matrix. Note that this also divides the resulting x, y, z coordinates by
 // the extended w coordinate as required for submitting vertexes to the TA/PVR.
+// The only difference between the two functions is whether the coordinates include
+// texture information or not.
 void matrix_perspective_transform_vertex(vertex_t *src, vertex_t *dest, int n);
+void matrix_perspective_transform_textured_vertex(textured_vertex_t *src, textured_vertex_t *dest, int n);
 
 #ifdef __cplusplus
 }

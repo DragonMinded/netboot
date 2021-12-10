@@ -338,6 +338,97 @@ void matrix_perspective_transform_vertex(vertex_t *src, vertex_t *dest, int n)
     irq_restore(old_irq);
 }
 
+void matrix_affine_transform_textured_vertex(textured_vertex_t *src, textured_vertex_t *dest, int n)
+{
+    // Let's do some bounds checking!
+    if (n <= 0) { return; }
+
+    uint32_t old_irq = irq_disable();
+
+    // Given a pre-set XMTRX (use matrix_clear() and matrix_apply() to get here),
+    // multiply it by a set of points to transform them from world space to screen space.
+    // These are extended to homogenous coordinates by assuming a "w" value of 1.0.
+    register textured_vertex_t *src_param asm("r4") = src;
+    register textured_vertex_t *dst_param asm("r5") = dest;
+    register int n_param asm("r6") = n;
+    asm(" \
+    .affinetexloop:\n \
+        fmov.s @r4+,fr0\n \
+        fmov.s @r4+,fr1\n \
+        fmov.s @r4+,fr2\n \
+        fldi1 fr3\n \
+        ftrv xmtrx,fv0\n \
+        dt r6\n \
+        fmov.s fr0,@r5\n \
+        add #4,r5\n \
+        fmov.s fr1,@r5\n \
+        add #4,r5\n \
+        fmov.s fr2,@r5\n \
+        add #4,r5\n \
+        fmov.s @r4+,fr0\n \
+        fmov.s fr0,@r5\n \
+        add #4,r5\n \
+        fmov.s @r4+,fr0\n \
+        fmov.s fr0,@r5\n \
+        add #4,r5\n \
+        bf/s .affinetexloop\n \
+        nop\n \
+        " :
+        /* No outputs */ :
+        "r" (src_param), "r" (dst_param), "r" (n_param) :
+        "fr0", "fr1", "fr2", "fr3"
+    );
+
+    irq_restore(old_irq);
+}
+
+void matrix_perspective_transform_textured_vertex(textured_vertex_t *src, textured_vertex_t *dest, int n)
+{
+    // Let's do some bounds checking!
+    if (n <= 0) { return; }
+
+    uint32_t old_irq = irq_disable();
+
+    // Given a pre-set XMTRX (use matrix_clear() and matrix_apply() to get here),
+    // multiply it by a set of points to transform them from world space to screen space.
+    // These are extended to homogenous coordinates by assuming a "w" value of 1.0.
+    register textured_vertex_t *src_param asm("r4") = src;
+    register textured_vertex_t *dst_param asm("r5") = dest;
+    register int n_param asm("r6") = n;
+    asm(" \
+    .perspectivetexloop:\n \
+        fmov.s @r4+,fr0\n \
+        fmov.s @r4+,fr1\n \
+        fmov.s @r4+,fr2\n \
+        fldi1 fr3\n \
+        ftrv xmtrx,fv0\n \
+        dt r6\n \
+        fdiv fr3,fr0\n \
+        fmov.s fr0,@r5\n \
+        add #4,r5\n \
+        fdiv fr3,fr1\n \
+        fmov.s fr1,@r5\n \
+        add #4,r5\n \
+        fdiv fr3,fr2\n \
+        fmov.s fr2,@r5\n \
+        add #4,r5\n \
+        fmov.s @r4+,fr0\n \
+        fmov.s fr0,@r5\n \
+        add #4,r5\n \
+        fmov.s @r4+,fr0\n \
+        fmov.s fr0,@r5\n \
+        add #4,r5\n \
+        bf/s .perspectivetexloop\n \
+        nop\n \
+        " :
+        /* No outputs */ :
+        "r" (src_param), "r" (dst_param), "r" (n_param) :
+        "fr0", "fr1", "fr2", "fr3"
+    );
+
+    irq_restore(old_irq);
+}
+
 void matrix_rotate_x(float degrees)
 {
     matrix_t matrix = {

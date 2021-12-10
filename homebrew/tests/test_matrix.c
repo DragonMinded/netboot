@@ -191,3 +191,51 @@ void test_matrix_affine_transform(test_context_t *context)
         );
     }
 }
+
+void test_matrix_affine_uv_transform(test_context_t *context)
+{
+    matrix_init_identity();
+    matrix_translate_x(10.0);
+    matrix_translate_y(-20.0);
+    matrix_translate_z(30.0);
+
+    textured_vertex_t coords[3] = {
+        { 0.0, 0.0, 0.0, 0.0, 0.0 },
+        { 10.0, 10.0, 10.0, 1.0, 1.0 },
+        { -30.0, -30.0, -30.0, 2.0, 2.0 },
+    };
+    textured_vertex_t newcoords[3];
+
+    matrix_affine_transform_textured_vertex(coords, newcoords, 3);
+
+    textured_vertex_t expected[3] = {
+        { 10.0, -20.0, 30.0, 0.0, 0.0 },
+        { 20.0, -10.0, 40.0, 1.0, 1.0 },
+        { -20.0, -50.0, 0.0, 2.0, 2.0 },
+    };
+
+    for (unsigned int set = 0; set < 3; set++)
+    {
+        ASSERT(
+            expected[set].x == newcoords[set].x,
+            "Expected %f but got %f for coordinate %d x!",
+            expected[set].x,
+            newcoords[set].x,
+            set
+        );
+        ASSERT(
+            expected[set].y == newcoords[set].y,
+            "Expected %f but got %f for coordinate %d y!",
+            expected[set].y,
+            newcoords[set].y,
+            set
+        );
+        ASSERT(
+            expected[set].z == newcoords[set].z,
+            "Expected %f but got %f for coordinate %d z!",
+            expected[set].z,
+            newcoords[set].z,
+            set
+        );
+    }
+}
