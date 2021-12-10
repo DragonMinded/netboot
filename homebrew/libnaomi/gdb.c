@@ -191,11 +191,16 @@ void _gdb_set_haltreason(int reason)
 
 typedef struct
 {
-    short *memAddr;
-    short oldInstr;
+    short *pc_offset;
+    short instruction;
 } step_data_t;
 
-static step_data_t instrBuffer;
+// Single step breakpoint.
+static step_data_t single_step = { 0 };
+
+// User-set breakpoints.
+#define MAX_BREAKPOINTS 16
+static step_data_t breakpoints[MAX_BREAKPOINTS] = { 0 };
 
 void _gdb_activate_single_step(irq_state_t *cur_state)
 {
@@ -325,8 +330,8 @@ void _gdb_activate_single_step(irq_state_t *cur_state)
     }
 
     // Remember the old instruction so we can replace it after we halt on it.
-    instrBuffer.memAddr = instrMem;
-    instrBuffer.oldInstr = *instrMem;
+    single_step.pc_offset = instrMem;
+    single_step.instruction = *instrMem;
 
     // Set the current instruction at this memory location to a TRAPA which will cause a breakpoint.
     *instrMem = SSTEP_INSTR;
@@ -344,11 +349,12 @@ void _gdb_deactivate_single_step(irq_state_t *cur_state)
     if (stepped)
     {
         // Look up old address, rewrite the original instruction.
-        short *instrMem = instrBuffer.memAddr;
-        *instrMem = instrBuffer.oldInstr;
+        short *instrMem = single_step.pc_offset;
+        *instrMem = single_step.instruction;
         icache_flush_range(instrMem, 2);
 
-        if (cur_state->pc != (uint32_t)instrBuffer.memAddr)
+        // Invariant check to catch cache or other subtle issues.
+        if (cur_state->pc != (uint32_t)single_step.pc_offset)
         {
             // If this happens, that means we got a "trapa 253" exception, but it
             // wasn't on the line we just modified. That means we have some sort
@@ -357,8 +363,12 @@ void _gdb_deactivate_single_step(irq_state_t *cur_state)
             // back. The danger of not catching this is that we end up infinite looping
             // trying to single-step.
             _irq_disable_debugging();
-            _irq_display_invariant("step failure", "resume address %08lX != modification address %08lX", cur_state->pc, instrBuffer.memAddr);
+            _irq_display_invariant("step failure", "resume address %08lX != modification address %08lX", cur_state->pc, single_step.pc_offset);
         }
+
+        // Clear original instruction so we never match with it again.
+        single_step.pc_offset = 0;
+        single_step.instruction = 0;
     }
 
     // Disable single-stepping.
@@ -510,31 +520,42 @@ int _gdb_handle_command(uint32_t address, irq_state_t *cur_state)
             }
 
             long int threadid = threadids[OPERATION_CONTINUE];
+            irq_state_t *state = 0;
+
             if (threadid == -1)
             {
-                // We don't support continuing *ALL* threads.
+                // We don't support getting registers from *ALL* threads.
+                state = 0;
+            }
+            else if (threadid == 0)
+            {
+                // Read from current thread.
+                state = cur_state;
+            }
+            else
+            {
+                // Read from particular thread.
+                state = _thread_get_regs(threadid);
+            }
+
+            if (state == 0)
+            {
                 _gdb_send_valid_response("E%02X", EINVAL);
                 return 1;
             }
-            else if (threadid == 0)
+            else
             {
                 // Make sure that, unless an exception occurs, the next halt reason
                 // will be a user trap exception.
                 haltreason = SIGTRAP;
-                if (newpc_set && cur_state)
+                if (newpc_set)
                 {
-                    cur_state->pc = newpc;
+                    state->pc = newpc;
                 }
 
                 // Wake up and continue processing, no longer halt in GDB. Don't send a packet.
                 _gdb_send_acknowledge_response();
                 return 0;
-            }
-            else
-            {
-                // Continue specific thread, not currently supported.
-                _gdb_send_valid_response("E%02X", EINVAL);
-                return 1;
             }
 
             break;
@@ -567,31 +588,42 @@ int _gdb_handle_command(uint32_t address, irq_state_t *cur_state)
 
             // Continue thread with signal, ignore the signal.
             long int threadid = threadids[OPERATION_CONTINUE];
+            irq_state_t *state = 0;
+
             if (threadid == -1)
             {
-                // We don't support continuing *ALL* threads.
+                // We don't support getting registers from *ALL* threads.
+                state = 0;
+            }
+            else if (threadid == 0)
+            {
+                // Read from current thread.
+                state = cur_state;
+            }
+            else
+            {
+                // Read from particular thread.
+                state = _thread_get_regs(threadid);
+            }
+
+            if (state == 0)
+            {
                 _gdb_send_valid_response("E%02X", EINVAL);
                 return 1;
             }
-            else if (threadid == 0)
+            else
             {
                 // Make sure that, unless an exception occurs, the next halt reason
                 // will be a user trap exception.
                 haltreason = SIGTRAP;
-                if (newpc_set && cur_state)
+                if (newpc_set)
                 {
-                    cur_state->pc = newpc;
+                    state->pc = newpc;
                 }
 
                 // Wake up and continue processing, no longer halt in GDB. Don't send a packet.
                 _gdb_send_acknowledge_response();
                 return 0;
-            }
-            else
-            {
-                // Continue specific thread, not currently supported.
-                _gdb_send_valid_response("E%02X", EINVAL);
-                return 1;
             }
 
             break;
@@ -609,43 +641,45 @@ int _gdb_handle_command(uint32_t address, irq_state_t *cur_state)
             }
 
             long int threadid = threadids[OPERATION_CONTINUE];
+            irq_state_t *state = 0;
+
             if (threadid == -1)
             {
-                // We don't support continuing *ALL* threads.
+                // We don't support getting registers from *ALL* threads.
+                state = 0;
+            }
+            else if (threadid == 0)
+            {
+                // Read from current thread.
+                state = cur_state;
+            }
+            else
+            {
+                // Read from particular thread.
+                state = _thread_get_regs(threadid);
+            }
+
+            if (state == 0)
+            {
                 _gdb_send_valid_response("E%02X", EINVAL);
                 return 1;
             }
-            else if (threadid == 0)
+            else
             {
                 // Make sure that, unless an exception occurs, the next halt reason
                 // will be a user trap exception.
                 haltreason = SIGTRAP;
-                if (newpc_set && cur_state)
+                if (newpc_set)
                 {
-                    cur_state->pc = newpc;
+                    state->pc = newpc;
                 }
 
                 // Wake up and continue processing, no longer halt in GDB. Don't even
                 // send a response, since we are going to end up back here real quick
                 // and we want the controlling host to poll us until we hit the next
                 // breakpoint and send the halt reason.
-                if (cur_state)
-                {
-                    _gdb_activate_single_step(cur_state);
-                    return 0;
-                }
-                else
-                {
-                    // If we don't have a state, we can't do anything.
-                    _gdb_send_valid_response("E%02X", EINVAL);
-                    return 1;
-                }
-            }
-            else
-            {
-                // Continue specific thread, not currently supported.
-                _gdb_send_valid_response("E%02X", EINVAL);
-                return 1;
+                _gdb_activate_single_step(state);
+                return 0;
             }
 
             break;
@@ -678,43 +712,45 @@ int _gdb_handle_command(uint32_t address, irq_state_t *cur_state)
 
             // Signle step thread with signal, ignore the signal.
             long int threadid = threadids[OPERATION_CONTINUE];
+            irq_state_t *state = 0;
+
             if (threadid == -1)
             {
-                // We don't support continuing *ALL* threads.
+                // We don't support getting registers from *ALL* threads.
+                state = 0;
+            }
+            else if (threadid == 0)
+            {
+                // Read from current thread.
+                state = cur_state;
+            }
+            else
+            {
+                // Read from particular thread.
+                state = _thread_get_regs(threadid);
+            }
+
+            if (state == 0)
+            {
                 _gdb_send_valid_response("E%02X", EINVAL);
                 return 1;
             }
-            else if (threadid == 0)
+            else
             {
                 // Make sure that, unless an exception occurs, the next halt reason
                 // will be a user trap exception.
                 haltreason = SIGTRAP;
-                if (newpc_set && cur_state)
+                if (newpc_set)
                 {
-                    cur_state->pc = newpc;
+                    state->pc = newpc;
                 }
 
                 // Wake up and continue processing, no longer halt in GDB. Don't even
                 // send a response, since we are going to end up back here real quick
                 // and we want the controlling host to poll us until we hit the next
                 // breakpoint and send the halt reason.
-                if (cur_state)
-                {
-                    _gdb_activate_single_step(cur_state);
-                    return 0;
-                }
-                else
-                {
-                    // If we don't have a state, we can't do anything.
-                    _gdb_send_valid_response("E%02X", EINVAL);
-                    return 1;
-                }
-            }
-            else
-            {
-                // Continue specific thread, not currently supported.
-                _gdb_send_valid_response("E%02X", EINVAL);
-                return 1;
+                _gdb_activate_single_step(state);
+                return 0;
             }
 
             break;
@@ -1488,12 +1524,169 @@ int _gdb_handle_command(uint32_t address, irq_state_t *cur_state)
         }
         case 'Z':
         {
-            // TODO: Insert some sort of breakpoint.
+            // Insert some sort of breakpoint.
+            char *commaloc = 0;
+            unsigned int bptype = strtoul(&cmdbuf[1], &commaloc, 16);
+
+            if (commaloc == 0)
+            {
+                _gdb_send_valid_response("E%02X", EINVAL);
+                return 1;
+            }
+            if (commaloc[0] != ',')
+            {
+                _gdb_send_valid_response("E%02X", EINVAL);
+                return 1;
+            }
+
+            unsigned int memloc = strtoul(&commaloc[1], &commaloc, 16);
+
+            if (commaloc == 0)
+            {
+                _gdb_send_valid_response("E%02X", EINVAL);
+                return 1;
+            }
+            if (commaloc[0] != ',')
+            {
+                _gdb_send_valid_response("E%02X", EINVAL);
+                return 1;
+            }
+
+            unsigned int memsize = strtoul(&commaloc[1], NULL, 16);
+
+            switch(bptype)
+            {
+                case 0:
+                {
+                    // Software breakpoint.
+                    if (memsize != 2)
+                    {
+                        _gdb_send_valid_response("E%02X", EINVAL);
+                        return 1;
+                    }
+
+                    // Replace the instruction at memloc with a TRAPA 253.
+                    short *instLoc = (short *)memloc;
+                    int found = 0;
+                    for (int i = 0; i < MAX_BREAKPOINTS; i++)
+                    {
+                        if (breakpoints[i].pc_offset == 0)
+                        {
+                            // This should be used to save the memory.
+                            breakpoints[i].pc_offset = instLoc;
+                            breakpoints[i].instruction = *instLoc;
+                            *instLoc = SSTEP_INSTR;
+                            icache_flush_range(instLoc, 2);
+
+                            found = 1;
+                            break;
+                        }
+                    }
+
+                    if (found)
+                    {
+                        _gdb_send_valid_response("OK");
+                        return 1;
+                    }
+                    else
+                    {
+                        _gdb_send_valid_response("E%02X", ENOMEM);
+                        return 1;
+                    }
+
+                    break;
+                }
+                default:
+                {
+                    // Unrecognized or unsupported breakpoint type.
+                    _gdb_send_valid_response("");
+                    return 1;
+                }
+            }
+
             break;
         }
         case 'z':
         {
-            // TODO: Remove some sort of breakpoint.
+            // Remove some sort of breakpoint.
+            char *commaloc = 0;
+            unsigned int bptype = strtoul(&cmdbuf[1], &commaloc, 16);
+
+            if (commaloc == 0)
+            {
+                _gdb_send_valid_response("E%02X", EINVAL);
+                return 1;
+            }
+            if (commaloc[0] != ',')
+            {
+                _gdb_send_valid_response("E%02X", EINVAL);
+                return 1;
+            }
+
+            unsigned int memloc = strtoul(&commaloc[1], &commaloc, 16);
+
+            if (commaloc == 0)
+            {
+                _gdb_send_valid_response("E%02X", EINVAL);
+                return 1;
+            }
+            if (commaloc[0] != ',')
+            {
+                _gdb_send_valid_response("E%02X", EINVAL);
+                return 1;
+            }
+
+            unsigned int memsize = strtoul(&commaloc[1], NULL, 16);
+
+            switch(bptype)
+            {
+                case 0:
+                {
+                    // Software breakpoint.
+                    if (memsize != 2)
+                    {
+                        _gdb_send_valid_response("E%02X", EINVAL);
+                        return 1;
+                    }
+
+                    // Replace the instruction at memloc with a TRAPA 253.
+                    short *instLoc = (short *)memloc;
+                    int found = 0;
+                    for (int i = 0; i < MAX_BREAKPOINTS; i++)
+                    {
+                        if (breakpoints[i].pc_offset == instLoc)
+                        {
+                            *instLoc = breakpoints[i].instruction;
+                            icache_flush_range(instLoc, 2);
+
+                            breakpoints[i].pc_offset = 0;
+                            breakpoints[i].instruction = 0;
+                            found = 1;
+                            break;
+                        }
+                    }
+
+                    if (found)
+                    {
+                        _gdb_send_valid_response("OK");
+                        return 1;
+                    }
+                    else
+                    {
+                        _gdb_send_valid_response("E%02X", EINVAL);
+                        return 1;
+                    }
+
+                    break;
+                }
+                default:
+                {
+                    // Unrecognized or unsupported breakpoint type.
+                    _gdb_send_valid_response("");
+                    return 1;
+                }
+            }
+
             break;
         }
     }
