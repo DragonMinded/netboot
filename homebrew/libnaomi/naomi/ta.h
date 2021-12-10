@@ -398,6 +398,7 @@ void ta_fill_box(uint32_t type, vertex_t *verticies, color_t color);
 // transparent or punchthru. The verticies should be in order of bottom left, top left, bottom
 // right for the first triangle, and then alternating up and down for the strip beyond that.
 void ta_draw_triangle_strip(uint32_t type, uint32_t striplen, textured_vertex_t *verticies, texture_description_t *texture);
+void ta_draw_triangle_strip_uv(uint32_t type, uint32_t striplen, vertex_t *verticies, uv_t *uvcoords, texture_description_t *texture);
 
 #ifdef __cplusplus
 }

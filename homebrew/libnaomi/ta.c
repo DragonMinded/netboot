@@ -1033,6 +1033,58 @@ void ta_draw_triangle_strip(uint32_t type, uint32_t striplen, textured_vertex_t 
     }
 }
 
+void ta_draw_triangle_strip_uv(uint32_t type, uint32_t striplen, vertex_t *verticies, uv_t *uvcoords, texture_description_t *texture)
+{
+    // This might be faster if we just copy-pasta'd the above algorithm here and accessed
+    // both uvcoords and verticies directly. Might be worth it to squeeze more speed out
+    // of all this once a lot of this settles.
+    if (striplen == TA_CMD_POLYGON_STRIPLENGTH_1)
+    {
+        textured_vertex_t real[3] = {
+            { verticies[0].x, verticies[0].y, verticies[0].z, uvcoords[0].u, uvcoords[0].v },
+            { verticies[1].x, verticies[1].y, verticies[1].z, uvcoords[1].u, uvcoords[1].v },
+            { verticies[2].x, verticies[2].y, verticies[2].z, uvcoords[2].u, uvcoords[2].v },
+        };
+        ta_draw_triangle_strip(type, striplen, real, texture);
+    }
+    else if (striplen == TA_CMD_POLYGON_STRIPLENGTH_2)
+    {
+        textured_vertex_t real[4] = {
+            { verticies[0].x, verticies[0].y, verticies[0].z, uvcoords[0].u, uvcoords[0].v },
+            { verticies[1].x, verticies[1].y, verticies[1].z, uvcoords[1].u, uvcoords[1].v },
+            { verticies[2].x, verticies[2].y, verticies[2].z, uvcoords[2].u, uvcoords[2].v },
+            { verticies[3].x, verticies[3].y, verticies[3].z, uvcoords[3].u, uvcoords[3].v },
+        };
+        ta_draw_triangle_strip(type, striplen, real, texture);
+    }
+    else if (striplen == TA_CMD_POLYGON_STRIPLENGTH_4)
+    {
+        textured_vertex_t real[6] = {
+            { verticies[0].x, verticies[0].y, verticies[0].z, uvcoords[0].u, uvcoords[0].v },
+            { verticies[1].x, verticies[1].y, verticies[1].z, uvcoords[1].u, uvcoords[1].v },
+            { verticies[2].x, verticies[2].y, verticies[2].z, uvcoords[2].u, uvcoords[2].v },
+            { verticies[3].x, verticies[3].y, verticies[3].z, uvcoords[3].u, uvcoords[3].v },
+            { verticies[4].x, verticies[4].y, verticies[4].z, uvcoords[4].u, uvcoords[4].v },
+            { verticies[5].x, verticies[5].y, verticies[5].z, uvcoords[5].u, uvcoords[5].v },
+        };
+        ta_draw_triangle_strip(type, striplen, real, texture);
+    }
+    else
+    {
+        textured_vertex_t real[8] = {
+            { verticies[0].x, verticies[0].y, verticies[0].z, uvcoords[0].u, uvcoords[0].v },
+            { verticies[1].x, verticies[1].y, verticies[1].z, uvcoords[1].u, uvcoords[1].v },
+            { verticies[2].x, verticies[2].y, verticies[2].z, uvcoords[2].u, uvcoords[2].v },
+            { verticies[3].x, verticies[3].y, verticies[3].z, uvcoords[3].u, uvcoords[3].v },
+            { verticies[4].x, verticies[4].y, verticies[4].z, uvcoords[4].u, uvcoords[4].v },
+            { verticies[5].x, verticies[5].y, verticies[5].z, uvcoords[5].u, uvcoords[5].v },
+            { verticies[6].x, verticies[6].y, verticies[6].z, uvcoords[6].u, uvcoords[6].v },
+            { verticies[7].x, verticies[7].y, verticies[7].z, uvcoords[7].u, uvcoords[7].v },
+        };
+        ta_draw_triangle_strip(type, striplen, real, texture);
+    }
+}
+
 void ta_draw_sprite(uint32_t type, textured_vertex_t *verticies, texture_description_t *texture)
 {
 
