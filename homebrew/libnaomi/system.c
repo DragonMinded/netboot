@@ -20,7 +20,6 @@
 #include "irqinternal.h"
 #include "irqstate.h"
 
-#define CCR (*(uint32_t *)0xFF00001C)
 #define QACR0 (*(uint32_t *)0xFF000038)
 #define QACR1 (*(uint32_t *)0xFF00003C)
 
@@ -157,10 +156,6 @@ void _enter()
     // global constructors below.
     register uint32_t boot_mode asm("r3");
     uint32_t _boot_mode = boot_mode;
-
-    // Invalidate cache, as is done in real games. This requires that the
-    // cache be setup which it is in sh-crt0.s.
-    CCR = 0x905;
 
     // Set up system DMA to allow for things like Maple to operate. This
     // was kindly copied from the Mvc2 init code after bisecting to it
@@ -410,6 +405,12 @@ void enter_test_mode()
 
     // Call it.
     call_unmanaged((void (*)())test_mode_syscall);
+}
+
+void restart_game()
+{
+    // Look up the entrypoint and jump to that.
+    call_unmanaged((void (*)())START_ADDR);
 }
 
 void __assert_func(const char * file, int line, const char *func, const char *failedexpr)

@@ -38,16 +38,18 @@ bss_zero_loop:
     mova @((setup_cache-.),pc),r0
     mov.l phys_mask,r1
     and r1,r0
-    mov.l p2_mask,r1
+    mov.l uncached_mask,r1
     or r1,r0
     jmp @r0
-
-    # These are only here to make sure setup_cache is exactly 16
-    # bytes (8 instructions) forward of the indirect pc load above.
-    nop
     nop
 
-    # This is exactly 16 bytes forward of the above mova instruction.
+    .align 4
+
+stack_addr:
+    # Location of stack
+    .long 0x0E000000
+
+    .align 4
 
 setup_cache:
     # Enable cache, copying the setup that Mvc2 does.
@@ -67,10 +69,82 @@ setup_cache:
     nop
 
     .align 4
+    .globl _icache_flush_range
 
-stack_addr:
-    # Location of stack
-    .long 0x0E000000
+    # Routine to flush parts of cache.. thanks to the Linux-SH guys
+    # for the algorithm. The original version of this routine was
+    # taken from sh4-gdbstub/sh-stub.c.
+    #
+    # r4 is the start address
+    # r5 is the number of bytes to flush starting at the start address
+_icache_flush_range:
+    mova @((flush_real-.),pc),r0
+    mov.l p2_mask,r1
+    or r1,r0
+    jmp @r0
+    nop
+
+    .align  4
+
+flush_real:
+    # Save old SR and disable interrupts
+    stc sr,r0
+    mov.l r0,@-r15
+    mov.l irq_disable_orbits,r1
+    or r1,r0
+    ldc r0,sr
+
+    # Get ending address from count and align start address
+    add r4,r5
+    mov.l l1_cache_align,r0
+    and r0,r4
+    mov.l cache_ic_address_array,r1
+    mov.l cache_ic_entry_mask,r2
+    mov.l cache_ic_valid_mask,r3
+
+flush_loop:
+    # Write back operand cache
+    ocbwb @r4
+
+    # Invalidate instruction cache
+    mov r4,r6
+    and r2,r6
+    or r1,r6
+    mov r4,r7
+    and r3,r7
+    add #32,r4
+    cmp/hs r4,r5
+    bt/s flush_loop
+    mov.l r7,@r6
+
+    # Restore old SR
+    mov.l @r15+,r0
+    ldc r0,sr
+
+    # Make sure we have enough instructions before returning to P1
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    rts
+    nop
+
+    .align 4
+
+l1_cache_align:
+    .long ~31
+
+cache_ic_address_array:
+    .long 0xf0000000
+
+cache_ic_entry_mask:
+    .long 0x1fe0
+
+cache_ic_valid_mask:
+    .long   0xfffffc00
 
 bss_start_addr:
     # Location of .bss section we must zero
@@ -88,9 +162,13 @@ phys_mask:
     # Mask for converting virtual to physical address.
     .long 0x0fffffff
 
-p2_mask:
+uncached_mask:
     # Mask for converting physical to uncached addresses.
     .long 0xa0000000
+
+p2_mask:
+    # Mask for converting physical to P2 address.
+    .long 0x20000000
 
 ccr_addr:
     # Address of cache control register.
@@ -99,6 +177,11 @@ ccr_addr:
 ccr_enable:
     # Value to write to cache control register to enable i-cache and d-cache.
     .long 0x00000105
+
+ccr_icache_flush:
+    # Value to write to cache control register to flush previously enabled i-cache
+    # but leave previously enabled d-cache alone.
+    .long 0x00000905
 
 sr_disable:
     # Value to write to SR to disable interrupts, mask them all off and start

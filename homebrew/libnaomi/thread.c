@@ -1460,6 +1460,12 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
             }
             break;
         }
+        case 253:
+        {
+            // Reserved for GDB software breakpoints. Like the below, we should
+            // never get here.
+            break;
+        }
         case 254:
         {
             // Reserved for a fake context switch just to grab the registers

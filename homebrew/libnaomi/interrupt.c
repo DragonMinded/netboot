@@ -51,11 +51,15 @@ static char exception_buffer[1024];
 // Statistics about the interrupt system.
 static irq_stats_t stats;
 
+// If we should refuse to allow debugging in exception loops.
+static int disable_debugging;
+
 // Prototype for passing the signal on to GDB if it connects.
 void _gdb_set_haltreason(int reason);
 
-// Prototype for halting the system with a GDB breakpoint.
+// Prototypes for halting the system with a GDB breakpoint.
 int _gdb_user_halt(irq_state_t *cur_state);
+int _gdb_breakpoint_halt(irq_state_t *cur_state);
 
 // Prototype to force thread system to disable preemption, used for safely
 // re-enabling interrupts to capture registers on an abort call.
@@ -72,6 +76,12 @@ int _timer_interrupt(int timer);
 uint32_t _irq_enable();
 uint32_t _irq_read_sr();
 uint32_t _irq_read_vbr();
+
+void _irq_disable_debugging()
+{
+    // An exception occured in the debugger itself, so we're completely hosed.
+    disable_debugging = 1;
+}
 
 void _irq_display_exception(int signal, irq_state_t *cur_state, char *failure, int code)
 {
@@ -108,11 +118,14 @@ void _irq_display_exception(int signal, irq_state_t *cur_state, char *failure, i
 
     while( 1 )
     {
-        halted = _dimm_command_handler(halted, cur_state);
-        if (halted == 0)
+        if (!disable_debugging)
         {
-            // User continued, not valid, so re-raise the exception.
-            _gdb_set_haltreason(signal);
+            halted = _dimm_command_handler(halted, cur_state);
+            if (halted == 0)
+            {
+                // User continued, not valid, so re-raise the exception.
+                _gdb_set_haltreason(signal);
+            }
         }
     }
 }
@@ -177,16 +190,19 @@ void _irq_display_invariant(char *msg, char *failure, ...)
 
     while( 1 )
     {
-        // This is a bit of a hack to get us the last used IRQ state. If we
-        // are in interrupt context, it will be accurate since we broke into
-        // IRQ by setting the state. If we are outside of interrupt context,
-        // it will be the last context switch which shold have happened at
-        // the beginning of this function, so it will be accurate enough.
-        halted = _dimm_command_handler(halted, irq_state);
-        if (halted == 0)
+        if (!disable_debugging)
         {
-            // User continued, not valid, so re-raise the exception.
-            _gdb_set_haltreason(SIGABRT);
+            // This is a bit of a hack to get us the last used IRQ state. If we
+            // are in interrupt context, it will be accurate since we broke into
+            // IRQ by setting the state. If we are outside of interrupt context,
+            // it will be the last context switch which shold have happened at
+            // the beginning of this function, so it will be accurate enough.
+            halted = _dimm_command_handler(halted, irq_state);
+            if (halted == 0)
+            {
+                // User continued, not valid, so re-raise the exception.
+                _gdb_set_haltreason(SIGABRT);
+            }
         }
     }
 }
@@ -201,7 +217,13 @@ irq_state_t * _irq_general_exception(irq_state_t *cur_state)
         {
             // TRAPA, AKA syscall exception.
             unsigned int which = ((TRA) >> 2) & 0xFF;
-            if (which == 254)
+            if (which == 253)
+            {
+                // We should jump into GDB mode and halt, since we were requested
+                // to do so by a previously placed down breakpoint.
+                halted = _gdb_breakpoint_halt(cur_state);
+            }
+            else if (which == 254)
             {
                 // We don't need to do anything here, this is just an interrupt
                 // jump to capture registers of the calling process.
@@ -538,6 +560,7 @@ void _irq_init()
     // Make sure we aren't halted.
     halted = 0;
     in_interrupt = 0;
+    disable_debugging = 0;
 
     // Initialize our stats.
     stats.last_source = 0;

@@ -59,6 +59,10 @@ void call_unmanaged(void (*call)());
 
 // Syscalls that request the BIOS do something.
 void enter_test_mode();
+void restart_game();
+
+// Flush a range of bytes of memory starting at addr from the instruction cache.
+void icache_flush_range(void *addr, unsigned int bytes);
 
 // UTF-8 handling for unicode text.
 unsigned int utf8_strlen(const char * const str);
