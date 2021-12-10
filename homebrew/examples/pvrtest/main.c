@@ -14,6 +14,8 @@
 #define ZFAR  100.0
 #define ZOFFS 5.0
 
+#define WHITE_THRESHOLD 200
+
 void init_palette()
 {
     uint32_t *palette[4] = {
@@ -26,16 +28,16 @@ void init_palette()
     for(int n = 0; n < 256; n++)
     {
         // Blue
-        palette[0][n] = rgb(0, 0, n);
+        palette[0][n] = ta_palette_entry(rgb(n > WHITE_THRESHOLD ? n : 0, n > WHITE_THRESHOLD ? n : 0, n));
 
         // Green
-        palette[1][n] = rgb(0, n, 0);
+        palette[1][n] = ta_palette_entry(rgb(n > WHITE_THRESHOLD ? n : 0, n, n > WHITE_THRESHOLD ? n : 0));
 
         // Purple
-        palette[2][n] = rgb(n, 0, n);
+        palette[2][n] = ta_palette_entry(rgb(n, n > WHITE_THRESHOLD ? n : 0, n));
 
         // Yellow
-        palette[3][n] = rgb(n, n, 0);
+        palette[3][n] = ta_palette_entry(rgb(n, n, n > WHITE_THRESHOLD ? n : 0));
     }
 }
 
@@ -69,7 +71,6 @@ void draw_face(vertex_t p1, vertex_t p2, vertex_t p3, vertex_t p4, void *tex, in
         TA_TEXTUREMODE_CLUT8 |
         TA_TEXTUREMODE_CLUTBANK8(pal) |
         TA_TEXTUREMODE_ADDRESS(tex);
-    mypoly.alpha = mypoly.red = mypoly.green = mypoly.blue = 0.0;
     ta_commit_list(&mypoly, TA_LIST_SHORT);
 
     myvertex.cmd = TA_CMD_VERTEX;

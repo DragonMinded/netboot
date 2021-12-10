@@ -315,18 +315,10 @@ void _ta_set_background_color(struct ta_buffers *buffers, uint32_t rgba)
 
 static struct ta_buffers ta_working_buffers;
 
-void ta_set_background_color(uint32_t rgba)
+void ta_set_background_color(color_t color)
 {
-    // This will be packed in the current framebuffer/palette format, so we need to
-    // unpack it first as the TA gourad shading requires RGB0888 color.
-    unsigned int r;
-    unsigned int g;
-    unsigned int b;
-    explodergb(rgba, &r, &g, &b);
-
-    // Now, set the color to the background plane.
-    ta_background_color = RGB0888(r, g, b);
-    _ta_set_background_color(&ta_working_buffers, ta_background_color);
+    // Set the color to the background plane.
+    _ta_set_background_color(&ta_working_buffers, RGB0888(color.r, color.g, color.b));
 }
 
 // Actual framebuffer address.
@@ -692,6 +684,18 @@ void *ta_palette_bank(int size, int banknum)
     }
 
     return 0;
+}
+
+uint32_t ta_palette_entry(color_t color)
+{
+    if (global_video_depth == 2)
+    {
+        return RGB1555(color.r, color.g, color.b, color.a);
+    }
+    else
+    {
+        return RGB8888(color.r, color.g, color.b, color.a);
+    }
 }
 
 void *ta_texture_base()

@@ -42,7 +42,7 @@ static irq_state_t *irq_freed_state = 0;
 #define INTC_IPRD *((volatile uint16_t *)(INTC_BASE_ADDRESS + 0x10))
 
 // Non-varargs version of debug print, so we can use our own static buffer for safety.
-void __video_draw_debug_text( int x, int y, uint32_t color, const char * const msg );
+void __video_draw_debug_text( int x, int y, color_t color, const char * const msg );
 
 // Static buffer for displaying exceptions, so we don't have to rely on messing with the
 // stack of the running program or our own internal stack.

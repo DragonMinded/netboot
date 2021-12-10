@@ -590,7 +590,7 @@ void console_free()
     }
 }
 
-uint32_t attr_to_color(uint8_t attr)
+color_t attr_to_color(uint8_t attr)
 {
     switch(attr & 0xF)
     {
@@ -640,12 +640,12 @@ void console_render()
         fflush( stdout );
 
         /* Render now */
-        uint32_t black = rgb(0, 0, 0);
+        color_t black = rgb(0, 0, 0);
         for (int pos = 0; pos < console_width * console_height; pos++)
         {
             uint16_t render_attr = render_attrs[pos];
-            uint32_t bgcolor;
-            uint32_t fgcolor;
+            color_t bgcolor;
+            color_t fgcolor;
 
             if (render_attr & REVERSE)
             {
@@ -658,7 +658,7 @@ void console_render()
                 fgcolor = attr_to_color(render_attr);
             }
 
-            if (bgcolor != black)
+            if (bgcolor.r != black.r && bgcolor.g != black.g && bgcolor.b != black.b)
             {
                 // Only draw background if it is not black (our transparent color).
                 video_fill_box(

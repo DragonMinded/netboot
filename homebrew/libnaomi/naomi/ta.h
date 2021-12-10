@@ -7,6 +7,8 @@ extern "C" {
 
 #include <stdint.h>
 #include <malloc.h>
+#include "naomi/video.h"
+#include "naomi/matrix.h"
 
 /* Command: User clip */
 struct user_clip_list
@@ -22,7 +24,7 @@ struct user_clip_list
 /*
  * Command: Polygon / Modifier volume
  *
- * Usable with used with packed color and intensity type color textured and untextured polygons.
+ * Usable with packed color textured and untextured polygons.
  */
 struct polygon_list_packed_color
 {
@@ -31,13 +33,45 @@ struct polygon_list_packed_color
     unsigned int mode2;
     /* When using untextured polygons, the texture word is left at 0 */
     unsigned int texture;
-    /* In packed color mode, these are completely ignored and should be left at 0 */
-    float alpha;
-    float red;
-    float green;
-    float blue;
+    int not_used[4];
 };
-		    
+
+/*
+ * Command: Polygon / Modifier volume
+ *
+ * Usable with intensity color textured and untextured polygons.
+ */
+struct polygon_list_intensity
+{
+    unsigned int cmd;
+    unsigned int mode1;
+    unsigned int mode2;
+    /* When using untextured polygons, the texture word is left at 0 */
+    unsigned int texture;
+    float face_alpha;
+    float face_red;
+    float face_green;
+    float face_blue;
+};
+/*
+ * Command: Polygon / Modifier volume
+ *
+ * Usable with textured and untextured sprites (quads with no perspective).
+ */
+struct polygon_list_sprite
+{
+    unsigned int cmd;
+    unsigned int mode1;
+    unsigned int mode2;
+    /* When using untextured sprites, the texture word is left at 0 */
+    unsigned int texture;
+    unsigned int mult_color;
+    /* When using untextured sprites, the additive color is ignored */
+    unsigned int add_color;
+    int not_used[2];
+};
+
+
 /* Command: Modifier list */
 struct modifier_list
 {
@@ -274,7 +308,7 @@ void ta_commit_end();
 
 // Set the background color for TA renders, specifically for areas where there is not any
 // polygon to draw.
-void ta_set_background_color(uint32_t color);
+void ta_set_background_color(color_t color);
 
 // Defines for the size of a ta_commit_list() call.
 #define TA_LIST_SHORT 32
@@ -282,6 +316,9 @@ void ta_set_background_color(uint32_t color);
 
 // Given a particular palette lookup size and a bank, return the palette RAM pointer.
 void *ta_palette_bank(int size, int banknum);
+
+// Given an RGBA value, return a packed color suitable for palettes.
+uint32_t ta_palette_entry(color_t color);
 
 #define TA_PALETTE_CLUT4 1
 #define TA_PALETTE_CLUT8 2

@@ -399,118 +399,62 @@ void video_free()
     irq_restore(old_interrupts);
 }
 
-uint32_t rgb(unsigned int r, unsigned int g, unsigned int b)
+color_t rgb(unsigned int r, unsigned int g, unsigned int b)
 {
-    if(global_video_depth == 2)
-    {
-        // Make a 1555 color that is non-transparent.
-        return RGB0555(r, g, b);
-    }
-    else if(global_video_depth == 4)
-    {
-        // Make a 8888 color that is non-transparent.
-        return RGB0888(r, g, b);
-    }
-    else
-    {
-        return 0;
-    }
+    color_t color = { r, g, b, 255 };
+    return color;
 }
 
-uint32_t rgba(unsigned int r, unsigned int g, unsigned int b, unsigned int a)
+color_t rgba(unsigned int r, unsigned int g, unsigned int b, unsigned int a)
 {
-    if(global_video_depth == 2)
-    {
-        // Make a 1555 color that is transparent if a < 128 and opaque if a >= 128.
-        return RGB1555(r, g, b, a);
-    }
-    else if(global_video_depth == 4)
-    {
-        // Make a 8888 color that is transparent based on alpha.
-        return RGB8888(r, g, b, a);
-    }
-    else
-    {
-        return 0;
-    }
+    color_t color = { r, g, b, a };
+    return color;
 }
 
-void explodergb(uint32_t color, unsigned int *r, unsigned int *g, unsigned int *b)
+void video_fill_screen(color_t color)
 {
     if(global_video_depth == 2)
     {
-        EXPLODE0555(color, *r, *g, *b);
-    }
-    else if(global_video_depth == 4)
-    {
-        EXPLODE0888(color, *r, *g, *b);
-    }
-    else
-    {
-        *r = 0;
-        *g = 0;
-        *b = 0;
-    }
-}
-
-void explodergba(uint32_t color, unsigned int *r, unsigned int *g, unsigned int *b, unsigned int *a)
-{
-    if(global_video_depth == 2)
-    {
-        EXPLODE1555(color, *r, *g, *b, *a);
-    }
-    else if(global_video_depth == 4)
-    {
-        EXPLODE8888(color, *r, *g, *b, *a);
-    }
-    else
-    {
-        *r = 0;
-        *g = 0;
-        *b = 0;
-    }
-}
-
-void video_fill_screen(uint32_t color)
-{
-    if(global_video_depth == 2)
-    {
-        if (!hw_memset(buffer_base, (color & 0xFFFF) | ((color << 16) & 0xFFFF0000), global_video_width * global_video_height * 2))
+        uint32_t actualcolor = RGB0555(color.r, color.g, color.b);
+        if (!hw_memset(buffer_base, (actualcolor & 0xFFFF) | ((actualcolor << 16) & 0xFFFF0000), global_video_width * global_video_height * 2))
         {
-            memset(buffer_base, (color & 0xFFFF) | ((color << 16) & 0xFFFF0000), global_video_width * global_video_height * 2);
+            memset(buffer_base, (actualcolor & 0xFFFF) | ((actualcolor << 16) & 0xFFFF0000), global_video_width * global_video_height * 2);
         }
     }
     else if(global_video_depth == 4)
     {
-        if (!hw_memset(buffer_base, color, global_video_width * global_video_height * 4))
+        uint32_t actualcolor = RGB0888(color.r, color.g, color.b);
+        if (!hw_memset(buffer_base, actualcolor, global_video_width * global_video_height * 4))
         {
-            memset(buffer_base, color, global_video_width * global_video_height * 4);
+            memset(buffer_base, actualcolor, global_video_width * global_video_height * 4);
         }
     }
 }
 
-void video_set_background_color(uint32_t color)
+void video_set_background_color(color_t color)
 {
     video_fill_screen(color);
     global_background_set = 1;
 
     if(global_video_depth == 2)
     {
+        uint32_t actualcolor = RGB0555(color.r, color.g, color.b);
         for (int offset = 0; offset < 8; offset++)
         {
-            global_background_fill_color[offset] = (color & 0xFFFF) | ((color << 16) & 0xFFFF0000);
+            global_background_fill_color[offset] = (actualcolor & 0xFFFF) | ((actualcolor << 16) & 0xFFFF0000);
         }
     }
     else if(global_video_depth == 4)
     {
+        uint32_t actualcolor = RGB0888(color.r, color.g, color.b);
         for (int offset = 0; offset < 8; offset++)
         {
-            global_background_fill_color[offset] = color;
+            global_background_fill_color[offset] = actualcolor;
         }
     }
 }
 
-void video_fill_box(int x0, int y0, int x1, int y1, uint32_t color)
+void video_fill_box(int x0, int y0, int x1, int y1, color_t color)
 {
     int low_x;
     int high_x;
@@ -561,13 +505,14 @@ void video_fill_box(int x0, int y0, int x1, int y1, uint32_t color)
 
     if(global_video_depth == 2)
     {
+        uint32_t actualcolor = RGB0555(color.r, color.g, color.b);
         if(global_video_vertical)
         {
             for(int col = low_x; col <= high_x; col++)
             {
                 for(int row = high_y; row >= low_y; row--)
                 {
-                    SET_PIXEL_V_2(buffer_base, col, row, color);
+                    SET_PIXEL_V_2(buffer_base, col, row, actualcolor);
                 }
             }
         }
@@ -577,20 +522,21 @@ void video_fill_box(int x0, int y0, int x1, int y1, uint32_t color)
             {
                 for(int col = low_x; col <= high_x; col++)
                 {
-                    SET_PIXEL_H_2(buffer_base, col, row, color);
+                    SET_PIXEL_H_2(buffer_base, col, row, actualcolor);
                 }
             }
         }
     }
     else if(global_video_depth == 4)
     {
+        uint32_t actualcolor = RGB0888(color.r, color.g, color.b);
         if(global_video_vertical)
         {
             for(int col = low_x; col <= high_x; col++)
             {
                 for(int row = high_y; row >= low_y; row--)
                 {
-                    SET_PIXEL_V_4(buffer_base, col, row, color);
+                    SET_PIXEL_V_4(buffer_base, col, row, actualcolor);
                 }
             }
         }
@@ -600,70 +546,86 @@ void video_fill_box(int x0, int y0, int x1, int y1, uint32_t color)
             {
                 for(int col = low_x; col <= high_x; col++)
                 {
-                    SET_PIXEL_H_4(buffer_base, col, row, color);
+                    SET_PIXEL_H_4(buffer_base, col, row, actualcolor);
                 }
             }
         }
     }
 }
 
-void video_draw_pixel(int x, int y, uint32_t color)
+void video_draw_pixel(int x, int y, color_t color)
 {
     if (global_video_depth == 2)
     {
+        uint32_t actualcolor = RGB0555(color.r, color.g, color.b);
         if (global_video_vertical)
         {
-            SET_PIXEL_V_2(buffer_base, x, y, color);
+            SET_PIXEL_V_2(buffer_base, x, y, actualcolor);
         }
         else
         {
-            SET_PIXEL_H_2(buffer_base, x, y, color);
+            SET_PIXEL_H_2(buffer_base, x, y, actualcolor);
         }
     }
     else if(global_video_depth == 4)
     {
+        uint32_t actualcolor = RGB0888(color.r, color.g, color.b);
         if (global_video_vertical)
         {
-            SET_PIXEL_V_4(buffer_base, x, y, color);
+            SET_PIXEL_V_4(buffer_base, x, y, actualcolor);
         }
         else
         {
-            SET_PIXEL_H_4(buffer_base, x, y, color);
+            SET_PIXEL_H_4(buffer_base, x, y, actualcolor);
         }
     }
 }
 
-uint32_t video_get_pixel(int x, int y)
+color_t video_get_pixel(int x, int y)
 {
+    uint32_t color;
+    color_t retval;
+
     if (global_video_depth == 2)
     {
         if (global_video_vertical)
         {
-            return GET_PIXEL_V_2(buffer_base, x, y);
+            color = GET_PIXEL_V_2(buffer_base, x, y);
         }
         else
         {
-            return GET_PIXEL_H_2(buffer_base, x, y);
+            color = GET_PIXEL_H_2(buffer_base, x, y);
         }
+
+        retval.a = 0;
+        EXPLODE0555(color, retval.r, retval.g, retval.b);
     }
     else if(global_video_depth == 4)
     {
         if (global_video_vertical)
         {
-            return GET_PIXEL_V_4(buffer_base, x, y);
+            color = GET_PIXEL_V_4(buffer_base, x, y);
         }
         else
         {
-            return GET_PIXEL_H_4(buffer_base, x, y);
+            color = GET_PIXEL_H_4(buffer_base, x, y);
         }
+
+        retval.a = 0;
+        EXPLODE0888(color, retval.r, retval.g, retval.b);
     }
     else
     {
-        return 0;
+        retval.r = 0;
+        retval.g = 0;
+        retval.b = 0;
+        retval.a = 0;
     }
+
+    return retval;
 }
 
-void video_draw_line(int x0, int y0, int x1, int y1, uint32_t color)
+void video_draw_line(int x0, int y0, int x1, int y1, color_t color)
 {
     int dy = y1 - y0;
     int dx = x1 - x0;
@@ -725,7 +687,7 @@ void video_draw_line(int x0, int y0, int x1, int y1, uint32_t color)
     }
 }
 
-void video_draw_box(int x0, int y0, int x1, int y1, uint32_t color)
+void video_draw_box(int x0, int y0, int x1, int y1, color_t color)
 {
     int low_x;
     int high_x;
@@ -759,7 +721,7 @@ void video_draw_box(int x0, int y0, int x1, int y1, uint32_t color)
     video_draw_line(high_x, low_y, high_x, high_y, color);
 }
 
-void video_draw_debug_character( int x, int y, uint32_t color, char ch )
+void video_draw_debug_character(int x, int y, color_t color, char ch)
 {
     if (ch < 0x20 || ch > 0x7F)
     {
@@ -906,7 +868,7 @@ void video_draw_debug_character( int x, int y, uint32_t color, char ch )
     }
 }
 
-void video_draw_sprite( int x, int y, int width, int height, void *data )
+void video_draw_sprite(int x, int y, int width, int height, void *data)
 {
     int low_x = 0;
     int high_x = width;
@@ -1072,7 +1034,7 @@ void video_draw_sprite( int x, int y, int width, int height, void *data )
     }
 }
 
-void __video_draw_debug_text( int x, int y, uint32_t color, const char * const msg )
+void __video_draw_debug_text(int x, int y, color_t color, const char * const msg)
 {
     if( msg == 0 ) { return; }
 
@@ -1111,7 +1073,7 @@ void __video_draw_debug_text( int x, int y, uint32_t color, const char * const m
     }
 }
 
-void video_draw_debug_text(int x, int y, uint32_t color, const char * const msg, ...)
+void video_draw_debug_text(int x, int y, color_t color, const char * const msg, ...)
 {
     if (msg)
     {
