@@ -28,6 +28,23 @@ typedef struct
     float a44;
 } matrix_t;
 
+// Type definitions for both regular vertexes as well as vertexes that also hold texture information.
+typedef struct
+{
+    float x;
+    float y;
+    float z;
+} vertex_t;
+
+typedef struct
+{
+    float x;
+    float y;
+    float z;
+    float u;
+    float v;
+} textured_vertex_t;
+
 // Dirty trick to make indexing programatically into matrixes possible.
 #define matrix_index(matrix, row, col) (*((&(matrix).a11) + ((row) * 4) + (col)))
 
@@ -51,6 +68,9 @@ void matrix_push();
 // the system matrix.
 void matrix_pop();
 
+// Invert the system matrix, such that if Ma = x, M-1x = a.
+void matrix_invert();
+
 // Apply another 4x4 matrix to the system matrix by multiplying it.
 void matrix_apply(matrix_t * matrix);
 
@@ -58,6 +78,11 @@ void matrix_apply(matrix_t * matrix);
 void matrix_rotate_x(float degrees);
 void matrix_rotate_y(float degrees);
 void matrix_rotate_z(float degrees);
+
+// Rotate the system matrix about a given axis with a given origin and given degrees, where 0.0 is identity rotation.
+void matrix_rotate_origin_x(vertex_t *origin, float degrees);
+void matrix_rotate_origin_y(vertex_t *origin, float degrees);
+void matrix_rotate_origin_z(vertex_t *origin, float degrees);
 
 // Scale the system matrix on a given axis and given amount, where 1.0 is identity scale.
 void matrix_scale_x(float amount);
@@ -68,23 +93,6 @@ void matrix_scale_z(float amount);
 void matrix_translate_x(float amount);
 void matrix_translate_y(float amount);
 void matrix_translate_z(float amount);
-
-// Type definitions for both regular vertexes as well as vertexes that also hold texture information.
-typedef struct
-{
-    float x;
-    float y;
-    float z;
-} vertex_t;
-
-typedef struct
-{
-    float x;
-    float y;
-    float z;
-    float u;
-    float v;
-} textured_vertex_t;
 
 // Transform a series of x, y, z coordinates from one worldspace to another (useful for
 // rotating/transforming/scaling objects in worldspace) by extending them to homogenous

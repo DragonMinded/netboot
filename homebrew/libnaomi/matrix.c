@@ -233,6 +233,66 @@ void matrix_pop()
     }
 }
 
+float _minor(float m[16], int r0, int r1, int r2, int c0, int c1, int c2)
+{
+    return (
+        m[4*r0+c0] * (m[4*r1+c1] * m[4*r2+c2] - m[4*r2+c1] * m[4*r1+c2]) -
+        m[4*r0+c1] * (m[4*r1+c0] * m[4*r2+c2] - m[4*r2+c0] * m[4*r1+c2]) +
+        m[4*r0+c2] * (m[4*r1+c0] * m[4*r2+c1] - m[4*r2+c0] * m[4*r1+c1])
+    );
+}
+
+void _adjoint(float m[16], float adjOut[16])
+{
+    adjOut[0] = _minor(m,1,2,3,1,2,3);
+    adjOut[1] = -_minor(m,0,2,3,1,2,3);
+    adjOut[2] = _minor(m,0,1,3,1,2,3);
+    adjOut[3] = -_minor(m,0,1,2,1,2,3);
+    adjOut[4] = -_minor(m,1,2,3,0,2,3);
+    adjOut[5] = _minor(m,0,2,3,0,2,3);
+    adjOut[6] = -_minor(m,0,1,3,0,2,3);
+    adjOut[7] = _minor(m,0,1,2,0,2,3);
+    adjOut[8] = _minor(m,1,2,3,0,1,3);
+    adjOut[9] = -_minor(m,0,2,3,0,1,3);
+    adjOut[10] = _minor(m,0,1,3,0,1,3);
+    adjOut[11] = -_minor(m,0,1,2,0,1,3);
+    adjOut[12] = -_minor(m,1,2,3,0,1,2);
+    adjOut[13] = _minor(m,0,2,3,0,1,2);
+    adjOut[14] = -_minor(m,0,1,3,0,1,2);
+    adjOut[15] = _minor(m,0,1,2,0,1,2);
+}
+
+float _det(float m[16])
+{
+    return (
+        m[0] * _minor(m, 1, 2, 3, 1, 2, 3) -
+        m[1] * _minor(m, 1, 2, 3, 0, 2, 3) +
+        m[2] * _minor(m, 1, 2, 3, 0, 1, 3) -
+        m[3] * _minor(m, 1, 2, 3, 0, 1, 2)
+    );
+}
+
+void _invertRowMajor(float m[16], float invOut[16])
+{
+    _adjoint(m, invOut);
+
+    float inv_det = 1.0f / _det(m);
+    for(int i = 0; i < 16; i++)
+    {
+        invOut[i] = invOut[i] * inv_det;
+    }
+}
+
+void matrix_invert()
+{
+    float orig[16];
+    matrix_get((matrix_t *)orig);
+
+    float upd[16];
+    _invertRowMajor(orig, upd);
+    matrix_set((matrix_t *)upd);
+}
+
 void matrix_affine_transform_vertex(vertex_t *src, vertex_t *dest, int n)
 {
     // Let's do some bounds checking!
@@ -247,7 +307,7 @@ void matrix_affine_transform_vertex(vertex_t *src, vertex_t *dest, int n)
     register vertex_t *dst_param asm("r5") = dest;
     register int n_param asm("r6") = n;
     asm(" \
-    .affineloop:\n \
+    .loop%=:\n \
         fmov.s @r4+,fr0\n \
         fmov.s @r4+,fr1\n \
         fmov.s @r4+,fr2\n \
@@ -260,7 +320,7 @@ void matrix_affine_transform_vertex(vertex_t *src, vertex_t *dest, int n)
         add #4,r5\n \
         fmov.s fr2,@r5\n \
         add #4,r5\n \
-        bf/s .affineloop\n \
+        bf/s .loop%=\n \
         nop\n \
         " :
         /* No outputs */ :
@@ -285,7 +345,7 @@ void matrix_perspective_transform_vertex(vertex_t *src, vertex_t *dest, int n)
     register vertex_t *dst_param asm("r5") = dest;
     register int n_param asm("r6") = n;
     asm(" \
-    .perspectiveloop:\n \
+    .loop%=:\n \
         fmov.s @r4+,fr0\n \
         fmov.s @r4+,fr1\n \
         fmov.s @r4+,fr2\n \
@@ -301,7 +361,7 @@ void matrix_perspective_transform_vertex(vertex_t *src, vertex_t *dest, int n)
         fdiv fr3,fr2\n \
         fmov.s fr2,@r5\n \
         add #4,r5\n \
-        bf/s .perspectiveloop\n \
+        bf/s .loop%=\n \
         nop\n \
         " :
         /* No outputs */ :
@@ -512,4 +572,82 @@ void matrix_translate_z(float amount)
     };
     matrix.a43 = amount;
     matrix_apply(&matrix);
+}
+
+void matrix_rotate_origin_x(vertex_t *origin, float amount)
+{
+    matrix_t backagain = {
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0
+    };
+    backagain.a41 = origin->x;
+    backagain.a42 = origin->y;
+    backagain.a43 = origin->z;
+    matrix_apply(&backagain);
+    matrix_rotate_x(amount);
+
+    matrix_t there = {
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0
+    };
+    there.a41 = -origin->x;
+    there.a42 = -origin->y;
+    there.a43 = -origin->z;
+    matrix_apply(&there);
+}
+
+void matrix_rotate_origin_y(vertex_t *origin, float amount)
+{
+    matrix_t backagain = {
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0
+    };
+    backagain.a41 = origin->x;
+    backagain.a42 = origin->y;
+    backagain.a43 = origin->z;
+    matrix_apply(&backagain);
+    matrix_rotate_y(amount);
+
+    matrix_t there = {
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0
+    };
+    there.a41 = -origin->x;
+    there.a42 = -origin->y;
+    there.a43 = -origin->z;
+    matrix_apply(&there);
+}
+
+void matrix_rotate_origin_z(vertex_t *origin, float amount)
+{
+    matrix_t backagain = {
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0
+    };
+    backagain.a41 = origin->x;
+    backagain.a42 = origin->y;
+    backagain.a43 = origin->z;
+    matrix_apply(&backagain);
+    matrix_rotate_z(amount);
+
+    matrix_t there = {
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0
+    };
+    there.a41 = -origin->x;
+    there.a42 = -origin->y;
+    there.a43 = -origin->z;
+    matrix_apply(&there);
 }

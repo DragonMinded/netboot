@@ -158,6 +158,7 @@ void main()
         /* Draw a box */
         float xcenter = 80.0;
         float ycenter = (float)video_height() - 80.0;
+        vertex_t origin = { xcenter, ycenter, 1.0 };
         vertex_t box[4] = {
             { xcenter - 50.0, ycenter + 50.0, 1.0 },
             { xcenter - 50.0, ycenter - 50.0, 1.0 },
@@ -168,11 +169,7 @@ void main()
         /* Rotate the box about its own axis. Remember that this is from the world
          * perspective, so build it backwards. */
         matrix_init_identity();
-        matrix_translate_x(xcenter);
-        matrix_translate_y(ycenter);
-        matrix_rotate_z(-(float)count);
-        matrix_translate_x(-xcenter);
-        matrix_translate_y(-ycenter);
+        matrix_rotate_origin_z(&origin, -(float)count);
         matrix_affine_transform_vertex(box, box, 4);
 
         /* Draw the box to the screen. */
@@ -181,6 +178,8 @@ void main()
         /* Draw a sprite */
         xcenter = (float)video_width() - 80;
         ycenter = (float)video_height() - 80;
+        origin.x = xcenter;
+        origin.y = ycenter;
         textured_vertex_t sprite[4] = {
             { xcenter - 50.0, ycenter + 50.0, 1.0, 0.0, 1.0 },
             { xcenter - 50.0, ycenter - 50.0, 1.0, 0.0, 0.0 },
@@ -191,11 +190,7 @@ void main()
         /* Rotate the sprite about its own axis. Remember that this is from the world
          * perspective, so build it backwards. */
         matrix_init_identity();
-        matrix_translate_x(xcenter);
-        matrix_translate_y(ycenter);
-        matrix_rotate_z((float)count);
-        matrix_translate_x(-xcenter);
-        matrix_translate_y(-ycenter);
+        matrix_rotate_origin_z(&origin, (float)count);
         matrix_affine_transform_textured_vertex(sprite, sprite, 4);
 
         /* Draw the sprite to the screen. */

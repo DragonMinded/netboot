@@ -239,3 +239,44 @@ void test_matrix_affine_uv_transform(test_context_t *context)
         );
     }
 }
+
+void test_matrix_invert(test_context_t *context)
+{
+    // First test inverting the identity matrix, which should give us the identity matrix.
+    matrix_init_identity();
+    matrix_invert();
+
+    matrix_t result;
+    matrix_get(&result);
+    for (int i = 0; i < 16; i++)
+    {
+        int x = i % 4;
+        int y = i / 4;
+
+        ASSERT(matrix_index(result, y, x) == ((x == y) ? 1.0 : 0.0), "Expected different value than %f for [%d][%d]!", matrix_index(result, y, x), y, x);
+    }
+
+    matrix_t mtrx1 = {
+        2.0, 0.0, 0.0, 0.0,
+        0.0, 4.0, 0.0, 0.0,
+        0.0, 0.0, 8.0, 0.0,
+        4.0, 6.0, 8.0, 1.0
+    };
+    matrix_set(&mtrx1);
+    matrix_invert();
+    matrix_get(&result);
+
+    matrix_t expected = {
+        0.5, 0.0, 0.0, 0.0,
+        0.0, 0.25, 0.0, 0.0,
+        0.0, 0.0, 0.125, 0.0,
+        -2.0, -1.5, -1.0, 1.0
+    };
+    for (int i = 0; i < 16; i++)
+    {
+        int x = i % 4;
+        int y = i / 4;
+
+        ASSERT(matrix_index(result, y, x) == matrix_index(expected, y, x), "Expected value %f but got %f for [%d][%d]!", matrix_index(expected, y, x), matrix_index(result, y, x), y, x);
+    }
+}
