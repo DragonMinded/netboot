@@ -137,16 +137,7 @@ void matrix_apply(matrix_t *matrix)
         fmov.s @r4+,fr14\n \
         fmov.s @r4+,fr15\n \
         ftrv xmtrx,fv12\n \
-        fschg\n \
-        fmov dr0,xd0\n \
-        fmov dr2,xd2\n \
-        fmov dr4,xd4\n \
-        fmov dr6,xd6\n \
-        fmov dr8,xd8\n \
-        fmov dr10,xd10\n \
-        fmov dr12,xd12\n \
-        fmov dr14,xd14\n \
-        fschg\n \
+        frchg\n \
         " :
         /* No ouputs */ :
         "r" (matrix_param) :
@@ -179,16 +170,7 @@ void matrix_set(matrix_t *matrix)
         fmov.s @r4+,fr13\n \
         fmov.s @r4+,fr14\n \
         fmov.s @r4+,fr15\n \
-        fschg\n \
-        fmov dr0,xd0\n \
-        fmov dr2,xd2\n \
-        fmov dr4,xd4\n \
-        fmov dr6,xd6\n \
-        fmov dr8,xd8\n \
-        fmov dr10,xd10\n \
-        fmov dr12,xd12\n \
-        fmov dr14,xd14\n \
-        fschg\n \
+        frchg\n \
         " :
         /* No ouputs */ :
         "r" (matrix_param) :
@@ -205,16 +187,7 @@ void matrix_get(matrix_t *matrix)
     // Set a 4x4 matrix into the XMTRX register.
     register matrix_t *matrix_param asm("r4") = matrix;
     asm(" \
-        fschg\n \
-        fmov xd0,dr0\n \
-        fmov xd2,dr2\n \
-        fmov xd4,dr4\n \
-        fmov xd6,dr6\n \
-        fmov xd8,dr8\n \
-        fmov xd10,dr10\n \
-        fmov xd12,dr12\n \
-        fmov xd14,dr14\n \
-        fschg\n \
+        frchg\n \
         add #64,r4\n \
         fmov.s fr15,@-r4\n \
         fmov.s fr14,@-r4\n \
@@ -232,6 +205,7 @@ void matrix_get(matrix_t *matrix)
         fmov.s fr2,@-r4\n \
         fmov.s fr1,@-r4\n \
         fmov.s fr0,@-r4\n \
+        frchg\n \
         " :
         /* No ouputs */ :
         "r" (matrix_param) :
