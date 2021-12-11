@@ -61,6 +61,7 @@ extern uint8_t *tex3_png_data;
 extern uint8_t *tex4_png_data;
 extern uint8_t *tex5_png_data;
 extern uint8_t *tex6_png_data;
+extern uint8_t *sprite1_png_data;
 
 void main()
 {
@@ -72,13 +73,14 @@ void main()
     init_palette();
 
     /* Load our textures into texture RAM */
-    texture_description_t *tex[6];
+    texture_description_t *tex[7];
     tex[0] = ta_texture_desc_malloc_paletted(256, tex1_png_data, TA_PALETTE_CLUT8, 0);
     tex[1] = ta_texture_desc_malloc_paletted(256, tex2_png_data, TA_PALETTE_CLUT8, 1);
     tex[2] = ta_texture_desc_malloc_paletted(256, tex3_png_data, TA_PALETTE_CLUT8, 2);
     tex[3] = ta_texture_desc_malloc_paletted(256, tex4_png_data, TA_PALETTE_CLUT8, 3);
     tex[4] = ta_texture_desc_malloc_paletted(256, tex5_png_data, TA_PALETTE_CLUT8, 1);
     tex[5] = ta_texture_desc_malloc_paletted(256, tex6_png_data, TA_PALETTE_CLUT8, 2);
+    tex[6] = ta_texture_desc_malloc_paletted(256, sprite1_png_data, TA_PALETTE_CLUT8, 0);
 
     /* x/y/z rotation amount in degrees */
     int i = 45;
@@ -155,10 +157,10 @@ void main()
 
         /* Draw a box */
         vertex_t box[4] = {
-            { 30.0, 450.0, 0.0 },
-            { 30.0, 350.0, 0.0 },
-            { 130.0, 350.0, 0.0 },
-            { 130.0, 450.0, 0.0 },
+            { 30.0, 450.0, 1.0 },
+            { 30.0, 350.0, 1.0 },
+            { 130.0, 350.0, 1.0 },
+            { 130.0, 450.0, 1.0 },
         };
 
         /* Rotate the box about its own axis. Remember that this is from the world
@@ -173,6 +175,27 @@ void main()
 
         /* Draw the box to the screen. */
         ta_fill_box(TA_CMD_POLYGON_TYPE_OPAQUE, box, rgb(255, 255, 0));
+
+        /* Draw a sprite */
+        textured_vertex_t sprite[4] = {
+            { 510.0, 450.0, 1.0, 0.0, 1.0 },
+            { 510.0, 350.0, 1.0, 0.0, 0.0 },
+            { 610.0, 350.0, 1.0, 1.0, 0.0 },
+            { 610.0, 450.0, 1.0, 1.0, 1.0 },
+        };
+
+        /* Rotate the sprite about its own axis. Remember that this is from the world
+         * perspective, so build it backwards. */
+        matrix_init_identity();
+        matrix_translate_x(560.0);
+        matrix_translate_y(400.0);
+        matrix_rotate_z((float)count);
+        matrix_translate_x(-560.0);
+        matrix_translate_y(-400.0);
+        matrix_affine_transform_textured_vertex(sprite, sprite, 4);
+
+        /* Draw the sprite to the screen. */
+        ta_draw_sprite(TA_CMD_POLYGON_TYPE_OPAQUE, sprite, tex[6]);
 
         /* Mark the end of the command list */
         ta_commit_end();

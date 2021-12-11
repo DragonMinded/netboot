@@ -392,6 +392,11 @@ void ta_texture_desc_free(texture_description_t *desc);
 // applied to them using matrix math should you wish to scale/rotate/shear the box.
 void ta_fill_box(uint32_t type, vertex_t *verticies, color_t color);
 
+// Given a box bounded by identical conditions to the above function, draw a sprite
+// with a particular texture. All caveats and conditions from above apply here, but
+// the box is drawn textured instead of filled.
+void ta_draw_sprite(uint32_t type, textured_vertex_t *verticies, texture_description_t *texture);
+
 // Draw a triangle strip consisting of striplen TA_CMD_POLYGON_STRIPLENGTH_1,
 // TA_CMD_POLYGON_STRIPLENGTH_2, TA_CMD_POLYGON_STRIPLENGTH_4 or TA_CMD_POLYGON_STRIPLENGTH_6.
 // The type is the same as ta_fill_box()'s type, specifying whether the triangle is opaque,

@@ -15,6 +15,7 @@ SRCS += build/tex3.o
 SRCS += build/tex4.o
 SRCS += build/tex5.o
 SRCS += build/tex6.o
+SRCS += build/sprite1.o
 
 # Pick up base makefile rules common to all examples.
 include ../../Makefile.base

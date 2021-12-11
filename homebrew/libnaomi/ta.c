@@ -887,7 +887,6 @@ void ta_fill_box(uint32_t type, vertex_t *verticies, color_t color)
         TA_CMD_SPRITE |
         type |
         TA_CMD_POLYGON_SUBLIST |
-        TA_CMD_POLYGON_STRIPLENGTH_2 |
         TA_CMD_POLYGON_PACKED_COLOR |
         TA_CMD_POLYGON_16BIT_UV;
     mypoly.mode1 =
@@ -1085,9 +1084,60 @@ void ta_draw_triangle_strip_uv(uint32_t type, uint32_t striplen, vertex_t *verti
     }
 }
 
+uint32_t _ta_16bit_uv(float uv)
+{
+    union intfloat f2i;
+    f2i.f = uv;
+    return ((f2i.i) >> 16) & 0xFFFF;
+}
+
 void ta_draw_sprite(uint32_t type, textured_vertex_t *verticies, texture_description_t *texture)
 {
+    struct polygon_list_sprite mypoly;
+    struct vertex_list_sprite myvertex;
 
+    mypoly.cmd =
+        TA_CMD_SPRITE |
+        type |
+        TA_CMD_POLYGON_SUBLIST |
+        TA_CMD_POLYGON_PACKED_COLOR |
+        TA_CMD_POLYGON_16BIT_UV |
+        TA_CMD_POLYGON_TEXTURED;
+    mypoly.mode1 =
+        TA_POLYMODE1_Z_ALWAYS |
+        TA_POLYMODE1_CULL_DISABLED;
+    mypoly.mode2 =
+        TA_POLYMODE2_MIPMAP_D_1_00 |
+        TA_POLYMODE2_TEXTURE_DECAL |
+        texture->uvsize |
+        TA_POLYMODE2_TEXTURE_CLAMP_U |
+        TA_POLYMODE2_TEXTURE_CLAMP_V |
+        TA_POLYMODE2_FOG_DISABLED |
+        TA_POLYMODE2_SRC_BLEND_SRC_ALPHA |
+        TA_POLYMODE2_DST_BLEND_INV_SRC_ALPHA;
+    mypoly.texture =
+        texture->texture_mode |
+        TA_TEXTUREMODE_ADDRESS(texture->vram_location);
+    mypoly.mult_color = 0xffffffff;
+    mypoly.add_color = 0;
+    ta_commit_list(&mypoly, TA_LIST_SHORT);
+
+    myvertex.cmd = TA_CMD_VERTEX | TA_CMD_VERTEX_END_OF_STRIP;
+    myvertex.ax = verticies[0].x;
+    myvertex.ay = verticies[0].y;
+    myvertex.az = verticies[0].z;
+    myvertex.bx = verticies[1].x;
+    myvertex.by = verticies[1].y;
+    myvertex.bz = verticies[1].z;
+    myvertex.cx = verticies[2].x;
+    myvertex.cy = verticies[2].y;
+    myvertex.cz = verticies[2].z;
+    myvertex.dx = verticies[3].x;
+    myvertex.dy = verticies[3].y;
+    myvertex.au_av = (_ta_16bit_uv(verticies[0].u) << 16) | _ta_16bit_uv(verticies[0].v);
+    myvertex.bu_bv = (_ta_16bit_uv(verticies[1].u) << 16) | _ta_16bit_uv(verticies[1].v);
+    myvertex.cu_cv = (_ta_16bit_uv(verticies[2].u) << 16) | _ta_16bit_uv(verticies[2].v);
+    ta_commit_list(&myvertex, TA_LIST_LONG);
 }
 
 void ta_draw_sprite_uv(uint32_t type, vertex_t *verticies, uv_t *texcoords, texture_description_t *texture)
