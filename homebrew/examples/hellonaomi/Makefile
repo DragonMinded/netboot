@@ -16,7 +16,7 @@ include ../../Makefile.base
 # Specific buildrule for PNG files for this project.
 build/%.o: %.png ${IMG2C_FILE}
 	@mkdir -p $(dir $@)
-	${IMG2C} build/$<.c --depth 16 $<
+	${IMG2C} build/$<.c --mode RGBA1555 $<
 	${CC} -c build/$<.c -o $@
 
 # Provide the top-level ROM creation target for this binary.

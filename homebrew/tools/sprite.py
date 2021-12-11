@@ -27,10 +27,10 @@ def main() -> int:
         help='The image file we should use to generate the output file.',
     )
     parser.add_argument(
-        '--depth',
-        metavar='DEPTH',
-        type=int,
-        help='The depth of the final sprite, in bits. Should match the video mode you are initializing.',
+        '--mode',
+        metavar='MODE',
+        type=str,
+        help='The mode of the final sprite. Should match the video mode you are initializing. Options include "RGBA1555", "RGBA8888" and "INTENSITY8".',
     )
     parser.add_argument(
         '--raw',
@@ -48,22 +48,21 @@ def main() -> int:
     # Convert it to RGBA, convert the data to a format that Naomi knows.
     pixels = texture.convert('RGBA')
     outdata: List[bytes] = []
+    mode: str = args.mode.lower()
 
-    if args.depth == 8:
-        # TODO: This only really makes sense if you want a grayscale image. We should also support
-        # generating palettes as well.
+    if mode == "intensity8":
         for r, g, b, _ in pixels.getdata():
             gray = int(0.2989 * r + 0.5870 * g + 0.1140 * b)
             outdata.append(struct.pack("<B", gray))
-    elif args.depth == 16:
+    elif mode == "rgba1555":
         for r, g, b, a in pixels.getdata():
             outdata.append(struct.pack("<H", ((b >> 3) & (0x1F << 0)) | ((g << 2) & (0x1F << 5)) | ((r << 7) & (0x1F << 10)) | ((a << 8) & 0x8000)))
-    elif args.depth == 32:
+    elif mode == "rgba8888":
         for r, g, b, a in pixels.getdata():
             outdata.append(struct.pack("<I", ((b & 0xFF) << 0) | ((g & 0xFF) << 8) | ((r & 0xFF) << 16) | ((a & 0xFF) << 24)))
     else:
-        # TODO: Add this when we support other depths.
-        raise Exception(f"Unsupported depth {args.depth}!")
+        # TODO: Add this when we support other modes.
+        raise Exception(f"Unsupported depth {args.mode}!")
 
     bindata = b"".join(outdata)
 
