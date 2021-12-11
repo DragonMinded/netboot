@@ -63,10 +63,6 @@ void restart_game();
 // Flush a range of bytes of memory starting at addr from the instruction cache.
 void icache_flush_range(void *addr, unsigned int bytes);
 
-// UTF-8 handling for unicode text.
-unsigned int utf8_strlen(const char * const str);
-uint32_t *utf8_convert(const char * const str);
-
 #ifdef __cplusplus
 }
 #endif

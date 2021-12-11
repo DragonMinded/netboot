@@ -1,6 +1,6 @@
 // vim: set fileencoding=utf-8
 #include <stdlib.h>
-#include "naomi/system.h"
+#include "naomi/utf8.h"
 
 #define test_utf8_strlen_duration 10
 void test_utf8_strlen(test_context_t *context)

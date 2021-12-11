@@ -6,7 +6,7 @@
 #include <stdarg.h>
 #include <ft2build.h>
 #include FT_FREETYPE_H
-#include "naomi/system.h"
+#include "naomi/utf8.h"
 #include "naomi/video.h"
 #include "video-internal.h"
 

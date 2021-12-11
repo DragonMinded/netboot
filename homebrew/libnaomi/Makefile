@@ -23,6 +23,7 @@ SRCS += rtc.c
 SRCS += cart.c
 SRCS += romfs.c
 SRCS += matrix.c
+SRCS += utf8.c
 SRCS += gdb.c
 
 # Pick up base makefile rules common to all examples.
