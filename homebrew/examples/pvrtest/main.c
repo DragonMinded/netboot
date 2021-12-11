@@ -156,42 +156,46 @@ void main()
         draw_face(coords[2], coords[3], coords[6], coords[7], tex[5]);
 
         /* Draw a box */
+        float xcenter = 80.0;
+        float ycenter = (float)video_height() - 80.0;
         vertex_t box[4] = {
-            { 30.0, 450.0, 1.0 },
-            { 30.0, 350.0, 1.0 },
-            { 130.0, 350.0, 1.0 },
-            { 130.0, 450.0, 1.0 },
+            { xcenter - 50.0, ycenter + 50.0, 1.0 },
+            { xcenter - 50.0, ycenter - 50.0, 1.0 },
+            { xcenter + 50.0, ycenter - 50.0, 1.0 },
+            { xcenter + 50.0, ycenter + 50.0, 1.0 },
         };
 
         /* Rotate the box about its own axis. Remember that this is from the world
          * perspective, so build it backwards. */
         matrix_init_identity();
-        matrix_translate_x(80.0);
-        matrix_translate_y(400.0);
+        matrix_translate_x(xcenter);
+        matrix_translate_y(ycenter);
         matrix_rotate_z(-(float)count);
-        matrix_translate_x(-80.0);
-        matrix_translate_y(-400.0);
+        matrix_translate_x(-xcenter);
+        matrix_translate_y(-ycenter);
         matrix_affine_transform_vertex(box, box, 4);
 
         /* Draw the box to the screen. */
         ta_fill_box(TA_CMD_POLYGON_TYPE_OPAQUE, box, rgb(255, 255, 0));
 
         /* Draw a sprite */
+        xcenter = (float)video_width() - 80;
+        ycenter = (float)video_height() - 80;
         textured_vertex_t sprite[4] = {
-            { 510.0, 450.0, 1.0, 0.0, 1.0 },
-            { 510.0, 350.0, 1.0, 0.0, 0.0 },
-            { 610.0, 350.0, 1.0, 1.0, 0.0 },
-            { 610.0, 450.0, 1.0, 1.0, 1.0 },
+            { xcenter - 50.0, ycenter + 50.0, 1.0, 0.0, 1.0 },
+            { xcenter - 50.0, ycenter - 50.0, 1.0, 0.0, 0.0 },
+            { xcenter + 50.0, ycenter - 50.0, 1.0, 1.0, 0.0 },
+            { xcenter + 50.0, ycenter + 50.0, 1.0, 1.0, 1.0 },
         };
 
         /* Rotate the sprite about its own axis. Remember that this is from the world
          * perspective, so build it backwards. */
         matrix_init_identity();
-        matrix_translate_x(560.0);
-        matrix_translate_y(400.0);
+        matrix_translate_x(xcenter);
+        matrix_translate_y(ycenter);
         matrix_rotate_z((float)count);
-        matrix_translate_x(-560.0);
-        matrix_translate_y(-400.0);
+        matrix_translate_x(-xcenter);
+        matrix_translate_y(-ycenter);
         matrix_affine_transform_textured_vertex(sprite, sprite, 4);
 
         /* Draw the sprite to the screen. */

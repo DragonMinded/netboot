@@ -269,6 +269,7 @@ uint32_t _ta_set_target(struct ta_buffers *buffers, int tile_width, int tile_hei
 extern unsigned int global_video_depth;
 extern unsigned int global_video_width;
 extern unsigned int global_video_height;
+extern unsigned int global_video_vertical;
 
 void _ta_set_background_color(struct ta_buffers *buffers, uint32_t rgba)
 {
@@ -903,17 +904,35 @@ void ta_fill_box(uint32_t type, vertex_t *verticies, color_t color)
     ta_commit_list(&mypoly, TA_LIST_SHORT);
 
     myvertex.cmd = TA_CMD_VERTEX | TA_CMD_VERTEX_END_OF_STRIP;
-    myvertex.ax = verticies[0].x;
-    myvertex.ay = verticies[0].y;
-    myvertex.az = verticies[0].z;
-    myvertex.bx = verticies[1].x;
-    myvertex.by = verticies[1].y;
-    myvertex.bz = verticies[1].z;
-    myvertex.cx = verticies[2].x;
-    myvertex.cy = verticies[2].y;
-    myvertex.cz = verticies[2].z;
-    myvertex.dx = verticies[3].x;
-    myvertex.dy = verticies[3].y;
+    if (global_video_vertical)
+    {
+        float width = (float)global_video_width - 1.0;
+        myvertex.ax = width - verticies[0].y;
+        myvertex.ay = verticies[0].x;
+        myvertex.az = verticies[0].z;
+        myvertex.bx = width - verticies[1].y;
+        myvertex.by = verticies[1].x;
+        myvertex.bz = verticies[1].z;
+        myvertex.cx = width - verticies[2].y;
+        myvertex.cy = verticies[2].x;
+        myvertex.cz = verticies[2].z;
+        myvertex.dx = width - verticies[3].y;
+        myvertex.dy = verticies[3].x;
+    }
+    else
+    {
+        myvertex.ax = verticies[0].x;
+        myvertex.ay = verticies[0].y;
+        myvertex.az = verticies[0].z;
+        myvertex.bx = verticies[1].x;
+        myvertex.by = verticies[1].y;
+        myvertex.bz = verticies[1].z;
+        myvertex.cx = verticies[2].x;
+        myvertex.cy = verticies[2].y;
+        myvertex.cz = verticies[2].z;
+        myvertex.dx = verticies[3].x;
+        myvertex.dy = verticies[3].y;
+    }
     ta_commit_list(&myvertex, TA_LIST_LONG);
 }
 
@@ -1123,17 +1142,35 @@ void ta_draw_sprite(uint32_t type, textured_vertex_t *verticies, texture_descrip
     ta_commit_list(&mypoly, TA_LIST_SHORT);
 
     myvertex.cmd = TA_CMD_VERTEX | TA_CMD_VERTEX_END_OF_STRIP;
-    myvertex.ax = verticies[0].x;
-    myvertex.ay = verticies[0].y;
-    myvertex.az = verticies[0].z;
-    myvertex.bx = verticies[1].x;
-    myvertex.by = verticies[1].y;
-    myvertex.bz = verticies[1].z;
-    myvertex.cx = verticies[2].x;
-    myvertex.cy = verticies[2].y;
-    myvertex.cz = verticies[2].z;
-    myvertex.dx = verticies[3].x;
-    myvertex.dy = verticies[3].y;
+    if (global_video_vertical)
+    {
+        float width = (float)global_video_width - 1.0;
+        myvertex.ax = width - verticies[0].y;
+        myvertex.ay = verticies[0].x;
+        myvertex.az = verticies[0].z;
+        myvertex.bx = width - verticies[1].y;
+        myvertex.by = verticies[1].x;
+        myvertex.bz = verticies[1].z;
+        myvertex.cx = width - verticies[2].y;
+        myvertex.cy = verticies[2].x;
+        myvertex.cz = verticies[2].z;
+        myvertex.dx = width - verticies[3].y;
+        myvertex.dy = verticies[3].x;
+    }
+    else
+    {
+        myvertex.ax = verticies[0].x;
+        myvertex.ay = verticies[0].y;
+        myvertex.az = verticies[0].z;
+        myvertex.bx = verticies[1].x;
+        myvertex.by = verticies[1].y;
+        myvertex.bz = verticies[1].z;
+        myvertex.cx = verticies[2].x;
+        myvertex.cy = verticies[2].y;
+        myvertex.cz = verticies[2].z;
+        myvertex.dx = verticies[3].x;
+        myvertex.dy = verticies[3].y;
+    }
     myvertex.au_av = (_ta_16bit_uv(verticies[0].u) << 16) | _ta_16bit_uv(verticies[0].v);
     myvertex.bu_bv = (_ta_16bit_uv(verticies[1].u) << 16) | _ta_16bit_uv(verticies[1].v);
     myvertex.cu_cv = (_ta_16bit_uv(verticies[2].u) << 16) | _ta_16bit_uv(verticies[2].v);
