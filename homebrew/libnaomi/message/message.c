@@ -4,7 +4,7 @@
 #ifdef FEATURE_ZLIB
 #include <zlib.h>
 #endif
-#include "naomi/system.h"
+#include "naomi/posix.h"
 #include "naomi/interrupt.h"
 #include "naomi/message/message.h"
 #include "naomi/message/packet.h"

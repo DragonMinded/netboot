@@ -6,7 +6,7 @@ void test_rtc_get(test_context_t *context)
     uint32_t rtc_orig = rtc_get();
     uint32_t rtc_new;
 
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 5; i++)
     {
         // Wait a quarter of a second.
         timer_wait(250000);

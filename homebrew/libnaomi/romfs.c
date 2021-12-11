@@ -4,7 +4,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <unistd.h>
-#include "naomi/system.h"
+#include "naomi/posix.h"
 #include "naomi/romfs.h"
 #include "naomi/cart.h"
 #include "naomi/interrupt.h"

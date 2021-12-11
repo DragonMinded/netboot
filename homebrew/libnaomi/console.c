@@ -3,7 +3,7 @@
 #include <malloc.h>
 #include <string.h>
 #include "naomi/console.h"
-#include "naomi/system.h"
+#include "naomi/posix.h"
 #include "naomi/video.h"
 #include "naomi/interrupt.h"
 #include "irqinternal.h"
