@@ -1,9 +1,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#if __has_include(<zlib.h>)
+#ifdef FEATURE_ZLIB
 #include <zlib.h>
-#define ZLIB_INCLUDED 1
 #endif
 #include "naomi/system.h"
 #include "naomi/interrupt.h"
@@ -11,7 +10,7 @@
 #include "naomi/message/packet.h"
 #include "../irqinternal.h"
 
-#ifdef ZLIB_INCLUDED
+#ifdef FEATURE_ZLIB
 int zlib_decompress(uint8_t *compressed, unsigned int compressedlen, uint8_t *decompressed, unsigned int decompressedlen)
 {
     int ret;
@@ -54,7 +53,7 @@ void message_init()
 
     // Set info about our state so the host can coordinate.
     uint32_t config = CONFIG_MESSAGE_EXISTS;
-#ifdef ZLIB_INCLUDED
+#ifdef FEATURE_ZLIB
     config |= CONFIG_MESSAGE_HAS_ZLIB;
 #endif
     packetlib_set_config(config);
@@ -331,7 +330,7 @@ int message_recv(uint16_t *type, void ** data, unsigned int *length)
         }
     }
 
-#ifdef ZLIB_INCLUDED
+#ifdef FEATURE_ZLIB
     // Now, possibly decompress the data.
     if (success == 0 && (*data) != 0 && (*length) >= 4 && ((*type) & 0x8000) != 0)
     {

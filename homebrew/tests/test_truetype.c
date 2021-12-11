@@ -4,7 +4,7 @@
 
 void test_truetype_metrics(test_context_t *context)
 {
-#if __has_include(<ft2build.h>)
+#ifdef FEATURE_FREETYPE
     extern uint8_t *dejavusans_ttf_data;
     extern unsigned int dejavusans_ttf_len;
     font_t *font_12pt = video_font_add(dejavusans_ttf_data, dejavusans_ttf_len);

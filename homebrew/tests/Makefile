@@ -20,7 +20,7 @@ include ../Makefile.base
 LIBS += -lnaomimessage
 
 # Only link against freetype if it has itself been compiled.
-ifeq ($(call libmissing,freetype), 0)
+ifeq (${FEATURE_FREETYPE}, 1)
 # Libraries that we want to link against.
 LIBS += -lfreetype -lbz2 -lz -lpng16
 endif

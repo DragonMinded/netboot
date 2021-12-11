@@ -18,7 +18,7 @@ LIBS += -lnaomimessage
 
 # Only link against zlib if it has itself been compiled.
 # libnaomimessage will pick it up and use it if its available.
-ifeq ($(call libmissing,z), 0)
+ifeq (${FEATURE_ZLIB}, 1)
 # Libraries that we want to link against.
 LIBS += -lz
 endif
