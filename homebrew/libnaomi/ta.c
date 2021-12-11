@@ -1142,5 +1142,14 @@ void ta_draw_sprite(uint32_t type, textured_vertex_t *verticies, texture_descrip
 
 void ta_draw_sprite_uv(uint32_t type, vertex_t *verticies, uv_t *texcoords, texture_description_t *texture)
 {
-
+    // This might be faster if we just copy-pasta'd the above algorithm here and accessed
+    // both uvcoords and verticies directly. Might be worth it to squeeze more speed out
+    // of all this once a lot of this settles.
+    textured_vertex_t real[4] = {
+        { verticies[0].x, verticies[0].y, verticies[0].z, texcoords[0].u, texcoords[0].v },
+        { verticies[1].x, verticies[1].y, verticies[1].z, texcoords[1].u, texcoords[1].v },
+        { verticies[2].x, verticies[2].y, verticies[2].z, texcoords[2].u, texcoords[2].v },
+        { verticies[3].x, verticies[3].y, verticies[3].z, texcoords[3].u, texcoords[3].v },
+    };
+    ta_draw_sprite(type, real, texture);
 }

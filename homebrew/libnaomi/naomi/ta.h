@@ -396,6 +396,7 @@ void ta_fill_box(uint32_t type, vertex_t *verticies, color_t color);
 // with a particular texture. All caveats and conditions from above apply here, but
 // the box is drawn textured instead of filled.
 void ta_draw_sprite(uint32_t type, textured_vertex_t *verticies, texture_description_t *texture);
+void ta_draw_sprite_uv(uint32_t type, vertex_t *verticies, uv_t *texcoords, texture_description_t *texture);
 
 // Draw a triangle strip consisting of striplen TA_CMD_POLYGON_STRIPLENGTH_1,
 // TA_CMD_POLYGON_STRIPLENGTH_2, TA_CMD_POLYGON_STRIPLENGTH_4 or TA_CMD_POLYGON_STRIPLENGTH_6.
