@@ -32,7 +32,7 @@ void ta_commit_list(void *src, int len)
     {
         uint32_t command = ((uint32_t *)src)[0];
 
-        if ((command & 0xE0000000) == TA_CMD_POLYGON)
+        if ((command & 0xE0000000) == TA_CMD_POLYGON || (command & 0xE0000000) == TA_CMD_SPRITE)
         {
             if ((command & 0x07000000) == TA_CMD_POLYGON_TYPE_OPAQUE)
             {
@@ -299,18 +299,18 @@ void _ta_set_background_color(struct ta_buffers *buffers, uint32_t rgba)
     bgintpointer[loc++] = 0;
 
     bgfltpointer[loc++] = 0.0;
+    bgfltpointer[loc++] = (float)global_video_height;
+    bgfltpointer[loc++] = 1.0;
+    bgintpointer[loc++] = rgba;
+
     bgfltpointer[loc++] = 0.0;
-    bgfltpointer[loc++] = BACKGROUND_Z_PLANE;
+    bgfltpointer[loc++] = 0.0;
+    bgfltpointer[loc++] = 1.0;
     bgintpointer[loc++] = rgba;
 
     bgfltpointer[loc++] = (float)global_video_width;
     bgfltpointer[loc++] = 0.0;
-    bgfltpointer[loc++] = BACKGROUND_Z_PLANE;
-    bgintpointer[loc++] = rgba;
-
-    bgfltpointer[loc++] = 0.0;
-    bgfltpointer[loc++] = (float)global_video_height;
-    bgfltpointer[loc++] = BACKGROUND_Z_PLANE;
+    bgfltpointer[loc++] = 1.0;
     bgintpointer[loc++] = rgba;
 }
 
