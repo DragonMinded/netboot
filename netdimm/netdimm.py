@@ -59,6 +59,7 @@ class NetDimmInfo:
         memory_size: int,
         firmware_version: NetDimmVersionEnum,
         available_game_memory: int,
+        control_address: int,
     ) -> None:
         self.current_game_crc = current_game_crc
         self.current_game_size = current_game_size
@@ -66,6 +67,7 @@ class NetDimmInfo:
         self.memory_size = memory_size
         self.firmware_version = firmware_version
         self.available_game_memory = available_game_memory
+        self.control_address = control_address
 
 
 class NetDimmPacket:
@@ -587,6 +589,9 @@ class NetDimm:
             # We stamped this with an invalid setup and the next transfer was interrupted.
             crc_status = CRCStatusEnum.STATUS_INVALID
 
+        # Now, query the BIOS control word.
+        control = self.__host_control_read()
+
         return NetDimmInfo(
             current_game_crc=crc,
             current_game_size=game_size,
@@ -594,6 +599,7 @@ class NetDimm:
             memory_size=dimm_memory,
             firmware_version=firmware_version,
             available_game_memory=game_memory << 20,
+            control_address=control,
         )
 
     def __set_information(self, crc: int, length: int) -> None:
