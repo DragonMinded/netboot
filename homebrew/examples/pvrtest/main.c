@@ -155,6 +155,12 @@ void main()
         draw_face(coords[4], coords[0], coords[6], coords[2], tex[4]);
         draw_face(coords[2], coords[3], coords[6], coords[7], tex[5]);
 
+        /* Mark the end of the opaque command list */
+        ta_commit_end();
+
+        /* Begin sending commands to the TA to draw stuff */
+        ta_commit_begin();
+
         /* Draw a box */
         float xcenter = 80.0;
         float ycenter = (float)video_height() - 80.0;
@@ -173,7 +179,7 @@ void main()
         matrix_affine_transform_vertex(box, box, 4);
 
         /* Draw the box to the screen. */
-        ta_fill_box(TA_CMD_POLYGON_TYPE_OPAQUE, box, rgb(255, 255, 0));
+        ta_fill_box(TA_CMD_POLYGON_TYPE_TRANSPARENT, box, rgb(255, 255, 0));
 
         /* Draw a sprite */
         xcenter = (float)video_width() - 80;
@@ -194,7 +200,7 @@ void main()
         matrix_affine_transform_textured_vertex(sprite, sprite, 4);
 
         /* Draw the sprite to the screen. */
-        ta_draw_sprite(TA_CMD_POLYGON_TYPE_OPAQUE, sprite, tex[6]);
+        ta_draw_sprite(TA_CMD_POLYGON_TYPE_TRANSPARENT, sprite, tex[6]);
 
         /* Mark the end of the command list */
         ta_commit_end();
