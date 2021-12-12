@@ -64,7 +64,6 @@ def main() -> int:
         for r, g, b, a in pixels.getdata():
             outdata.append(struct.pack("<I", ((b & 0xFF) << 0) | ((g & 0xFF) << 8) | ((r & 0xFF) << 16) | ((a & 0xFF) << 24)))
     else:
-        # TODO: Add this when we support other modes.
         raise Exception(f"Unsupported depth {args.mode}!")
 
     bindata = b"".join(outdata)
