@@ -48,7 +48,7 @@ extern unsigned int global_video_vertical;
 extern unsigned int global_video_width;
 extern void * buffer_base;
 
-void __video_draw_bitmap(int x, int y, unsigned int width, unsigned int height, unsigned int mode, void *data, color_t color)
+void __video_draw_cached_bitmap(int x, int y, unsigned int width, unsigned int height, unsigned int mode, void *data, color_t color)
 {
     uint8_t *buffer = data;
 
@@ -269,9 +269,15 @@ void __video_draw_bitmap(int x, int y, unsigned int width, unsigned int height, 
     }
 }
 
+// Given how this module caches, both the uncached and cached draw functions are identical.
+void __video_draw_uncached_bitmap(int x, int y, unsigned int width, unsigned int height, unsigned int mode, uint8_t *data, color_t color)
+{
+    __video_draw_cached_bitmap(x, y, width, height, mode, data, color);
+}
+
 int video_draw_character(int x, int y, font_t *fontface, color_t color, int ch)
 {
-    return _font_draw_calc_character(x, y, fontface, color, ch, 0, &__video_cache_create, &__video_draw_bitmap);
+    return _font_draw_calc_character(x, y, fontface, color, ch, 0, &__video_cache_create, &__video_draw_uncached_bitmap, &__video_draw_cached_bitmap);
 }
 
 int video_draw_text(int x, int y, font_t *fontface, color_t color, const char * const msg, ...)
@@ -287,7 +293,7 @@ int video_draw_text(int x, int y, font_t *fontface, color_t color, const char * 
         if (length > 0)
         {
             buffer[min(length, 2047)] = 0;
-            return _font_draw_calc_text(x, y, fontface, color, buffer, 0, &__video_cache_create, &__video_draw_bitmap);
+            return _font_draw_calc_text(x, y, fontface, color, buffer, 0, &__video_cache_create, &__video_draw_uncached_bitmap, &__video_draw_cached_bitmap);
         }
         else if (length == 0)
         {
