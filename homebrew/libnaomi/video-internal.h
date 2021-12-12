@@ -14,8 +14,10 @@
 
 #define RGB0555(r, g, b) ((((b) >> 3) & (0x1F << 0)) | (((g) << 2) & (0x1F << 5)) | (((r) << 7) & (0x1F << 10)) | 0x8000)
 #define RGB1555(r, g, b, a) ((((b) >> 3) & (0x1F << 0)) | (((g) << 2) & (0x1F << 5)) | (((r) << 7) & (0x1F << 10)) | (((a) << 8) & 0x8000))
-#define RGB0888(r, g, b) ((b) & 0xFF) | (((g) << 8) & 0xFF00) | (((r) << 16) & 0xFF0000) | 0xFF000000
+#define RGB0888(r, g, b) (((b) & 0xFF) | (((g) << 8) & 0xFF00) | (((r) << 16) & 0xFF0000) | 0xFF000000)
 #define RGB8888(r, g, b, a) ((b) & 0xFF) | (((g) << 8) & 0xFF00) | (((r) << 16) & 0xFF0000) | (((a) << 24) & 0xFF000000)
+#define RGB0444(r, g, b) (((b >> 4) & 0xF) | (((g)) & 0xF0) | (((r) << 4) & 0xF00) | 0xF000)
+#define RGB4444(r, g, b, a) (((b >> 4) & 0xF) | (((g)) & 0xF0) | (((r) << 4) & 0xF00) | (((a) << 8) & 0xF000))
 
 // Convert back to 8-bit values, setting the lower 3 bits to the high
 // bits so that values closer to 255 will be brighter and values closer

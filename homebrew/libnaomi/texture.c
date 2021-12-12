@@ -340,9 +340,129 @@ int ta_texture_load(void *offset, int uvsize, int bitsize, void *data)
             }
             break;
         }
+        case 16:
+        {
+            uint16_t *tex = (uint16_t *)(((uint32_t)offset) | UNCACHED_MIRROR);
+            uint16_t *src = (uint16_t *)data;
+
+            for(int v = 0; v < uvsize; v++)
+            {
+                for(int u = 0; u < uvsize; u++)
+                {
+                    tex[TWIDDLE(u, v)] = src[(u + (v * uvsize))];
+                }
+            }
+            break;
+        }
         default:
         {
-            // Currently only support loading 8bit textures here.
+            // Currently only support loading 8/16bit textures here.
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+int ta_texture_load_sprite(void *offset, int uvsize, int bitsize, int x, int y, int width, int height, void *data)
+{
+    if (uvsize != 8 && uvsize != 16 && uvsize != 32 && uvsize != 64 && uvsize != 128 && uvsize != 256 && uvsize != 512 && uvsize != 1024)
+    {
+        return -1;
+    }
+    if (offset == 0 || data == 0)
+    {
+        return -1;
+    }
+
+    // Verify that we have the right height alignment depending on the mode.
+    if (bitsize == 4)
+    {
+        if ((height & 0x3) != 0)
+        {
+            return -2;
+        }
+        if ((y & 0x3) != 0)
+        {
+            return -2;
+        }
+    }
+    if (bitsize == 8)
+    {
+        if ((height & 0x1) != 0)
+        {
+            return -2;
+        }
+        if ((y & 0x1) != 0)
+        {
+            return -2;
+        }
+    }
+
+    // Bounds check where we're loading the sprite.
+    if (x >= uvsize || (x + width) <= 0)
+    {
+        return 0;
+    }
+    if (y >= uvsize || (y + height) <= 0)
+    {
+        return 0;
+    }
+
+    // Possibly limit our copy area depending on overlap.
+    int origwidth = width;
+    if ((x + width) > uvsize)
+    {
+        width = uvsize - x;
+    }
+    if ((y + height) > uvsize)
+    {
+        height = uvsize - y;
+    }
+    int xs = 0;
+    int ys = 0;
+    if (x < 0)
+    {
+        xs = -x;
+    }
+    if (y < 0)
+    {
+        ys = -y;
+    }
+
+    switch (bitsize)
+    {
+        case 8:
+        {
+            uint16_t *tex = (uint16_t *)(((uint32_t)offset) | UNCACHED_MIRROR);
+            uint8_t *src = (uint8_t *)data;
+
+            for(int v = ys; v < height; v+= 2)
+            {
+                for(int u = xs; u < width; u++)
+                {
+                    tex[TWIDDLE((u + x), (v + y)) >> 1] = src[(u + (v * origwidth))] | (src[u + ((v + 1) * origwidth)] << 8);
+                }
+            }
+            break;
+        }
+        case 16:
+        {
+            uint16_t *tex = (uint16_t *)(((uint32_t)offset) | UNCACHED_MIRROR);
+            uint16_t *src = (uint16_t *)data;
+
+            for(int v = ys; v < height; v++)
+            {
+                for(int u = xs; u < width; u++)
+                {
+                    tex[TWIDDLE((u + x), (v + y))] = src[(u + (v * origwidth))];
+                }
+            }
+            break;
+        }
+        default:
+        {
+            // Currently only support loading 8/16bit textures here.
             return -1;
         }
     }

@@ -345,6 +345,14 @@ struct mallinfo ta_texture_mallinfo();
 // and 1024.
 int ta_texture_load(void *offset, int uvsize, int bitsize, void *data);
 
+// Given a raw offset into texture RAM and a texture size, load a sprite into the texture
+// RAM as if it was a spritemap, in twiddled format required by several video modes. Note
+// that the texture size is the size in pixels of one side. Similar restrictions on texture
+// sizes as ta_texture_load() are also here. Note that when loading 4bpp sprites, the y
+// offset and height must both be a multiple of 4, and when loading 8bpp sprites, the y offset
+// and height must must both be a multiple of 2.
+int ta_texture_load_sprite(void *offset, int uvsize, int bitsize, int x, int y, int width, int height, void *data);
+
 // Data type for standalone UV coordinates.
 typedef struct
 {

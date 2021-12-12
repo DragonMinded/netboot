@@ -57,6 +57,9 @@ def main() -> int:
     elif mode == "rgba1555":
         for r, g, b, a in pixels.getdata():
             outdata.append(struct.pack("<H", ((b >> 3) & (0x1F << 0)) | ((g << 2) & (0x1F << 5)) | ((r << 7) & (0x1F << 10)) | ((a << 8) & 0x8000)))
+    elif mode == "rgba4444":
+        for r, g, b, a in pixels.getdata():
+            outdata.append(struct.pack("<H", ((b >> 4) & 0xFF) | (g & 0xF0) | ((r << 4) & 0xF00) | ((a << 8) & 0xF000)))
     elif mode == "rgba8888":
         for r, g, b, a in pixels.getdata():
             outdata.append(struct.pack("<I", ((b & 0xFF) << 0) | ((g & 0xFF) << 8) | ((r & 0xFF) << 16) | ((a & 0xFF) << 24)))

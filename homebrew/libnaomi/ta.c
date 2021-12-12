@@ -891,7 +891,7 @@ void ta_fill_box(uint32_t type, vertex_t *verticies, color_t color)
         TA_CMD_POLYGON_PACKED_COLOR |
         TA_CMD_POLYGON_16BIT_UV;
     mypoly.mode1 =
-        TA_POLYMODE1_Z_ALWAYS |
+        TA_POLYMODE1_Z_NEVER |
         TA_POLYMODE1_CULL_DISABLED;
     mypoly.mode2 =
         TA_POLYMODE2_MIPMAP_D_1_00 |
@@ -1123,7 +1123,7 @@ void ta_draw_sprite(uint32_t type, textured_vertex_t *verticies, texture_descrip
         TA_CMD_POLYGON_16BIT_UV |
         TA_CMD_POLYGON_TEXTURED;
     mypoly.mode1 =
-        TA_POLYMODE1_Z_ALWAYS |
+        TA_POLYMODE1_Z_NEVER |
         TA_POLYMODE1_CULL_DISABLED;
     mypoly.mode2 =
         TA_POLYMODE2_MIPMAP_D_1_00 |

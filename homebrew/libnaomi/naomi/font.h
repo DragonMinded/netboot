@@ -2,8 +2,8 @@
 // Only provide this stuff if freetype is installed. Otherwise just don't do anything with it.
 // This is so that stage 1 libnaomi.a can be built, and then freetype built against it, before
 // libnaomi is built again.
-#ifndef __TA_FREETYPE_H
-#define __TA_FREETYPE_H
+#ifndef __FONT_H
+#define __FONT_H
 
 #ifdef __cplusplus
 extern "C" {
