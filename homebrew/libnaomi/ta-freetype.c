@@ -40,6 +40,7 @@ font_cache_entry_t *_ta_cache_create(uint32_t index, int advancex, int advancey,
         return 0;
     }
     entry->index = index;
+    entry->cache_namespace = FONT_CACHE_TA;
     entry->advancex = advancex;
     entry->advancey = advancey;
     entry->bitmap_left = bitmap_left;
@@ -238,7 +239,7 @@ void _ta_draw_cached_bitmap(int x, int y, unsigned int width, unsigned int heigh
 
 int ta_draw_character(int x, int y, font_t *fontface, color_t color, int ch)
 {
-    return _font_draw_calc_character(x, y, fontface, color, ch, 0, &_ta_cache_create, &_ta_draw_uncached_bitmap, &_ta_draw_cached_bitmap);
+    return _font_draw_calc_character(x, y, fontface, color, ch, 0, &_ta_cache_create, FONT_CACHE_TA, &_ta_draw_uncached_bitmap, &_ta_draw_cached_bitmap);
 }
 
 int ta_draw_text(int x, int y, font_t *fontface, color_t color, const char * const msg, ...)
@@ -254,7 +255,7 @@ int ta_draw_text(int x, int y, font_t *fontface, color_t color, const char * con
         if (length > 0)
         {
             buffer[min(length, 2047)] = 0;
-            return _font_draw_calc_text(x, y, fontface, color, buffer, 0, &_ta_cache_create, &_ta_draw_uncached_bitmap, &_ta_draw_cached_bitmap);
+            return _font_draw_calc_text(x, y, fontface, color, buffer, 0, &_ta_cache_create, FONT_CACHE_TA, &_ta_draw_uncached_bitmap, &_ta_draw_cached_bitmap);
         }
         else if (length == 0)
         {

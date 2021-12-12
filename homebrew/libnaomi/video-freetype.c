@@ -23,6 +23,7 @@ font_cache_entry_t *__video_cache_create(uint32_t index, int advancex, int advan
         return 0;
     }
     entry->index = index;
+    entry->cache_namespace = FONT_CACHE_VIDEO;
     entry->advancex = advancex;
     entry->advancey = advancey;
     entry->bitmap_left = bitmap_left;
@@ -277,7 +278,7 @@ void __video_draw_uncached_bitmap(int x, int y, unsigned int width, unsigned int
 
 int video_draw_character(int x, int y, font_t *fontface, color_t color, int ch)
 {
-    return _font_draw_calc_character(x, y, fontface, color, ch, 0, &__video_cache_create, &__video_draw_uncached_bitmap, &__video_draw_cached_bitmap);
+    return _font_draw_calc_character(x, y, fontface, color, ch, 0, &__video_cache_create, FONT_CACHE_VIDEO, &__video_draw_uncached_bitmap, &__video_draw_cached_bitmap);
 }
 
 int video_draw_text(int x, int y, font_t *fontface, color_t color, const char * const msg, ...)
@@ -293,7 +294,7 @@ int video_draw_text(int x, int y, font_t *fontface, color_t color, const char * 
         if (length > 0)
         {
             buffer[min(length, 2047)] = 0;
-            return _font_draw_calc_text(x, y, fontface, color, buffer, 0, &__video_cache_create, &__video_draw_uncached_bitmap, &__video_draw_cached_bitmap);
+            return _font_draw_calc_text(x, y, fontface, color, buffer, 0, &__video_cache_create, FONT_CACHE_VIDEO, &__video_draw_uncached_bitmap, &__video_draw_cached_bitmap);
         }
         else if (length == 0)
         {

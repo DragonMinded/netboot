@@ -9,6 +9,7 @@
 #include "naomi/utf8.h"
 #include "naomi/font.h"
 #include "font-internal.h"
+#include "irqinternal.h"
 
 #ifndef min
 #define min(a,b) (((a) < (b)) ? (a) : (b))
@@ -118,14 +119,16 @@ void _font_cache_discard(font_t *fontface)
     fontface->cacheloc = 0;
 }
 
-font_cache_entry_t *_font_cache_lookup(font_t *fontface, uint32_t index)
+font_cache_entry_t *_font_cache_lookup(font_t *fontface, int cache_namespace, uint32_t index)
 {
     // This is linear and we could make it a lot better if we sorted by index
     // and then did a binary search. The lion's share of this module's compute
     // time goes to drawing glyphs to the screen however, so I didn't bother.
     for (int i = 0; i < fontface->cacheloc; i++)
     {
-        if(((font_cache_entry_t *)fontface->cache[i])->index == index)
+        font_cache_entry_t *entry = (font_cache_entry_t *)fontface->cache[i];
+
+        if(entry->index == index && (cache_namespace == FONT_CACHE_ANY || entry->cache_namespace == cache_namespace))
         {
             return fontface->cache[i];
         }
@@ -202,12 +205,18 @@ int _font_draw_calc_character(                                                  
     int ch,
     font_metrics_t *metrics,
     cache_func_t cache_func,
+    int cache_namespace,
     uncached_draw_func_t uncached_draw,
     cached_draw_func_t cached_draw
 ) {
+    if(cache_namespace == FONT_CACHE_ANY && (uncached_draw != 0 || cached_draw != 0))
+    {
+        _irq_display_invariant("font failure", "cannot render text with wildcard font cache namespace!");
+    }
+
     if (fontface)
     {
-        font_cache_entry_t *entry = _font_cache_lookup(fontface, ch);
+        font_cache_entry_t *entry = _font_cache_lookup(fontface, cache_namespace, ch);
         unsigned int lineheight = fontface->lineheight;
 
         if (entry)
@@ -305,6 +314,7 @@ int _font_draw_calc_text(
     const char * const msg,
     font_metrics_t *metrics,
     cache_func_t cache_func,
+    int cache_namespace,
     uncached_draw_func_t uncached_draw,
     cached_draw_func_t cached_draw
 ) {
@@ -314,6 +324,11 @@ int _font_draw_calc_text(
         metrics->height = 0;
     }
     if( msg == 0 ) { return 0; }
+
+    if(cache_namespace == FONT_CACHE_ANY && (uncached_draw != 0 || cached_draw != 0))
+    {
+        _irq_display_invariant("font failure", "cannot render text with wildcard font cache namespace!");
+    }
 
     int tx = x;
     int ty = y;
@@ -343,7 +358,7 @@ int _font_draw_calc_text(
                 }
                 case '\t':
                 {
-                    font_cache_entry_t *entry = _font_cache_lookup(fontface, *text);
+                    font_cache_entry_t *entry = _font_cache_lookup(fontface, cache_namespace, *text);
                     if (entry)
                     {
                         tx += entry->advancex * 5;
@@ -389,7 +404,7 @@ int _font_draw_calc_text(
                 }
                 default:
                 {
-                    font_cache_entry_t *entry = _font_cache_lookup(fontface, *text);
+                    font_cache_entry_t *entry = _font_cache_lookup(fontface, cache_namespace, *text);
                     if (entry)
                     {
                         if (cached_draw)
@@ -494,7 +509,7 @@ font_metrics_t font_get_character_metrics(font_t *fontface, int ch)
 {
     font_metrics_t metrics;
     
-    if (_font_draw_calc_character(0, 0, fontface, rgb(0, 0, 0), ch, &metrics, 0, 0, 0) == 0)
+    if (_font_draw_calc_character(0, 0, fontface, rgb(0, 0, 0), ch, &metrics, 0, FONT_CACHE_ANY, 0, 0) == 0)
     {
         return metrics;
     }
@@ -520,7 +535,7 @@ font_metrics_t font_get_text_metrics(font_t *fontface, const char * const msg, .
         if (length > 0)
         {
             buffer[min(length, 2047)] = 0;
-            if (_font_draw_calc_text(0, 0, fontface, rgb(0, 0, 0), buffer, &metrics, 0, 0, 0) == 0)
+            if (_font_draw_calc_text(0, 0, fontface, rgb(0, 0, 0), buffer, &metrics, 0, FONT_CACHE_ANY, 0, 0) == 0)
             {
                 return metrics;
             }

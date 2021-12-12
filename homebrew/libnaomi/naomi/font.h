@@ -11,7 +11,7 @@ extern "C" {
 
 #include <stdint.h>
 
-#define FONT_CACHE_SIZE 1024
+#define FONT_CACHE_SIZE 4096
 #define MAX_FALLBACK_SIZE 10
 
 typedef struct
