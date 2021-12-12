@@ -5,6 +5,7 @@
 #include <naomi/video.h>
 #include <naomi/audio.h>
 #include <naomi/system.h>
+#include <naomi/font.h>
 #include <naomi/message/packet.h>
 #include <naomi/message/message.h>
 #include "common.h"
@@ -547,7 +548,7 @@ void display_test_error(state_t *state)
     char *cannot_edit = "Cannot edit menu settings on this screen!";
     char *please_edit = "Please edit settings from the main menu only!";
 
-    font_metrics_t metrics = video_get_text_metrics(
+    font_metrics_t metrics = font_get_text_metrics(
         state->font_12pt,
         cannot_edit
     );
@@ -558,7 +559,7 @@ void display_test_error(state_t *state)
         rgb(255, 0, 0),
         cannot_edit
     );
-    metrics = video_get_text_metrics(
+    metrics = font_get_text_metrics(
         state->font_12pt,
         please_edit
     );
@@ -840,7 +841,7 @@ unsigned int main_menu(state_t *state, int reinit)
     else
     {
         char * nogames = "No Naomi ROMs in ROM directory!";
-        font_metrics_t metrics = video_get_text_metrics(state->font_18pt, nogames);
+        font_metrics_t metrics = font_get_text_metrics(state->font_18pt, nogames);
         video_draw_text((video_width() - metrics.width) / 2, (video_height() - metrics.height) / 2, state->font_18pt, rgb(255, 0, 0), nogames);
     }
 
@@ -940,7 +941,7 @@ unsigned int game_settings_load(state_t *state, int reinit)
     }
 
     char * fetching = "Fetching game settings...";
-    font_metrics_t metrics = video_get_text_metrics(state->font_18pt, fetching);
+    font_metrics_t metrics = font_get_text_metrics(state->font_18pt, fetching);
     video_draw_text((video_width() - metrics.width) / 2, 100, state->font_18pt, rgb(0, 255, 0), fetching);
 
     return new_screen;
@@ -1410,7 +1411,7 @@ unsigned int game_settings(state_t *state, int reinit)
     // Actually draw the menu
     {
         char *config_str = "Game Configuration";
-        font_metrics_t metrics = video_get_text_metrics(state->font_18pt, config_str);
+        font_metrics_t metrics = font_get_text_metrics(state->font_18pt, config_str);
         video_draw_text((video_width() - metrics.width) / 2, 22, state->font_18pt, rgb(0, 255, 255), config_str);
 
         unsigned int scroll_indicator_move_amount[4] = { 1, 2, 1, 0 };
@@ -1435,7 +1436,7 @@ unsigned int game_settings(state_t *state, int reinit)
                 video_draw_sprite(24, 24 + 21 + 21 + ((option - top) * 21), cursor_png_width, cursor_png_height, cursor_png_data);
             }
 
-            uint32_t option_color = blocked[option] ? rgb(128, 128, 128) : (option == cursor ? rgb(255, 255, 20) : rgb(255, 255, 255));
+            color_t option_color = blocked[option] ? rgb(128, 128, 128) : (option == cursor ? rgb(255, 255, 20) : rgb(255, 255, 255));
 
             // Draw the menu entry itself.
             if (option < patch_count)
@@ -1794,7 +1795,7 @@ unsigned int game_settings_save(state_t *state, int reinit)
     }
 
     char *saving_str = "Saving game settings...";
-    font_metrics_t metrics = video_get_text_metrics(state->font_18pt, saving_str);
+    font_metrics_t metrics = font_get_text_metrics(state->font_18pt, saving_str);
     video_draw_text((video_width() - metrics.width) / 2, 100, state->font_18pt, rgb(0, 255, 0), saving_str);
 
     return new_screen;
@@ -1823,9 +1824,9 @@ unsigned int comm_error(state_t *state, int reinit)
         "and run the menu software to try again!"
     );
 
-    font_metrics_t metrics = video_get_text_metrics(state->font_18pt, comm_error);
+    font_metrics_t metrics = font_get_text_metrics(state->font_18pt, comm_error);
     video_draw_text((video_width() - metrics.width) / 2, 100, state->font_18pt, rgb(255, 0, 0), comm_error);
-    metrics = video_get_text_metrics(state->font_12pt, message);
+    metrics = font_get_text_metrics(state->font_12pt, message);
     video_draw_text((video_width() - metrics.width) / 2, 130, state->font_12pt, rgb(255, 255, 255), message);
 
     return SCREEN_COMM_ERROR;
@@ -2213,7 +2214,7 @@ unsigned int configuration(state_t *state, int reinit)
     // Actually draw the menu
     {
         char *menuconfig = "Menu Configuration";
-        font_metrics_t metrics = video_get_text_metrics(state->font_18pt, menuconfig);
+        font_metrics_t metrics = font_get_text_metrics(state->font_18pt, menuconfig);
         video_draw_text((video_width() - metrics.width) / 2, 22, state->font_18pt, rgb(0, 255, 255), menuconfig);
 
         for (unsigned int option = top; option < top + maxoptions; option++)
@@ -2417,7 +2418,7 @@ unsigned int configuration_save(state_t *state, int reinit)
     }
 
     char *saving_str = "Saving configuration...";
-    font_metrics_t metrics = video_get_text_metrics(state->font_18pt, saving_str);
+    font_metrics_t metrics = font_get_text_metrics(state->font_18pt, saving_str);
     video_draw_text((video_width() - metrics.width) / 2, 100, state->font_18pt, rgb(0, 255, 0), saving_str);
 
     return new_screen;
@@ -2501,7 +2502,7 @@ unsigned int game_load(state_t *state, int reinit)
     // Draw the progress bar and percentage.
     {
         char *loading_game = "Loading game...";
-        font_metrics_t metrics = video_get_text_metrics(state->font_18pt, loading_game);
+        font_metrics_t metrics = font_get_text_metrics(state->font_18pt, loading_game);
         video_draw_text((video_width() - metrics.width) / 2, 100, state->font_18pt, rgb(255, 255, 255), loading_game);
         video_fill_box(50, 150, 50 + width, 170, rgb(32, 32, 32));
         video_draw_box(50, 150, 50 + width, 170, rgb(255, 255, 255));
@@ -2515,7 +2516,7 @@ unsigned int game_load(state_t *state, int reinit)
             actual_percent = (int)(((double)game_progress / (double)game_size) * 100);
         }
 
-        metrics = video_get_text_metrics(state->font_12pt, "%d%%", actual_percent);
+        metrics = font_get_text_metrics(state->font_12pt, "%d%%", actual_percent);
         video_draw_text((video_width() - metrics.width) / 2, 153, state->font_12pt, rgb(255, 255, 255), "%d%%", actual_percent);
     }
 
@@ -2584,7 +2585,7 @@ unsigned int game_unpack(state_t *state, int reinit)
     // Draw the progress bar and percentage.
     {
         char *loading_game = "Loading game...";
-        font_metrics_t metrics = video_get_text_metrics(state->font_18pt, loading_game);
+        font_metrics_t metrics = font_get_text_metrics(state->font_18pt, loading_game);
         video_draw_text((video_width() - metrics.width) / 2, 100, state->font_18pt, rgb(255, 255, 255), loading_game);
 
         char *message = (
@@ -2592,7 +2593,7 @@ unsigned int game_unpack(state_t *state, int reinit)
             "can be patched and uploaded! Please hold tight!"
         );
 
-        metrics = video_get_text_metrics(state->font_12pt, message);
+        metrics = font_get_text_metrics(state->font_12pt, message);
         video_draw_text((video_width() - metrics.width) / 2, 130, state->font_12pt, rgb(255, 255, 255), message);
     }
 

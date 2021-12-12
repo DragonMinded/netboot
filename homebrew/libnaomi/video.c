@@ -399,18 +399,6 @@ void video_free()
     irq_restore(old_interrupts);
 }
 
-color_t rgb(unsigned int r, unsigned int g, unsigned int b)
-{
-    color_t color = { r, g, b, 255 };
-    return color;
-}
-
-color_t rgba(unsigned int r, unsigned int g, unsigned int b, unsigned int a)
-{
-    color_t color = { r, g, b, a };
-    return color;
-}
-
 void video_fill_screen(color_t color)
 {
     if(global_video_depth == 2)

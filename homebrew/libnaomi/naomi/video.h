@@ -6,25 +6,12 @@ extern "C" {
 #endif
 
 #include <stdint.h>
+#include "naomi/color.h"
 
 // Note that all of the functions in here are intentionally not thread-safe.
 // If you are attempting to update the video buffer from multiple threads at
 // once it is indeterminate what will display on the screen. It is recommended
 // not to interact with the video system across multiple threads.
-
-// Defines a color type, independent of the video mode.
-typedef struct
-{
-    uint8_t r;
-    uint8_t g;
-    uint8_t b;
-    uint8_t a;
-} color_t;
-
-// Generates a color suitable for passing into any function that
-// requests a color parameter.
-color_t rgb(unsigned int r, unsigned int g, unsigned int b);
-color_t rgba(unsigned int r, unsigned int g, unsigned int b, unsigned int a);
 
 // Defines for the color argument of the below function.
 #define VIDEO_COLOR_1555 2

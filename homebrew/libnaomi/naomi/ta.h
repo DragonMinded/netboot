@@ -406,6 +406,9 @@ void ta_draw_sprite_uv(uint32_t type, vertex_t *verticies, uv_t *texcoords, text
 void ta_draw_triangle_strip(uint32_t type, uint32_t striplen, textured_vertex_t *verticies, texture_description_t *texture);
 void ta_draw_triangle_strip_uv(uint32_t type, uint32_t striplen, vertex_t *verticies, uv_t *uvcoords, texture_description_t *texture);
 
+// Include the freetype extensions for you, so you don't have to include ta-freetype.h yourself.
+#include "ta-freetype.h"
+
 #ifdef __cplusplus
 }
 #endif

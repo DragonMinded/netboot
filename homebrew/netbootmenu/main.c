@@ -5,6 +5,7 @@
 #include <naomi/eeprom.h>
 #include <naomi/timer.h>
 #include <naomi/audio.h>
+#include <naomi/font.h>
 #include <naomi/message/message.h>
 #include "config.h"
 #include "screens.h"
@@ -60,18 +61,18 @@ void main()
     // Attach our fonts
     extern uint8_t *dejavusans_ttf_data;
     extern unsigned int dejavusans_ttf_len;
-    state.font_18pt = video_font_add(dejavusans_ttf_data, dejavusans_ttf_len);
-    video_font_set_size(state.font_18pt, 18);
-    state.font_12pt = video_font_add(dejavusans_ttf_data, dejavusans_ttf_len);
-    video_font_set_size(state.font_12pt, 12);
+    state.font_18pt = font_add(dejavusans_ttf_data, dejavusans_ttf_len);
+    font_set_size(state.font_18pt, 18);
+    state.font_12pt = font_add(dejavusans_ttf_data, dejavusans_ttf_len);
+    font_set_size(state.font_12pt, 12);
 
     // Add fallbacks if they are provided, for rendering CJK or other characters.
     unsigned int fallback_size;
     uint8_t *fallback_data = get_fallback_font(&fallback_size);
     if (fallback_size && fallback_data)
     {
-        video_font_add_fallback(state.font_18pt, fallback_data, fallback_size);
-        video_font_add_fallback(state.font_12pt, fallback_data, fallback_size);
+        font_add_fallback(state.font_18pt, fallback_data, fallback_size);
+        font_add_fallback(state.font_12pt, fallback_data, fallback_size);
     }
 
     // FPS calculation for debugging.
