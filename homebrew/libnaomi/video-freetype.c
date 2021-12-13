@@ -37,7 +37,14 @@ font_cache_entry_t *__video_cache_create(uint32_t index, int advancex, int advan
         free(entry);
         return 0;
     }
-    memcpy(entry->data, buffer, width * height);
+    if (mode == FT_PIXEL_MODE_GRAY)
+    {
+        memcpy(entry->data, buffer, width * height);
+    }
+    else
+    {
+        memset(entry->data, 0, width * height);
+    }
 
     return entry;
 }
@@ -49,231 +56,223 @@ extern unsigned int global_video_vertical;
 extern unsigned int global_video_width;
 extern void * buffer_base;
 
-void __video_draw_cached_bitmap(int x, int y, unsigned int width, unsigned int height, unsigned int mode, void *data, color_t color)
+void __video_draw_cached_bitmap(int x, int y, unsigned int width, unsigned int height, void *data, color_t color)
 {
     uint8_t *buffer = data;
+    int low_x = 0;
+    int high_x = width;
+    int low_y = 0;
+    int high_y = height;
 
-    if (mode == FT_PIXEL_MODE_GRAY)
+    if (x < 0)
     {
-        int low_x = 0;
-        int high_x = width;
-        int low_y = 0;
-        int high_y = height;
-
-        if (x < 0)
+        if (x + width <= 0)
         {
-            if (x + width <= 0)
-            {
-                return;
-            }
-
-            low_x = -x;
-        }
-        if (y < 0)
-        {
-            if (y + height <= 0)
-            {
-                return;
-            }
-
-            low_y = -y;
-        }
-        if ((x + width) >= cached_actual_width)
-        {
-            if (x >= cached_actual_width)
-            {
-                return;
-            }
-
-            high_x = cached_actual_width - x;
-        }
-        if (y + height >= cached_actual_height)
-        {
-            if (y >= cached_actual_height)
-            {
-                return;
-            }
-
-            high_y = cached_actual_height - y;
+            return;
         }
 
-        // The below algorithm is fully duplicated for speed. It makes a massive difference
-        // (on the order of 33% faster) so it is worth the code duplication.
-        if (global_video_depth == 2)
+        low_x = -x;
+    }
+    if (y < 0)
+    {
+        if (y + height <= 0)
         {
-            // Grab the color itself.
-            unsigned int sr = color.r;
-            unsigned int sg = color.g;
-            unsigned int sb = color.b;
-            uint32_t actual_color = RGB0555(color.r, color.g, color.b);
+            return;
+        }
 
-            if (global_video_vertical)
+        low_y = -y;
+    }
+    if ((x + width) >= cached_actual_width)
+    {
+        if (x >= cached_actual_width)
+        {
+            return;
+        }
+
+        high_x = cached_actual_width - x;
+    }
+    if (y + height >= cached_actual_height)
+    {
+        if (y >= cached_actual_height)
+        {
+            return;
+        }
+
+        high_y = cached_actual_height - y;
+    }
+
+    // The below algorithm is fully duplicated for speed. It makes a massive difference
+    // (on the order of 33% faster) so it is worth the code duplication.
+    if (global_video_depth == 2)
+    {
+        // Grab the color itself.
+        unsigned int sr = color.r;
+        unsigned int sg = color.g;
+        unsigned int sb = color.b;
+        uint32_t actual_color = RGB0555(color.r, color.g, color.b);
+
+        if (global_video_vertical)
+        {
+            /* Iterate slightly differently so we can guarantee that we're close to the data
+             * cache, since drawing vertically is done from the perspective of a horizontal
+             * buffer. */
+            for(int xp = low_x; xp < high_x; xp++)
             {
-                /* Iterate slightly differently so we can guarantee that we're close to the data
-                 * cache, since drawing vertically is done from the perspective of a horizontal
-                 * buffer. */
+                for (int yp = (high_y - 1); yp >= low_y; yp--)
+                {
+                    // Alpha-blend the grayscale image with the destination.
+                    // We only support 32 alpha levels here for speed.
+                    unsigned int alpha = buffer[(yp * width) + xp] | 0x7;
+
+                    if (alpha > 0x7)
+                    {
+                        if(alpha >= 255)
+                        {
+                            SET_PIXEL_V_2(buffer_base, x + xp, y + yp, actual_color);
+                        }
+                        else
+                        {
+                            unsigned int dr;
+                            unsigned int dg;
+                            unsigned int db;
+                            unsigned int negalpha = (~alpha) & 0xFF;
+
+                            // Technically it should be divided by 255, but this should
+                            // be much much faster for an 0.4% accuracy loss.
+                            EXPLODE0555(GET_PIXEL_V_2(buffer_base, x + xp, y + yp), dr, dg, db);
+                            dr = ((sr * alpha) + (dr * negalpha)) >> 8;
+                            dg = ((sg * alpha) + (dg * negalpha)) >> 8;
+                            db = ((sb * alpha) + (db * negalpha)) >> 8;
+                            SET_PIXEL_V_2(buffer_base, x + xp, y + yp, RGB0555(dr, dg, db));
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            for (int yp = low_y; yp < high_y; yp++)
+            {
                 for(int xp = low_x; xp < high_x; xp++)
                 {
-                    for (int yp = (high_y - 1); yp >= low_y; yp--)
+                    // Alpha-blend the grayscale image with the destination.
+                    // We only support 32 alpha levels here for speed.
+                    unsigned int alpha = buffer[(yp * width) + xp] | 0x7;
+
+                    if (alpha > 0x7)
                     {
-                        // Alpha-blend the grayscale image with the destination.
-                        // We only support 32 alpha levels here for speed.
-                        unsigned int alpha = buffer[(yp * width) + xp] | 0x7;
-
-                        if (alpha > 0x7)
+                        if(alpha >= 255)
                         {
-                            if(alpha >= 255)
-                            {
-                                SET_PIXEL_V_2(buffer_base, x + xp, y + yp, actual_color);
-                            }
-                            else
-                            {
-                                unsigned int dr;
-                                unsigned int dg;
-                                unsigned int db;
-                                unsigned int negalpha = (~alpha) & 0xFF;
-
-                                // Technically it should be divided by 255, but this should
-                                // be much much faster for an 0.4% accuracy loss.
-                                EXPLODE0555(GET_PIXEL_V_2(buffer_base, x + xp, y + yp), dr, dg, db);
-                                dr = ((sr * alpha) + (dr * negalpha)) >> 8;
-                                dg = ((sg * alpha) + (dg * negalpha)) >> 8;
-                                db = ((sb * alpha) + (db * negalpha)) >> 8;
-                                SET_PIXEL_V_2(buffer_base, x + xp, y + yp, RGB0555(dr, dg, db));
-                            }
+                            SET_PIXEL_H_2(buffer_base, x + xp, y + yp, actual_color);
                         }
-                    }
-                }
-            }
-            else
-            {
-                for (int yp = low_y; yp < high_y; yp++)
-                {
-                    for(int xp = low_x; xp < high_x; xp++)
-                    {
-                        // Alpha-blend the grayscale image with the destination.
-                        // We only support 32 alpha levels here for speed.
-                        unsigned int alpha = buffer[(yp * width) + xp] | 0x7;
-
-                        if (alpha > 0x7)
+                        else
                         {
-                            if(alpha >= 255)
-                            {
-                                SET_PIXEL_H_2(buffer_base, x + xp, y + yp, actual_color);
-                            }
-                            else
-                            {
-                                unsigned int dr;
-                                unsigned int dg;
-                                unsigned int db;
-                                unsigned int negalpha = (~alpha) & 0xFF;
+                            unsigned int dr;
+                            unsigned int dg;
+                            unsigned int db;
+                            unsigned int negalpha = (~alpha) & 0xFF;
 
-                                // Technically it should be divided by 255, but this should
-                                // be much much faster for an 0.4% accuracy loss.
-                                EXPLODE0555(GET_PIXEL_H_2(buffer_base, x + xp, y + yp), dr, dg, db);
-                                dr = ((sr * alpha) + (dr * negalpha)) >> 8;
-                                dg = ((sg * alpha) + (dg * negalpha)) >> 8;
-                                db = ((sb * alpha) + (db * negalpha)) >> 8;
-                                SET_PIXEL_H_2(buffer_base, x + xp, y + yp, RGB0555(dr, dg, db));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        else if (global_video_depth == 4)
-        {
-            // Grab the color itself.
-            unsigned int sr = color.r;
-            unsigned int sg = color.g;
-            unsigned int sb = color.b;
-            uint32_t actual_color = RGB0888(color.r, color.g, color.b);
-
-            if (global_video_vertical)
-            {
-                /* Iterate slightly differently so we can guarantee that we're close to the data
-                 * cache, since drawing vertically is done from the perspective of a horizontal
-                 * buffer. */
-                for(int xp = low_x; xp < high_x; xp++)
-                {
-                    for (int yp = (high_y - 1); yp >= low_y; yp--)
-                    {
-                        // Alpha-blend the grayscale image with the destination.
-                        // We only support 32 alpha levels here for speed.
-                        unsigned int alpha = buffer[(yp * width) + xp] | 0x7;
-
-                        if (alpha > 0x7)
-                        {
-                            if(alpha >= 255)
-                            {
-                                SET_PIXEL_V_4(buffer_base, x + xp, y + yp, actual_color);
-                            }
-                            else
-                            {
-                                unsigned int dr;
-                                unsigned int dg;
-                                unsigned int db;
-                                unsigned int negalpha = (~alpha) & 0xFF;
-
-                                // Technically it should be divided by 255, but this should
-                                // be much much faster for an 0.4% accuracy loss.
-                                EXPLODE0888(GET_PIXEL_V_4(buffer_base, x + xp, y + yp), dr, dg, db);
-                                dr = ((sr * alpha) + (dr * negalpha)) >> 8;
-                                dg = ((sg * alpha) + (dg * negalpha)) >> 8;
-                                db = ((sb * alpha) + (db * negalpha)) >> 8;
-                                SET_PIXEL_V_4(buffer_base, x + xp, y + yp, RGB0888(dr, dg, db));
-                            }
-                        }
-                    }
-                }
-            }
-            else
-            {
-                for (int yp = low_y; yp < high_y; yp++)
-                {
-                    for(int xp = low_x; xp < high_x; xp++)
-                    {
-                        // Alpha-blend the grayscale image with the destination.
-                        // We only support 32 alpha levels here for speed.
-                        unsigned int alpha = buffer[(yp * width) + xp] | 0x7;
-
-                        if (alpha > 0x7)
-                        {
-                            if(alpha >= 255)
-                            {
-                                SET_PIXEL_H_4(buffer_base, x + xp, y + yp, actual_color);
-                            }
-                            else
-                            {
-                                unsigned int dr;
-                                unsigned int dg;
-                                unsigned int db;
-                                unsigned int negalpha = (~alpha) & 0xFF;
-
-                                // Technically it should be divided by 255, but this should
-                                // be much much faster for an 0.4% accuracy loss.
-                                EXPLODE0888(GET_PIXEL_H_4(buffer_base, x + xp, y + yp), dr, dg, db);
-                                dr = ((sr * alpha) + (dr * negalpha)) >> 8;
-                                dg = ((sg * alpha) + (dg * negalpha)) >> 8;
-                                db = ((sb * alpha) + (db * negalpha)) >> 8;
-                                SET_PIXEL_H_4(buffer_base, x + xp, y + yp, RGB0888(dr, dg, db));
-                            }
+                            // Technically it should be divided by 255, but this should
+                            // be much much faster for an 0.4% accuracy loss.
+                            EXPLODE0555(GET_PIXEL_H_2(buffer_base, x + xp, y + yp), dr, dg, db);
+                            dr = ((sr * alpha) + (dr * negalpha)) >> 8;
+                            dg = ((sg * alpha) + (dg * negalpha)) >> 8;
+                            db = ((sb * alpha) + (db * negalpha)) >> 8;
+                            SET_PIXEL_H_2(buffer_base, x + xp, y + yp, RGB0555(dr, dg, db));
                         }
                     }
                 }
             }
         }
     }
-    else
+    else if (global_video_depth == 4)
     {
-        // TODO: Need to support bitmapped fonts.
+        // Grab the color itself.
+        unsigned int sr = color.r;
+        unsigned int sg = color.g;
+        unsigned int sb = color.b;
+        uint32_t actual_color = RGB0888(color.r, color.g, color.b);
+
+        if (global_video_vertical)
+        {
+            /* Iterate slightly differently so we can guarantee that we're close to the data
+             * cache, since drawing vertically is done from the perspective of a horizontal
+             * buffer. */
+            for(int xp = low_x; xp < high_x; xp++)
+            {
+                for (int yp = (high_y - 1); yp >= low_y; yp--)
+                {
+                    // Alpha-blend the grayscale image with the destination.
+                    // We only support 32 alpha levels here for speed.
+                    unsigned int alpha = buffer[(yp * width) + xp] | 0x7;
+
+                    if (alpha > 0x7)
+                    {
+                        if(alpha >= 255)
+                        {
+                            SET_PIXEL_V_4(buffer_base, x + xp, y + yp, actual_color);
+                        }
+                        else
+                        {
+                            unsigned int dr;
+                            unsigned int dg;
+                            unsigned int db;
+                            unsigned int negalpha = (~alpha) & 0xFF;
+
+                            // Technically it should be divided by 255, but this should
+                            // be much much faster for an 0.4% accuracy loss.
+                            EXPLODE0888(GET_PIXEL_V_4(buffer_base, x + xp, y + yp), dr, dg, db);
+                            dr = ((sr * alpha) + (dr * negalpha)) >> 8;
+                            dg = ((sg * alpha) + (dg * negalpha)) >> 8;
+                            db = ((sb * alpha) + (db * negalpha)) >> 8;
+                            SET_PIXEL_V_4(buffer_base, x + xp, y + yp, RGB0888(dr, dg, db));
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            for (int yp = low_y; yp < high_y; yp++)
+            {
+                for(int xp = low_x; xp < high_x; xp++)
+                {
+                    // Alpha-blend the grayscale image with the destination.
+                    // We only support 32 alpha levels here for speed.
+                    unsigned int alpha = buffer[(yp * width) + xp] | 0x7;
+
+                    if (alpha > 0x7)
+                    {
+                        if(alpha >= 255)
+                        {
+                            SET_PIXEL_H_4(buffer_base, x + xp, y + yp, actual_color);
+                        }
+                        else
+                        {
+                            unsigned int dr;
+                            unsigned int dg;
+                            unsigned int db;
+                            unsigned int negalpha = (~alpha) & 0xFF;
+
+                            // Technically it should be divided by 255, but this should
+                            // be much much faster for an 0.4% accuracy loss.
+                            EXPLODE0888(GET_PIXEL_H_4(buffer_base, x + xp, y + yp), dr, dg, db);
+                            dr = ((sr * alpha) + (dr * negalpha)) >> 8;
+                            dg = ((sg * alpha) + (dg * negalpha)) >> 8;
+                            db = ((sb * alpha) + (db * negalpha)) >> 8;
+                            SET_PIXEL_H_4(buffer_base, x + xp, y + yp, RGB0888(dr, dg, db));
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
 // Given how this module caches, both the uncached and cached draw functions are identical.
-void __video_draw_uncached_bitmap(int x, int y, unsigned int width, unsigned int height, unsigned int mode, uint8_t *data, color_t color)
+void __video_draw_uncached_bitmap(int x, int y, unsigned int width, unsigned int height, uint8_t *data, color_t color)
 {
-    __video_draw_cached_bitmap(x, y, width, height, mode, data, color);
+    __video_draw_cached_bitmap(x, y, width, height, data, color);
 }
 
 int video_draw_character(int x, int y, font_t *fontface, color_t color, int ch)

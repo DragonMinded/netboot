@@ -224,9 +224,9 @@ int _font_draw_calc_character(                                                  
             x += entry->bitmap_left;
             y += lineheight - entry->bitmap_top;
 
-            if (cached_draw)
+            if (cached_draw && entry->mode == FT_PIXEL_MODE_GRAY)
             {
-                cached_draw(x, y, entry->width, entry->height, entry->mode, entry->data, color);
+                cached_draw(x, y, entry->width, entry->height, entry->data, color);
             }
             if (metrics)
             {
@@ -280,15 +280,15 @@ int _font_draw_calc_character(                                                  
                     slot->bitmap.buffer
                  );
                 _font_cache_add(fontface, entry);
-                if (cached_draw)
+                if (cached_draw && entry->mode == FT_PIXEL_MODE_GRAY)
                 {
-                    cached_draw(x, y, entry->width, entry->height, entry->mode, entry->data, color);
+                    cached_draw(x, y, entry->width, entry->height, entry->data, color);
                 }
             }
-            else if (uncached_draw)
+            else if (uncached_draw && slot->bitmap.pixel_mode == FT_PIXEL_MODE_GRAY)
             {
                 // Alpha-composite the grayscale bitmap, treating it as an alpha map.
-                uncached_draw(x, y, slot->bitmap.width, slot->bitmap.rows, slot->bitmap.pixel_mode, slot->bitmap.buffer, color);
+                uncached_draw(x, y, slot->bitmap.width, slot->bitmap.rows, slot->bitmap.buffer, color);
             }
 
             if (metrics)
@@ -407,9 +407,9 @@ int _font_draw_calc_text(
                     font_cache_entry_t *entry = _font_cache_lookup(fontface, cache_namespace, *text);
                     if (entry)
                     {
-                        if (cached_draw)
+                        if (cached_draw && entry->mode == FT_PIXEL_MODE_GRAY)
                         {
-                            cached_draw(tx + entry->bitmap_left, ty + lineheight - entry->bitmap_top, entry->width, entry->height, entry->mode, entry->data, color);
+                            cached_draw(tx + entry->bitmap_left, ty + lineheight - entry->bitmap_top, entry->width, entry->height, entry->data, color);
                         }
 
                         // Advance the pen based on this glyph.
@@ -460,12 +460,12 @@ int _font_draw_calc_text(
                                 slot->bitmap.buffer
                              );
                             _font_cache_add(fontface, entry);
-                            if (cached_draw)
+                            if (cached_draw && entry->mode == FT_PIXEL_MODE_GRAY)
                             {
-                                cached_draw(tx + entry->bitmap_left, ty + lineheight - entry->bitmap_top, entry->width, entry->height, entry->mode, entry->data, color);
+                                cached_draw(tx + entry->bitmap_left, ty + lineheight - entry->bitmap_top, entry->width, entry->height, entry->data, color);
                             }
                         }
-                        else if (uncached_draw)
+                        else if (uncached_draw && slot->bitmap.pixel_mode == FT_PIXEL_MODE_GRAY)
                         {
                             // Alpha-composite the grayscale bitmap, treating it as an
                             // alpha map.
@@ -474,7 +474,6 @@ int _font_draw_calc_text(
                                 ty + (lineheight - slot->bitmap_top),
                                 slot->bitmap.width,
                                 slot->bitmap.rows,
-                                slot->bitmap.pixel_mode,
                                 slot->bitmap.buffer,
                                 color
                             );

@@ -56,7 +56,7 @@ font_cache_entry_t *_ta_cache_create(uint32_t index, int advancex, int advancey,
         return 0;
     }
 
-    if (width > 0 && height > 0)
+    if (width > 0 && height > 0 && mode == FT_PIXEL_MODE_GRAY)
     {
         // Let's try to find a spritemap to add this character to.
         if (curtex == 0 || ((uloc + width) >= SPRITEMAP_UVSIZE && (vloc + vsize + height) >= SPRITEMAP_UVSIZE))
@@ -98,22 +98,14 @@ font_cache_entry_t *_ta_cache_create(uint32_t index, int advancex, int advancey,
             return 0;
         }
 
-        if (mode == FT_PIXEL_MODE_GRAY)
+        // Create a 4444 pixel of pure white (so we can multiply by our actual color later)
+        // with the alpha channel set to the intensity of the buffer at that pixel.
+        for (int y = 0; y < height; y++)
         {
-            // Create a 4444 pixel of pure white (so we can multiply by our actual color later)
-            // with the alpha channel set to the intensity of the buffer at that pixel.
-            for (int y = 0; y < height; y++)
+            for (int x = 0; x < width; x++)
             {
-                for (int x = 0; x < width; x++)
-                {
-                    created_buffer[x + (y * width)] = RGB4444(255, 255, 255, buffer[x + (y * width)]);
-                }
+                created_buffer[x + (y * width)] = RGB4444(255, 255, 255, buffer[x + (y * width)]);
             }
-        }
-        else
-        {
-            // TODO: Need to support bitmapped fonts.
-            memset(created_buffer, 0, sizeof(uint16_t) * width * height);
         }
 
         /* Load this created sprite into the spritemap, save the cache pointer. */
@@ -146,13 +138,13 @@ extern unsigned int cached_actual_width;
 extern unsigned int cached_actual_height;
 uint32_t _ta_16bit_uv(float uv);
 
-void _ta_draw_uncached_bitmap(int x, int y, unsigned int width, unsigned int height, unsigned int mode, uint8_t *data, color_t color)
+void _ta_draw_uncached_bitmap(int x, int y, unsigned int width, unsigned int height, uint8_t *data, color_t color)
 {
     // We can't draw this, since we don't have the VRAM for it. So, give up. Perhaps in the future
     // we might schedule a framebuffer fallback? Not sure.
 }
 
-void _ta_draw_cached_bitmap_horiz(int x, int y, unsigned int width, unsigned int height, unsigned int mode, void *data, color_t color)
+void _ta_draw_cached_bitmap_horiz(int x, int y, unsigned int width, unsigned int height, void *data, color_t color)
 {
     ta_cache_entry_t *ta_entry = data;
     if (ta_entry->texture)
@@ -263,7 +255,7 @@ void _ta_draw_cached_bitmap_horiz(int x, int y, unsigned int width, unsigned int
     }
 }
 
-void _ta_draw_cached_bitmap_vert(int x, int y, unsigned int width, unsigned int height, unsigned int mode, void *data, color_t color)
+void _ta_draw_cached_bitmap_vert(int x, int y, unsigned int width, unsigned int height, void *data, color_t color)
 {
     ta_cache_entry_t *ta_entry = data;
     if (ta_entry->texture)

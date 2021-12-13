@@ -18,8 +18,8 @@ typedef struct
 } font_cache_entry_t;
 
 typedef font_cache_entry_t * (*cache_func_t)(uint32_t index, int advancex, int advancey, int bitmap_left, int bitmap_top, int width, int height, int mode, uint8_t *buffer);
-typedef void (*cached_draw_func_t)(int x, int y, unsigned int width, unsigned int height, unsigned int mode, void *data, color_t color);
-typedef void (*uncached_draw_func_t)(int x, int y, unsigned int width, unsigned int height, unsigned int mode, uint8_t *data, color_t color);
+typedef void (*cached_draw_func_t)(int x, int y, unsigned int width, unsigned int height, void *data, color_t color);
+typedef void (*uncached_draw_func_t)(int x, int y, unsigned int width, unsigned int height, uint8_t *data, color_t color);
 
 int _font_draw_calc_character(
     int x,
