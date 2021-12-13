@@ -459,9 +459,10 @@ int maple_request_update(void *binary, unsigned int len)
         resp = _maple_swap_data(0, 0, MAPLE_NAOMI_UPLOAD_CODE_REQUEST, 1, execdata);
         if (_maple_response_code(resp) != MAPLE_COMMAND_ACKNOWLEDGE_RESPONSE)
         {
-            // TODO: A different value is returned by different revisions of the
+            // A different value is returned by different revisions of the
             // MIE which depend on the Naomi BIOS. However, since netboot only
-            // works on Rev. H BIOS, I think we're good here.
+            // works on Rev. H BIOS, I think we're good not supporting them
+            // here.
             mutex_unlock(&maple_mutex);
             return -4;
         }
