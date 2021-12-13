@@ -1633,15 +1633,76 @@ void semaphore_init(semaphore_t *semaphore, uint32_t initial_value)
 
 void semaphore_acquire(semaphore_t * semaphore)
 {
-    // TODO: This could benefit from the same optimization as mutex_lock.
-    register semaphore_t * syscall_param0 asm("r4") = semaphore;
-    register unsigned int syscall_param1 asm("r5") = SEM_TYPE_SEMAPHORE;
-    asm("trapa #10" : : "r" (syscall_param0), "r" (syscall_param1));
+    // Attempt to acquire even without interrupts/threads running. If we succeed, then there
+    // was no problem. However, if we fail, since we can't use syscalls we need to throw
+    // up an invariant message instead.
+    uint32_t old_interrupts = irq_disable();
+    int irq_disabled = _irq_is_disabled(old_interrupts);
+    int acquired = 0;
+
+    if (semaphore)
+    {
+        int slot = semaphore->id % MAX_SEM_AND_MUTEX;
+        if (semaphores[slot] != 0 && semaphores[slot]->id == semaphore->id && semaphores[slot]->type == SEM_TYPE_SEMAPHORE)
+        {
+            // This is the right semaphore. See if we can acquire it.
+            if (semaphores[slot]->current > 0)
+            {
+                acquired = 1;
+                semaphores[slot]->current --;
+
+                // Keep track of whether this was acquired with interrupts disabled or not.
+                // This is because if it was, the subsequent release must be done without
+                // syscalls as well.
+                semaphores[slot]->irq_disabled = irq_disabled;
+            }
+        }
+    }
+
+    irq_restore(old_interrupts);
+
+    if (!acquired)
+    {
+        if (irq_disabled)
+        {
+            _irq_display_invariant("semaphore failure", "interrupts are disabled but we need to make a syscall to acquire semaphore");
+        }
+
+        register semaphore_t * syscall_param0 asm("r4") = semaphore;
+        register unsigned int syscall_param1 asm("r5") = SEM_TYPE_SEMAPHORE;
+        asm("trapa #10" : : "r" (syscall_param0), "r" (syscall_param1));
+    }
 }
 
 void semaphore_release(semaphore_t * semaphore)
 {
-    // TODO: This could benefit from the same optimization as mutex_unlock.
+    // If we acquired a semaphore without threads/interrupts enabled, we need to similarly
+    // release it without a syscall. That's safe to do so, since no other thread could
+    // have gotten to the semaphore as threads were disabled. Also, if no other thread
+    // was waiting for this semaphore, we can release it without a syscall to save a massive
+    // amount of time.
+    uint32_t old_interrupts = irq_disable();
+
+    if (semaphore)
+    {
+        int slot = semaphore->id % MAX_SEM_AND_MUTEX;
+        if (
+            semaphores[slot] != 0 &&
+            semaphores[slot]->id == semaphore->id &&
+            semaphores[slot]->type == SEM_TYPE_SEMAPHORE &&
+            (semaphores[slot]->irq_disabled || semaphores[slot]->others_waiting == 0)
+        ) {
+            // Release the semaphore, exit without doing a syscall.
+            semaphores[slot]->current ++;
+            semaphores[slot]->irq_disabled = 0;
+
+            irq_restore(old_interrupts);
+            return;
+        }
+    }
+
+    // This was acquired normally, release using a syscall to wake any other threads.
+    irq_restore(old_interrupts);
     register semaphore_t * syscall_param0 asm("r4") = semaphore;
     register unsigned int syscall_param1 asm("r5") = SEM_TYPE_SEMAPHORE;
     asm("trapa #11" : : "r" (syscall_param0), "r" (syscall_param1));
