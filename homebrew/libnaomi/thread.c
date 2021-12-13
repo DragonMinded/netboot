@@ -1633,6 +1633,7 @@ void semaphore_init(semaphore_t *semaphore, uint32_t initial_value)
 
 void semaphore_acquire(semaphore_t * semaphore)
 {
+    // TODO: This could benefit from the same optimization as mutex_lock.
     register semaphore_t * syscall_param0 asm("r4") = semaphore;
     register unsigned int syscall_param1 asm("r5") = SEM_TYPE_SEMAPHORE;
     asm("trapa #10" : : "r" (syscall_param0), "r" (syscall_param1));
@@ -1640,6 +1641,7 @@ void semaphore_acquire(semaphore_t * semaphore)
 
 void semaphore_release(semaphore_t * semaphore)
 {
+    // TODO: This could benefit from the same optimization as mutex_unlock.
     register semaphore_t * syscall_param0 asm("r4") = semaphore;
     register unsigned int syscall_param1 asm("r5") = SEM_TYPE_SEMAPHORE;
     asm("trapa #11" : : "r" (syscall_param0), "r" (syscall_param1));
