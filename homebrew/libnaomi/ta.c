@@ -28,55 +28,52 @@ void ta_commit_list(void *src, int len)
 {
     /* Figure out what kind of command this is so we can set up to wait for
      * it to be finished loading properly. */
-    if (!_irq_is_disabled(_irq_get_sr()))
-    {
-        uint32_t command = ((uint32_t *)src)[0];
+    uint32_t command = ((uint32_t *)src)[0];
 
-        if ((command & 0xE0000000) == TA_CMD_POLYGON || (command & 0xE0000000) == TA_CMD_SPRITE)
+    if ((command & 0xE0000000) == TA_CMD_POLYGON || (command & 0xE0000000) == TA_CMD_SPRITE)
+    {
+        if ((command & 0x07000000) == TA_CMD_POLYGON_TYPE_OPAQUE)
         {
-            if ((command & 0x07000000) == TA_CMD_POLYGON_TYPE_OPAQUE)
+            if ((waiting_lists & (WAITING_LIST_TRANSPARENT | WAITING_LIST_PUNCHTHRU)) != 0)
             {
-                if ((waiting_lists & (WAITING_LIST_TRANSPARENT | WAITING_LIST_PUNCHTHRU)) != 0)
-                {
-                    _irq_display_invariant("display list failure", "cannot send more than one type of polygon in single list!");
-                }
-                if ((waiting_lists & WAITING_LIST_OPAQUE) == 0)
-                {
-                    waiting_lists |= WAITING_LIST_OPAQUE;
-                    populated_lists |= WAITING_LIST_OPAQUE;
-                    thread_notify_wait_ta_load_opaque();
-                }
+                _irq_display_invariant("display list failure", "cannot send more than one type of polygon in single list!");
             }
-            else if ((command & 0x07000000) == TA_CMD_POLYGON_TYPE_TRANSPARENT)
+            if ((waiting_lists & WAITING_LIST_OPAQUE) == 0)
             {
-                if ((waiting_lists & (WAITING_LIST_OPAQUE | WAITING_LIST_PUNCHTHRU)) != 0)
-                {
-                    _irq_display_invariant("display list failure", "cannot send more than one type of polygon in single list!");
-                }
-                if ((waiting_lists & WAITING_LIST_TRANSPARENT) == 0)
-                {
-                    waiting_lists |= WAITING_LIST_TRANSPARENT;
-                    populated_lists |= WAITING_LIST_TRANSPARENT;
-                    thread_notify_wait_ta_load_transparent();
-                }
+                waiting_lists |= WAITING_LIST_OPAQUE;
+                populated_lists |= WAITING_LIST_OPAQUE;
+                thread_notify_wait_ta_load_opaque();
             }
-            else if ((command & 0x07000000) == TA_CMD_POLYGON_TYPE_PUNCHTHRU)
+        }
+        else if ((command & 0x07000000) == TA_CMD_POLYGON_TYPE_TRANSPARENT)
+        {
+            if ((waiting_lists & (WAITING_LIST_OPAQUE | WAITING_LIST_PUNCHTHRU)) != 0)
             {
-                if ((waiting_lists & (WAITING_LIST_TRANSPARENT | WAITING_LIST_OPAQUE)) != 0)
-                {
-                    _irq_display_invariant("display list failure", "cannot send more than one type of polygon in single list!");
-                }
-                if ((waiting_lists & WAITING_LIST_PUNCHTHRU) == 0)
-                {
-                    waiting_lists |= WAITING_LIST_PUNCHTHRU;
-                    populated_lists |= WAITING_LIST_PUNCHTHRU;
-                    thread_notify_wait_ta_load_punchthru();
-                }
+                _irq_display_invariant("display list failure", "cannot send more than one type of polygon in single list!");
             }
-            else
+            if ((waiting_lists & WAITING_LIST_TRANSPARENT) == 0)
             {
-                _irq_display_invariant("display list failure", "we do not support this type of polygon!");
+                waiting_lists |= WAITING_LIST_TRANSPARENT;
+                populated_lists |= WAITING_LIST_TRANSPARENT;
+                thread_notify_wait_ta_load_transparent();
             }
+        }
+        else if ((command & 0x07000000) == TA_CMD_POLYGON_TYPE_PUNCHTHRU)
+        {
+            if ((waiting_lists & (WAITING_LIST_TRANSPARENT | WAITING_LIST_OPAQUE)) != 0)
+            {
+                _irq_display_invariant("display list failure", "cannot send more than one type of polygon in single list!");
+            }
+            if ((waiting_lists & WAITING_LIST_PUNCHTHRU) == 0)
+            {
+                waiting_lists |= WAITING_LIST_PUNCHTHRU;
+                populated_lists |= WAITING_LIST_PUNCHTHRU;
+                thread_notify_wait_ta_load_punchthru();
+            }
+        }
+        else
+        {
+            _irq_display_invariant("display list failure", "we do not support this type of polygon!");
         }
     }
 
