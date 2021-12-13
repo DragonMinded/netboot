@@ -1,7 +1,7 @@
 all: build
 
 # Download arguments
-BASE_URL = ftp://ftp.simplesystems.org/pub/libpng/png/src/libpng16
+BASE_URL = https://download.sourceforge.net/libpng
 
 NAME = libpng-1.6.37
 
