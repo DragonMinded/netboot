@@ -278,6 +278,11 @@ void _enter()
     _exit(0);
 }
 
+void __assert_func(const char * file, int line, const char *func, const char *failedexpr)
+{
+    // Nothing!
+}
+
 _ssize_t _read_r(struct _reent *reent, int file, void *ptr, size_t len)
 {
     reent->_errno = ENOTSUP;
