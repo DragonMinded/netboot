@@ -20,6 +20,7 @@ typedef struct
     uint32_t max;
     uint32_t current;
     uint32_t irq_disabled;
+    int others_waiting;
 } semaphore_internal_t;
 
 static semaphore_internal_t *semaphores[MAX_SEM_AND_MUTEX];
@@ -775,6 +776,12 @@ int _thread_wake_waiting_semaphore(semaphore_internal_t *semaphore)
 
             // Now, since this was an acquire, we need to bookkeep the current
             // semaphore.
+            semaphore->others_waiting--;
+            if (semaphore->others_waiting < 0)
+            {
+                _irq_display_invariant("bookkeeping failure", "somehow dipped into the negative for waiting thread count?");
+            }
+
             semaphore->current--;
             if (semaphore->current == 0)
             {
@@ -1301,6 +1308,9 @@ irq_state_t *_syscall_trapa(irq_state_t *current, unsigned int which)
                         thread->state = THREAD_STATE_WAITING;
                         thread->waiting_semaphore = semaphore;
                         schedule = THREAD_SCHEDULE_OTHER;
+
+                        // Track how many other threads are waiting for this semaphore.
+                        semaphore->others_waiting++;
                     }
                     else
                     {
@@ -1604,6 +1614,7 @@ void semaphore_init(semaphore_t *semaphore, uint32_t initial_value)
                 internal->type = SEM_TYPE_SEMAPHORE;
                 internal->max = initial_value;
                 internal->current = initial_value;
+                internal->others_waiting = 0;
 
                 // Put it in our registry.
                 semaphores[slot] = internal;
@@ -1685,6 +1696,7 @@ void mutex_init(mutex_t *mutex)
                 internal->type = SEM_TYPE_MUTEX;
                 internal->max = 1;
                 internal->current = 1;
+                internal->others_waiting = 0;
 
                 // Put it in our registry.
                 semaphores[slot] = internal;
@@ -1778,14 +1790,20 @@ void mutex_unlock(mutex_t * mutex)
 {
     // If we locked a mutex without threads/interrupts enabled, we need to similarly
     // unlock it without a syscall. That's safe to do so, since no other thread could
-    // have gotten to the mutex as threads were disabled.
+    // have gotten to the mutex as threads were disabled. Also, if no other thread
+    // was waiting for this mutex, we can unlock it without a syscall to save a massive
+    // amount of time.
     uint32_t old_interrupts = irq_disable();
 
     if (mutex)
     {
         int slot = mutex->id % MAX_SEM_AND_MUTEX;
-        if (semaphores[slot] != 0 && semaphores[slot]->id == mutex->id && semaphores[slot]->type == SEM_TYPE_MUTEX && semaphores[slot]->irq_disabled)
-        {
+        if (
+            semaphores[slot] != 0 &&
+            semaphores[slot]->id == mutex->id &&
+            semaphores[slot]->type == SEM_TYPE_MUTEX &&
+            (semaphores[slot]->irq_disabled || semaphores[slot]->others_waiting == 0)
+        ) {
             // Unlock the mutex, exit without doing a syscall.
             semaphores[slot]->current ++;
             semaphores[slot]->irq_disabled = 0;

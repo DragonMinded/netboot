@@ -15,7 +15,7 @@ void test_utf8_strlen(test_context_t *context)
     ASSERT(result == 6, "Invalid length %d for utf-8 string", result);
 }
 
-#define test_utf8_convert_duration 20
+#define test_utf8_convert_duration 30
 void test_utf8_convert(test_context_t *context)
 {
     // Simple test that ensures malloc is giving us valid RAM back
