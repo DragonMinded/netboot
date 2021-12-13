@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <naomi/video.h>
+#include <naomi/ta.h>
 #include <naomi/audio.h>
 #include <naomi/system.h>
 #include <naomi/font.h>
@@ -527,17 +528,77 @@ void send_game_options(game_options_t *parsed_options)
 #define ERROR_BOX_HEIGHT 50
 #define ERROR_BOX_TOP 100
 
+void display_sprite(int x, int y, texture_description_t *texture)
+{
+    textured_vertex_t sprite[4] = {
+        { (float)x, (float)(y + texture->height), 1.0, 0.0, 1.0 },
+        { (float)x, (float)y, 1.0, 0.0, 0.0 },
+        { (float)(x + texture->width), (float)y, 1.0, 1.0, 0.0 },
+        { (float)(x + texture->width), (float)(y + texture->height), 1.0, 1.0, 1.0 }
+    };
+
+    /* Draw the sprite to the screen. */
+    ta_draw_sprite(TA_CMD_POLYGON_TYPE_TRANSPARENT, sprite, texture);
+}
+
+void display_filled_box(int x0, int y0, int x1, int y1, color_t color)
+{
+    vertex_t sprite[4] = {
+        { (float)x0, (float)y1, 1.0 },
+        { (float)x0, (float)y0, 1.0 },
+        { (float)x1, (float)y0, 1.0 },
+        { (float)x1, (float)y1, 1.0 }
+    };
+
+    /* Draw the sprite to the screen. */
+    ta_fill_box(TA_CMD_POLYGON_TYPE_TRANSPARENT, sprite, color);
+}
+
+#define BUMP_AMOUNT 1.0
+
+void display_box(int x0, int y0, int x1, int y1, color_t color)
+{
+    vertex_t sprite[16] = {
+        { (float)x0, (float)y1, 1.0 },
+        { (float)x0, (float)y0, 1.0 },
+        { (float)x0 + BUMP_AMOUNT, (float)y0, 1.0 },
+        { (float)x0 + BUMP_AMOUNT, (float)y1, 1.0 },
+
+        { (float)x0, (float)y0 + BUMP_AMOUNT, 1.0 },
+        { (float)x0, (float)y0, 1.0 },
+        { (float)x1, (float)y0, 1.0 },
+        { (float)x1, (float)y0 + BUMP_AMOUNT, 1.0 },
+
+        { (float)x0, (float)y1, 1.0 },
+        { (float)x0, (float)y1 - BUMP_AMOUNT, 1.0 },
+        { (float)x1, (float)y1 - BUMP_AMOUNT, 1.0 },
+        { (float)x1, (float)y1, 1.0 },
+
+        { (float)x1 - BUMP_AMOUNT, (float)y1, 1.0 },
+        { (float)x1 - BUMP_AMOUNT, (float)y0, 1.0 },
+        { (float)x1, (float)y0, 1.0 },
+        { (float)x1, (float)y1, 1.0 }
+
+    };
+
+    /* Draw the sprite to the screen. */
+    ta_fill_box(TA_CMD_POLYGON_TYPE_TRANSPARENT, &sprite[0], color);
+    ta_fill_box(TA_CMD_POLYGON_TYPE_TRANSPARENT, &sprite[4], color);
+    ta_fill_box(TA_CMD_POLYGON_TYPE_TRANSPARENT, &sprite[8], color);
+    ta_fill_box(TA_CMD_POLYGON_TYPE_TRANSPARENT, &sprite[12], color);
+}
+
 void display_test_error(state_t *state)
 {
     unsigned int halfwidth = video_width() / 2;
-    video_fill_box(
+    display_filled_box(
         halfwidth - (ERROR_BOX_WIDTH / 2),
         ERROR_BOX_TOP,
         halfwidth + (ERROR_BOX_WIDTH / 2),
         ERROR_BOX_TOP + ERROR_BOX_HEIGHT,
         rgb(32, 32, 32)
     );
-    video_draw_box(
+    display_box(
         halfwidth - (ERROR_BOX_WIDTH / 2),
         ERROR_BOX_TOP,
         halfwidth + (ERROR_BOX_WIDTH / 2),
@@ -552,7 +613,7 @@ void display_test_error(state_t *state)
         state->font_12pt,
         cannot_edit
     );
-    video_draw_text(
+    ta_draw_text(
         halfwidth - (metrics.width / 2),
         ERROR_BOX_TOP + 10,
         state->font_12pt,
@@ -563,7 +624,7 @@ void display_test_error(state_t *state)
         state->font_12pt,
         please_edit
     );
-    video_draw_text(
+    ta_draw_text(
         halfwidth - (metrics.width / 2),
         ERROR_BOX_TOP + 25,
         state->font_12pt,
@@ -571,18 +632,6 @@ void display_test_error(state_t *state)
         please_edit
     );
 }
-
-extern unsigned int up_png_width;
-extern unsigned int up_png_height;
-extern void *up_png_data;
-
-extern unsigned int dn_png_width;
-extern unsigned int dn_png_height;
-extern void *dn_png_data;
-
-extern unsigned int cursor_png_width;
-extern unsigned int cursor_png_height;
-extern void *cursor_png_data;
 
 unsigned int main_menu(state_t *state, int reinit)
 {
@@ -787,7 +836,7 @@ unsigned int main_menu(state_t *state, int reinit)
 
         if (top > 0)
         {
-            video_draw_sprite(video_width() / 2 - 10, 10 - scroll_offset, up_png_width, up_png_height, up_png_data);
+            display_sprite(video_width() / 2 - 10, 10 - scroll_offset, state->sprite_up);
         }
 
         for (unsigned int game = top; game < top + maxgames; game++)
@@ -801,7 +850,7 @@ unsigned int main_menu(state_t *state, int reinit)
             // Draw cursor itself.
             if (game == cursor && (!booting))
             {
-                video_draw_sprite(24 + cursor_offset, 24 + ((game - top) * 21), cursor_png_width, cursor_png_height, cursor_png_data);
+                display_sprite(24 + cursor_offset, 24 + ((game - top) * 21), state->sprite_cursor);
             }
 
             unsigned int away = abs(game - cursor);
@@ -830,19 +879,19 @@ unsigned int main_menu(state_t *state, int reinit)
             }
 
             // Draw game, highlighted if it is selected.
-            video_draw_text(48 + horizontal_offset, 22 + ((game - top) * 21), state->font_18pt, game == cursor ? rgb(255, 255, 20) : rgb(255, 255, 255), games[game].name);
+            ta_draw_text(48 + horizontal_offset, 22 + ((game - top) * 21), state->font_18pt, game == cursor ? rgb(255, 255, 20) : rgb(255, 255, 255), games[game].name);
         }
 
         if ((top + maxgames) < count)
         {
-            video_draw_sprite(video_width() / 2 - 10, 24 + (maxgames * 21) + scroll_offset, dn_png_width, dn_png_height, dn_png_data);
+            display_sprite(video_width() / 2 - 10, 24 + (maxgames * 21) + scroll_offset, state->sprite_down);
         }
     }
     else
     {
         char * nogames = "No Naomi ROMs in ROM directory!";
         font_metrics_t metrics = font_get_text_metrics(state->font_18pt, nogames);
-        video_draw_text((video_width() - metrics.width) / 2, (video_height() - metrics.height) / 2, state->font_18pt, rgb(255, 0, 0), nogames);
+        ta_draw_text((video_width() - metrics.width) / 2, (video_height() - metrics.height) / 2, state->font_18pt, rgb(255, 0, 0), nogames);
     }
 
     return new_screen;
@@ -942,7 +991,7 @@ unsigned int game_settings_load(state_t *state, int reinit)
 
     char * fetching = "Fetching game settings...";
     font_metrics_t metrics = font_get_text_metrics(state->font_18pt, fetching);
-    video_draw_text((video_width() - metrics.width) / 2, 100, state->font_18pt, rgb(0, 255, 0), fetching);
+    ta_draw_text((video_width() - metrics.width) / 2, 100, state->font_18pt, rgb(0, 255, 0), fetching);
 
     return new_screen;
 }
@@ -1412,14 +1461,14 @@ unsigned int game_settings(state_t *state, int reinit)
     {
         char *config_str = "Game Configuration";
         font_metrics_t metrics = font_get_text_metrics(state->font_18pt, config_str);
-        video_draw_text((video_width() - metrics.width) / 2, 22, state->font_18pt, rgb(0, 255, 255), config_str);
+        ta_draw_text((video_width() - metrics.width) / 2, 22, state->font_18pt, rgb(0, 255, 255), config_str);
 
         unsigned int scroll_indicator_move_amount[4] = { 1, 2, 1, 0 };
         int scroll_offset = scroll_indicator_move_amount[((int)(state->animation_counter * 4.0)) & 0x3];
 
         if (top > 0)
         {
-            video_draw_sprite(video_width() / 2 - 10, 21 + 21 + 10 - scroll_offset, up_png_width, up_png_height, up_png_data);
+            display_sprite(video_width() / 2 - 10, 21 + 21 + 10 - scroll_offset, state->sprite_up);
         }
 
         for (unsigned int option = top; option < top + maxoptions; option++)
@@ -1433,7 +1482,7 @@ unsigned int game_settings(state_t *state, int reinit)
             // Draw cursor itself.
             if (option == cursor)
             {
-                video_draw_sprite(24, 24 + 21 + 21 + ((option - top) * 21), cursor_png_width, cursor_png_height, cursor_png_data);
+                display_sprite(24, 24 + 21 + 21 + ((option - top) * 21), state->sprite_cursor);
             }
 
             color_t option_color = blocked[option] ? rgb(128, 128, 128) : (option == cursor ? rgb(255, 255, 20) : rgb(255, 255, 255));
@@ -1445,7 +1494,7 @@ unsigned int game_settings(state_t *state, int reinit)
 
                 if (game_options->patch_count > 0 && patchoption < 0)
                 {
-                    video_draw_text(
+                    ta_draw_text(
                         48,
                         22 + 21 + 21 + ((option - top) * 21),
                         state->font_18pt,
@@ -1455,7 +1504,7 @@ unsigned int game_settings(state_t *state, int reinit)
                 }
                 else if (patchoption < game_options->patch_count)
                 {
-                    video_draw_character(
+                    ta_draw_character(
                         48,
                         22 + 21 + 21 + ((option - top) * 21),
                         state->font_18pt,
@@ -1465,7 +1514,7 @@ unsigned int game_settings(state_t *state, int reinit)
 
                     if (game_options->patches[patchoption].enabled)
                     {
-                        video_draw_character(
+                        ta_draw_character(
                             48 + 2,
                             22 + 21 + 21 + ((option - top) * 21),
                             state->font_18pt,
@@ -1474,7 +1523,7 @@ unsigned int game_settings(state_t *state, int reinit)
                         );
                     }
 
-                    video_draw_text(
+                    ta_draw_text(
                         48 + 24,
                         22 + 21 + 21 + ((option - top) * 21),
                         state->font_18pt,
@@ -1484,7 +1533,7 @@ unsigned int game_settings(state_t *state, int reinit)
                 }
                 else if ((patchoption == -1 && game_options->patch_count == 0 && force_option != 0) || (force_option != 0 && patchoption == (game_options->patch_count + 1)))
                 {
-                    video_draw_character(
+                    ta_draw_character(
                         48,
                         22 + 21 + 21 + ((option - top) * 21),
                         state->font_18pt,
@@ -1494,7 +1543,7 @@ unsigned int game_settings(state_t *state, int reinit)
 
                     if (game_options->force_settings)
                     {
-                        video_draw_character(
+                        ta_draw_character(
                             48 + 2,
                             22 + 21 + 21 + ((option - top) * 21),
                             state->font_18pt,
@@ -1503,7 +1552,7 @@ unsigned int game_settings(state_t *state, int reinit)
                         );
                     }
 
-                    video_draw_text(
+                    ta_draw_text(
                         48 + 24,
                         22 + 21 + 21 + ((option - top) * 21),
                         state->font_18pt,
@@ -1519,7 +1568,7 @@ unsigned int game_settings(state_t *state, int reinit)
 
                 if (systemoption < 0)
                 {
-                    video_draw_text(
+                    ta_draw_text(
                         48,
                         22 + 21 + 21 + ((option - top) * 21),
                         state->font_18pt,
@@ -1550,7 +1599,7 @@ unsigned int game_settings(state_t *state, int reinit)
 
                     if (blocked[option])
                     {
-                        video_draw_text(
+                        ta_draw_text(
                             48,
                             22 + 21 + 21 + ((option - top) * 21),
                             state->font_18pt,
@@ -1563,7 +1612,7 @@ unsigned int game_settings(state_t *state, int reinit)
                         int valno = find_setting_value(&game_options->system_settings[actualoption], game_options->system_settings[actualoption].current);
                         if (valno >= 0)
                         {
-                            video_draw_text(
+                            ta_draw_text(
                                 48,
                                 22 + 21 + 21 + ((option - top) * 21),
                                 state->font_18pt,
@@ -1573,7 +1622,7 @@ unsigned int game_settings(state_t *state, int reinit)
                         }
                         else
                         {
-                            video_draw_text(
+                            ta_draw_text(
                                 48,
                                 22 + 21 + 21 + ((option - top) * 21),
                                 state->font_18pt,
@@ -1590,7 +1639,7 @@ unsigned int game_settings(state_t *state, int reinit)
 
                 if (gameoption < 0)
                 {
-                    video_draw_text(
+                    ta_draw_text(
                         48,
                         22 + 21 + 21 + ((option - top) * 21),
                         state->font_18pt,
@@ -1621,7 +1670,7 @@ unsigned int game_settings(state_t *state, int reinit)
 
                     if (blocked[option])
                     {
-                        video_draw_text(
+                        ta_draw_text(
                             48,
                             22 + 21 + 21 + ((option - top) * 21),
                             state->font_18pt,
@@ -1634,7 +1683,7 @@ unsigned int game_settings(state_t *state, int reinit)
                         int valno = find_setting_value(&game_options->game_settings[actualoption], game_options->game_settings[actualoption].current);
                         if (valno >= 0)
                         {
-                            video_draw_text(
+                            ta_draw_text(
                                 48,
                                 22 + 21 + 21 + ((option - top) * 21),
                                 state->font_18pt,
@@ -1644,7 +1693,7 @@ unsigned int game_settings(state_t *state, int reinit)
                         }
                         else
                         {
-                            video_draw_text(
+                            ta_draw_text(
                                 48,
                                 22 + 21 + 21 + ((option - top) * 21),
                                 state->font_18pt,
@@ -1661,7 +1710,7 @@ unsigned int game_settings(state_t *state, int reinit)
                 switch (menuoption)
                 {
                     case 0:
-                        video_draw_text(
+                        ta_draw_text(
                             48,
                             22 + 21 + 21 + ((option - top) * 21),
                             state->font_18pt,
@@ -1670,7 +1719,7 @@ unsigned int game_settings(state_t *state, int reinit)
                         );
                         break;
                     case 1:
-                        video_draw_text(
+                        ta_draw_text(
                             48,
                             22 + 21 + 21 + ((option - top) * 21),
                             state->font_18pt,
@@ -1679,7 +1728,7 @@ unsigned int game_settings(state_t *state, int reinit)
                         );
                         break;
                     case 2:
-                        video_draw_text(
+                        ta_draw_text(
                             48,
                             22 + 21 + 21 + ((option - top) * 21),
                             state->font_18pt,
@@ -1688,7 +1737,7 @@ unsigned int game_settings(state_t *state, int reinit)
                         );
                         break;
                     default:
-                        video_draw_text(
+                        ta_draw_text(
                             48,
                             22 + 21 + 21 + ((option - top) * 21),
                             state->font_18pt,
@@ -1702,7 +1751,7 @@ unsigned int game_settings(state_t *state, int reinit)
 
         if ((top + maxoptions) < total)
         {
-            video_draw_sprite(video_width() / 2 - 10, 24 + 21 + 21 + (maxoptions * 21) + scroll_offset, dn_png_width, dn_png_height, dn_png_data);
+            display_sprite(video_width() / 2 - 10, 24 + 21 + 21 + (maxoptions * 21) + scroll_offset, state->sprite_down);
         }
     }
 
@@ -1796,7 +1845,7 @@ unsigned int game_settings_save(state_t *state, int reinit)
 
     char *saving_str = "Saving game settings...";
     font_metrics_t metrics = font_get_text_metrics(state->font_18pt, saving_str);
-    video_draw_text((video_width() - metrics.width) / 2, 100, state->font_18pt, rgb(0, 255, 0), saving_str);
+    ta_draw_text((video_width() - metrics.width) / 2, 100, state->font_18pt, rgb(0, 255, 0), saving_str);
 
     return new_screen;
 }
@@ -1825,9 +1874,9 @@ unsigned int comm_error(state_t *state, int reinit)
     );
 
     font_metrics_t metrics = font_get_text_metrics(state->font_18pt, comm_error);
-    video_draw_text((video_width() - metrics.width) / 2, 100, state->font_18pt, rgb(255, 0, 0), comm_error);
+    ta_draw_text((video_width() - metrics.width) / 2, 100, state->font_18pt, rgb(255, 0, 0), comm_error);
     metrics = font_get_text_metrics(state->font_12pt, message);
-    video_draw_text((video_width() - metrics.width) / 2, 130, state->font_12pt, rgb(255, 255, 255), message);
+    ta_draw_text((video_width() - metrics.width) / 2, 130, state->font_12pt, rgb(255, 255, 255), message);
 
     return SCREEN_COMM_ERROR;
 }
@@ -2215,7 +2264,7 @@ unsigned int configuration(state_t *state, int reinit)
     {
         char *menuconfig = "Menu Configuration";
         font_metrics_t metrics = font_get_text_metrics(state->font_18pt, menuconfig);
-        video_draw_text((video_width() - metrics.width) / 2, 22, state->font_18pt, rgb(0, 255, 255), menuconfig);
+        ta_draw_text((video_width() - metrics.width) / 2, 22, state->font_18pt, rgb(0, 255, 255), menuconfig);
 
         for (unsigned int option = top; option < top + maxoptions; option++)
         {
@@ -2228,7 +2277,7 @@ unsigned int configuration(state_t *state, int reinit)
             // Draw cursor itself.
             if (option == cursor && locked == -1)
             {
-                video_draw_sprite(24, 24 + 21 + 21 + ((option - top) * 21), cursor_png_width, cursor_png_height, cursor_png_data);
+                display_sprite(24, 24 + 21 + 21 + ((option - top) * 21), state->sprite_cursor);
             }
 
             // Draw option, highlighted if it is selected.
@@ -2336,7 +2385,7 @@ unsigned int configuration(state_t *state, int reinit)
                 }
             }
 
-            video_draw_text(
+            ta_draw_text(
                 48,
                 22 + 21 + 21 + ((option - top) * 21),
                 state->font_18pt,
@@ -2346,7 +2395,7 @@ unsigned int configuration(state_t *state, int reinit)
         }
 
         // Draw asterisk for some settings.
-        video_draw_text(48, 22 + 21 + (maxoptions * 21), state->font_12pt, rgb(255, 255, 255), "Options marked with an asterisk (*) take effect only on the next boot.");
+        ta_draw_text(48, 22 + 21 + (maxoptions * 21), state->font_12pt, rgb(255, 255, 255), "Options marked with an asterisk (*) take effect only on the next boot.");
     }
 
     return new_screen;
@@ -2419,7 +2468,7 @@ unsigned int configuration_save(state_t *state, int reinit)
 
     char *saving_str = "Saving configuration...";
     font_metrics_t metrics = font_get_text_metrics(state->font_18pt, saving_str);
-    video_draw_text((video_width() - metrics.width) / 2, 100, state->font_18pt, rgb(0, 255, 0), saving_str);
+    ta_draw_text((video_width() - metrics.width) / 2, 100, state->font_18pt, rgb(0, 255, 0), saving_str);
 
     return new_screen;
 }
@@ -2503,21 +2552,21 @@ unsigned int game_load(state_t *state, int reinit)
     {
         char *loading_game = "Loading game...";
         font_metrics_t metrics = font_get_text_metrics(state->font_18pt, loading_game);
-        video_draw_text((video_width() - metrics.width) / 2, 100, state->font_18pt, rgb(255, 255, 255), loading_game);
-        video_fill_box(50, 150, 50 + width, 170, rgb(32, 32, 32));
-        video_draw_box(50, 150, 50 + width, 170, rgb(255, 255, 255));
+        ta_draw_text((video_width() - metrics.width) / 2, 100, state->font_18pt, rgb(255, 255, 255), loading_game);
+        display_filled_box(50, 150, 50 + width, 170, rgb(32, 32, 32));
+        display_box(50, 150, 50 + width, 170, rgb(255, 255, 255));
 
         int actual_percent = 0;
         if (game_size > 0)
         {
             int actual_width = (int)(((double)game_progress / (double)game_size) * (width - 2));
-            video_fill_box(51, 151, 51 + actual_width, 169, rgb(0, 0, 255));
+            display_filled_box(51, 151, 51 + actual_width, 169, rgb(0, 0, 255));
 
             actual_percent = (int)(((double)game_progress / (double)game_size) * 100);
         }
 
         metrics = font_get_text_metrics(state->font_12pt, "%d%%", actual_percent);
-        video_draw_text((video_width() - metrics.width) / 2, 153, state->font_12pt, rgb(255, 255, 255), "%d%%", actual_percent);
+        ta_draw_text((video_width() - metrics.width) / 2, 153, state->font_12pt, rgb(255, 255, 255), "%d%%", actual_percent);
     }
 
     return new_screen;
@@ -2586,7 +2635,7 @@ unsigned int game_unpack(state_t *state, int reinit)
     {
         char *loading_game = "Loading game...";
         font_metrics_t metrics = font_get_text_metrics(state->font_18pt, loading_game);
-        video_draw_text((video_width() - metrics.width) / 2, 100, state->font_18pt, rgb(255, 255, 255), loading_game);
+        ta_draw_text((video_width() - metrics.width) / 2, 100, state->font_18pt, rgb(255, 255, 255), loading_game);
 
         char *message = (
             "Host is currently extracting game so that it\n"
@@ -2594,7 +2643,7 @@ unsigned int game_unpack(state_t *state, int reinit)
         );
 
         metrics = font_get_text_metrics(state->font_12pt, message);
-        video_draw_text((video_width() - metrics.width) / 2, 130, state->font_12pt, rgb(255, 255, 255), message);
+        ta_draw_text((video_width() - metrics.width) / 2, 130, state->font_12pt, rgb(255, 255, 255), message);
     }
 
     return new_screen;
@@ -2605,11 +2654,11 @@ void display_error_dialogs(state_t *state)
     if (state->test_error_counter > 0.0)
     {
         // Only display for 3 seconds.
-        if ((state->animation_counter - state->test_error_counter) >= 3.0)
+        /*if ((state->animation_counter - state->test_error_counter) >= 3.0)
         {
             state->test_error_counter = 0.0;
         }
-        else
+        else*/
         {
             display_test_error(state);
         }

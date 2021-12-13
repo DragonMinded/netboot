@@ -142,6 +142,8 @@ font_cache_entry_t *_ta_cache_create(uint32_t index, int advancex, int advancey,
 // Forward definitions of stuff we don't want in public headers.
 extern unsigned int global_video_vertical;
 extern unsigned int global_video_width;
+extern unsigned int cached_actual_width;
+extern unsigned int cached_actual_height;
 uint32_t _ta_16bit_uv(float uv);
 
 void _ta_draw_uncached_bitmap(int x, int y, unsigned int width, unsigned int height, unsigned int mode, uint8_t *data, color_t color)
@@ -150,21 +152,63 @@ void _ta_draw_uncached_bitmap(int x, int y, unsigned int width, unsigned int hei
     // we might schedule a framebuffer fallback? Not sure.
 }
 
-void _ta_draw_cached_bitmap(int x, int y, unsigned int width, unsigned int height, unsigned int mode, void *data, color_t color)
+void _ta_draw_cached_bitmap_horiz(int x, int y, unsigned int width, unsigned int height, unsigned int mode, void *data, color_t color)
 {
     ta_cache_entry_t *ta_entry = data;
     if (ta_entry->texture)
     {
-        float ulow = (float)ta_entry->u / (float)SPRITEMAP_UVSIZE;
-        float vlow = (float)ta_entry->v / (float)SPRITEMAP_UVSIZE;
-        float uhigh = (float)(ta_entry->u + width) / (float)SPRITEMAP_UVSIZE;
-        float vhigh = (float)(ta_entry->v + height) / (float)SPRITEMAP_UVSIZE;
+        int low_x = 0;
+        int high_x = width;
+        int low_y = 0;
+        int high_y = height;
+
+        if (x < 0)
+        {
+            if (x + width <= 0)
+            {
+                return;
+            }
+
+            low_x = -x;
+        }
+        if (y < 0)
+        {
+            if (y + height <= 0)
+            {
+                return;
+            }
+
+            low_y = -y;
+        }
+        if ((x + width) >= cached_actual_width)
+        {
+            if (x >= cached_actual_width)
+            {
+                return;
+            }
+
+            high_x = cached_actual_width - x;
+        }
+        if (y + height >= cached_actual_height)
+        {
+            if (y >= cached_actual_height)
+            {
+                return;
+            }
+
+            high_y = cached_actual_height - y;
+        }
+
+        float ulow = (float)(ta_entry->u + low_x) / (float)SPRITEMAP_UVSIZE;
+        float vlow = (float)(ta_entry->v + low_y) / (float)SPRITEMAP_UVSIZE;
+        float uhigh = (float)(ta_entry->u + high_x) / (float)SPRITEMAP_UVSIZE;
+        float vhigh = (float)(ta_entry->v + high_y) / (float)SPRITEMAP_UVSIZE;
 
         textured_vertex_t verticies[4] = {
-            { (float)x, (float)(y + height), 1.0, ulow, vhigh },
-            { (float)x, (float)y, 1.0, ulow, vlow },
-            { (float)(x + width), (float)y, 1.0, uhigh, vlow },
-            { (float)(x + width), (float)(y + height), 1.0, uhigh, vhigh },
+            { (float)(x + low_x), (float)(y + high_y), 1.0, ulow, vhigh },
+            { (float)(x + low_x), (float)(y + low_y), 1.0, ulow, vlow },
+            { (float)(x + high_x), (float)(y + low_y), 1.0, uhigh, vlow },
+            { (float)(x + high_x), (float)(y + high_y), 1.0, uhigh, vhigh },
         };
 
         // This doesn't use the sprite draw routines as it is slightly different
@@ -201,35 +245,129 @@ void _ta_draw_cached_bitmap(int x, int y, unsigned int width, unsigned int heigh
         ta_commit_list(&mypoly, TA_LIST_SHORT);
 
         myvertex.cmd = TA_CMD_VERTEX | TA_CMD_VERTEX_END_OF_STRIP;
-        if (global_video_vertical)
+        myvertex.ax = verticies[0].x;
+        myvertex.ay = verticies[0].y;
+        myvertex.az = verticies[0].z;
+        myvertex.bx = verticies[1].x;
+        myvertex.by = verticies[1].y;
+        myvertex.bz = verticies[1].z;
+        myvertex.cx = verticies[2].x;
+        myvertex.cy = verticies[2].y;
+        myvertex.cz = verticies[2].z;
+        myvertex.dx = verticies[3].x;
+        myvertex.dy = verticies[3].y;
+        myvertex.au_av = (_ta_16bit_uv(verticies[0].u) << 16) | _ta_16bit_uv(verticies[0].v);
+        myvertex.bu_bv = (_ta_16bit_uv(verticies[1].u) << 16) | _ta_16bit_uv(verticies[1].v);
+        myvertex.cu_cv = (_ta_16bit_uv(verticies[2].u) << 16) | _ta_16bit_uv(verticies[2].v);
+        ta_commit_list(&myvertex, TA_LIST_LONG);
+    }
+}
+
+void _ta_draw_cached_bitmap_vert(int x, int y, unsigned int width, unsigned int height, unsigned int mode, void *data, color_t color)
+{
+    ta_cache_entry_t *ta_entry = data;
+    if (ta_entry->texture)
+    {
+        int low_x = 0;
+        int high_x = width;
+        int low_y = 0;
+        int high_y = height;
+
+        if (x < 0)
         {
-            float width = (float)global_video_width - 1.0;
-            myvertex.ax = width - verticies[0].y;
-            myvertex.ay = verticies[0].x;
-            myvertex.az = verticies[0].z;
-            myvertex.bx = width - verticies[1].y;
-            myvertex.by = verticies[1].x;
-            myvertex.bz = verticies[1].z;
-            myvertex.cx = width - verticies[2].y;
-            myvertex.cy = verticies[2].x;
-            myvertex.cz = verticies[2].z;
-            myvertex.dx = width - verticies[3].y;
-            myvertex.dy = verticies[3].x;
+            if (x + width <= 0)
+            {
+                return;
+            }
+
+            low_x = -x;
         }
-        else
+        if (y < 0)
         {
-            myvertex.ax = verticies[0].x;
-            myvertex.ay = verticies[0].y;
-            myvertex.az = verticies[0].z;
-            myvertex.bx = verticies[1].x;
-            myvertex.by = verticies[1].y;
-            myvertex.bz = verticies[1].z;
-            myvertex.cx = verticies[2].x;
-            myvertex.cy = verticies[2].y;
-            myvertex.cz = verticies[2].z;
-            myvertex.dx = verticies[3].x;
-            myvertex.dy = verticies[3].y;
+            if (y + height <= 0)
+            {
+                return;
+            }
+
+            low_y = -y;
         }
+        if ((x + width) >= cached_actual_width)
+        {
+            if (x >= cached_actual_width)
+            {
+                return;
+            }
+
+            high_x = cached_actual_width - x;
+        }
+        if (y + height >= cached_actual_height)
+        {
+            if (y >= cached_actual_height)
+            {
+                return;
+            }
+
+            high_y = cached_actual_height - y;
+        }
+
+        float ulow = (float)(ta_entry->u + low_x) / (float)SPRITEMAP_UVSIZE;
+        float vlow = (float)(ta_entry->v + low_y) / (float)SPRITEMAP_UVSIZE;
+        float uhigh = (float)(ta_entry->u + high_x) / (float)SPRITEMAP_UVSIZE;
+        float vhigh = (float)(ta_entry->v + high_y) / (float)SPRITEMAP_UVSIZE;
+
+        textured_vertex_t verticies[4] = {
+            { (float)(x + low_x), (float)(y + high_y), 1.0, ulow, vhigh },
+            { (float)(x + low_x), (float)(y + low_y), 1.0, ulow, vlow },
+            { (float)(x + high_x), (float)(y + low_y), 1.0, uhigh, vlow },
+            { (float)(x + high_x), (float)(y + high_y), 1.0, uhigh, vhigh },
+        };
+
+        // This doesn't use the sprite draw routines as it is slightly different
+        // (modulates the color against an all-white sprite instead of just using
+        // decal mode).
+        struct polygon_list_sprite mypoly;
+        struct vertex_list_sprite myvertex;
+
+        mypoly.cmd =
+            TA_CMD_SPRITE |
+            TA_CMD_POLYGON_TYPE_TRANSPARENT |
+            TA_CMD_POLYGON_SUBLIST |
+            TA_CMD_POLYGON_PACKED_COLOR |
+            TA_CMD_POLYGON_16BIT_UV |
+            TA_CMD_POLYGON_TEXTURED;
+        mypoly.mode1 =
+            TA_POLYMODE1_Z_NEVER |
+            TA_POLYMODE1_CULL_DISABLED;
+        mypoly.mode2 =
+            TA_POLYMODE2_MIPMAP_D_1_00 |
+            TA_POLYMODE2_TEXTURE_MODULATE |
+            TA_POLYMODE2_U_SIZE_256 |
+            TA_POLYMODE2_V_SIZE_256 |
+            TA_POLYMODE2_TEXTURE_CLAMP_U |
+            TA_POLYMODE2_TEXTURE_CLAMP_V |
+            TA_POLYMODE2_FOG_DISABLED |
+            TA_POLYMODE2_SRC_BLEND_SRC_ALPHA |
+            TA_POLYMODE2_DST_BLEND_INV_SRC_ALPHA;
+        mypoly.texture =
+            TA_TEXTUREMODE_ARGB4444 |
+            TA_TEXTUREMODE_ADDRESS(ta_entry->texture);
+        mypoly.mult_color = RGB0888(color.r, color.g, color.b);
+        mypoly.add_color = 0;
+        ta_commit_list(&mypoly, TA_LIST_SHORT);
+
+        myvertex.cmd = TA_CMD_VERTEX | TA_CMD_VERTEX_END_OF_STRIP;
+        float vwidth = (float)global_video_width - 1.0;
+        myvertex.ax = vwidth - verticies[0].y;
+        myvertex.ay = verticies[0].x;
+        myvertex.az = verticies[0].z;
+        myvertex.bx = vwidth - verticies[1].y;
+        myvertex.by = verticies[1].x;
+        myvertex.bz = verticies[1].z;
+        myvertex.cx = vwidth - verticies[2].y;
+        myvertex.cy = verticies[2].x;
+        myvertex.cz = verticies[2].z;
+        myvertex.dx = vwidth - verticies[3].y;
+        myvertex.dy = verticies[3].x;
         myvertex.au_av = (_ta_16bit_uv(verticies[0].u) << 16) | _ta_16bit_uv(verticies[0].v);
         myvertex.bu_bv = (_ta_16bit_uv(verticies[1].u) << 16) | _ta_16bit_uv(verticies[1].v);
         myvertex.cu_cv = (_ta_16bit_uv(verticies[2].u) << 16) | _ta_16bit_uv(verticies[2].v);
@@ -239,7 +377,18 @@ void _ta_draw_cached_bitmap(int x, int y, unsigned int width, unsigned int heigh
 
 int ta_draw_character(int x, int y, font_t *fontface, color_t color, int ch)
 {
-    return _font_draw_calc_character(x, y, fontface, color, ch, 0, &_ta_cache_create, FONT_CACHE_TA, &_ta_draw_uncached_bitmap, &_ta_draw_cached_bitmap);
+    return _font_draw_calc_character(
+        x,
+        y,
+        fontface,
+        color,
+        ch,
+        0,
+        &_ta_cache_create,
+        FONT_CACHE_TA,
+        &_ta_draw_uncached_bitmap,
+        global_video_vertical ? &_ta_draw_cached_bitmap_vert : &_ta_draw_cached_bitmap_horiz
+    );
 }
 
 int ta_draw_text(int x, int y, font_t *fontface, color_t color, const char * const msg, ...)
@@ -255,7 +404,18 @@ int ta_draw_text(int x, int y, font_t *fontface, color_t color, const char * con
         if (length > 0)
         {
             buffer[min(length, 2047)] = 0;
-            return _font_draw_calc_text(x, y, fontface, color, buffer, 0, &_ta_cache_create, FONT_CACHE_TA, &_ta_draw_uncached_bitmap, &_ta_draw_cached_bitmap);
+            return _font_draw_calc_text(
+                x,
+                y,
+                fontface,
+                color,
+                buffer,
+                0,
+                &_ta_cache_create,
+                FONT_CACHE_TA,
+                &_ta_draw_uncached_bitmap,
+                global_video_vertical ? &_ta_draw_cached_bitmap_vert : &_ta_draw_cached_bitmap_horiz
+            );
         }
         else if (length == 0)
         {

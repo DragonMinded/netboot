@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <naomi/video.h>
+#include <naomi/ta.h>
 #include <naomi/maple.h>
 #include <naomi/system.h>
 #include <naomi/eeprom.h>
@@ -17,6 +18,17 @@ extern uint8_t *change_raw_data;
 extern unsigned int scroll_raw_len;
 extern unsigned int check_raw_len;
 extern unsigned int change_raw_len;
+
+// Sprites, compiled in from Makefile.
+extern unsigned int up_png_width;
+extern unsigned int up_png_height;
+extern void *up_png_data;
+extern unsigned int dn_png_width;
+extern unsigned int dn_png_height;
+extern void *dn_png_data;
+extern unsigned int cursor_png_width;
+extern unsigned int cursor_png_height;
+extern void *cursor_png_data;
 
 void main()
 {
@@ -36,7 +48,7 @@ void main()
 
     // Init the screen for a simple 640x480 framebuffer.
     video_init(VIDEO_COLOR_1555);
-    video_set_background_color(rgb(0, 0, 0));
+    ta_set_background_color(rgb(0, 0, 0));
 
     // Init audio system for displaying sound effects.
     audio_init();
@@ -66,6 +78,11 @@ void main()
     state.font_12pt = font_add(dejavusans_ttf_data, dejavusans_ttf_len);
     font_set_size(state.font_12pt, 12);
 
+    // Attach our sprites
+    state.sprite_up = ta_texture_desc_malloc_direct(up_png_width, up_png_data, TA_TEXTUREMODE_ARGB1555);
+    state.sprite_down = ta_texture_desc_malloc_direct(dn_png_width, dn_png_data, TA_TEXTUREMODE_ARGB1555);
+    state.sprite_cursor = ta_texture_desc_malloc_direct(cursor_png_width, cursor_png_data, TA_TEXTUREMODE_ARGB1555);
+
     // Add fallbacks if they are provided, for rendering CJK or other characters.
     unsigned int fallback_size;
     uint8_t *fallback_data = get_fallback_font(&fallback_size);
@@ -92,7 +109,10 @@ void main()
 
         // Now, draw the current screen.
         int profile = profile_start();
+        ta_commit_begin();
         draw_screen(&state);
+        ta_commit_end();
+        ta_render();
         uint32_t draw_time = profile_end(profile);
 
         // Display some debugging info.

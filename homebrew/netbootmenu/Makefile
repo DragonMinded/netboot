@@ -29,7 +29,8 @@ SERIAL = BRP0
 # Pick up base makefile rules common to all examples.
 include ../Makefile.base
 
-# Specific buildrule for PNG files for this project.
+# Specific buildrule for PNG files for this project. Note that these
+# *MUST* be a multiple of 8 both in width and height.
 build/%.o: %.png ${IMG2C_FILE}
 	@mkdir -p $(dir $@)
 	${IMG2C} build/$<.c --mode RGBA1555 $<

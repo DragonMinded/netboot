@@ -8,6 +8,7 @@ extern "C" {
 #include <stdint.h>
 #include <naomi/eeprom.h>
 #include <naomi/video.h>
+#include <naomi/ta.h>
 
 typedef struct __attribute__((__packed__))
 {
@@ -59,6 +60,9 @@ typedef struct
     double test_error_counter;
     font_t *font_18pt;
     font_t *font_12pt;
+    texture_description_t *sprite_up;
+    texture_description_t *sprite_down;
+    texture_description_t *sprite_cursor;
     sounds_t sounds;
 } state_t;
 

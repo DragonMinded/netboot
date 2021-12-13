@@ -735,6 +735,8 @@ texture_description_t *ta_texture_desc_paletted(void *offset, int uvsize, int si
     if (desc)
     {
         desc->vram_location = offset;
+        desc->width = uvsize;
+        desc->height = uvsize;
         desc->uvsize = _ta_texture_desc_uvsize(uvsize);
         if (desc->uvsize == 0xFFFFFFFF)
         {
@@ -766,6 +768,8 @@ texture_description_t *ta_texture_desc_direct(void *offset, int uvsize, uint32_t
     if (desc)
     {
         desc->vram_location = offset;
+        desc->width = uvsize;
+        desc->height = uvsize;
         desc->uvsize = _ta_texture_desc_uvsize(uvsize);
         if (desc->uvsize == 0xFFFFFFFF)
         {
@@ -800,6 +804,8 @@ texture_description_t *ta_texture_desc_malloc_paletted(int uvsize, void *data, i
     if (desc)
     {
         desc->uvsize = _ta_texture_desc_uvsize(uvsize);
+        desc->width = uvsize;
+        desc->height = uvsize;
         if (desc->uvsize == 0xFFFFFFFF)
         {
             free(desc);
@@ -834,6 +840,8 @@ texture_description_t *ta_texture_desc_malloc_direct(int uvsize, void *data, uin
     if (desc)
     {
         desc->uvsize = _ta_texture_desc_uvsize(uvsize);
+        desc->width = uvsize;
+        desc->height = uvsize;
         if (desc->uvsize == 0xFFFFFFFF)
         {
             free(desc);

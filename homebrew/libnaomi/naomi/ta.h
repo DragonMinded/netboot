@@ -367,6 +367,8 @@ typedef struct
     uint32_t texture_mode;
     uint32_t uvsize;
     int vram_owned;
+    int width;
+    int height;
 } texture_description_t;
 
 // Constructor functions for the above texture_description_t datatype. For paletted
