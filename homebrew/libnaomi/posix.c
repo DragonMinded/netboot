@@ -1208,14 +1208,14 @@ int _isatty_r(struct _reent *reent, int fd)
 
 int _kill_r(struct _reent *reent, int n, int m)
 {
-    // TODO: Implement kill once we have threads support.
+    // We have threads but no processes, so let's not pretend with half support.
     reent->_errno = ENOTSUP;
     return -1;
 }
 
 int _getpid_r(struct _reent *reent)
 {
-    // TODO: Implement getpid once we have threads support.
+    // We have threads but no processes, so let's not pretend with half support.
     reent->_errno = ENOTSUP;
     return -1;
 }
@@ -1279,28 +1279,28 @@ int _stat_r(struct _reent *reent, const char *path, struct stat *st)
 
 int _fork_r(struct _reent *reent)
 {
-    // TODO: Implement fork once we have threads support.
+    // We have threads but no processes, so let's not pretend with half support.
     reent->_errno = ENOTSUP;
     return -1;
 }
 
 int _wait_r(struct _reent *reent, int *statusp)
 {
-    // TODO: Implement wait once we have threads support.
+    // We have threads but no processes, so let's not pretend with half support.
     reent->_errno = ENOTSUP;
     return -1;
 }
 
 int _execve_r(struct _reent *reent, const char *path, char *const argv[], char *const envp[])
 {
-    // TODO: Implement execve once we have threads support.
+    // We have threads but no processes, so let's not pretend with half support.
     reent->_errno = ENOTSUP;
     return -1;
 }
 
 _CLOCK_T_ _times_r(struct _reent *reent, struct tms *tm)
 {
-    // TODO: Implement times once we have threads support.
+    // We have threads but no processes, so let's not pretend with half support.
     reent->_errno = ENOTSUP;
     return -1;
 }
