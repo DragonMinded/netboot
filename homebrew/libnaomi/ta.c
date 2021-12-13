@@ -331,6 +331,7 @@ extern uint32_t global_buffer_offset[3];
 #define TA_CMDLIST_SIZE (1 * 1024 * 1024)
 #define TA_BACKGROUNDLIST_SIZE 256
 #define TA_OVERFLOW_SIZE (1 * 1024 * 1024)
+#define TA_SCRATCH_SIZE (1024 * 128)
 
 // Alignment required for various buffers.
 #define BUFFER_ALIGNMENT 128
@@ -345,7 +346,7 @@ void _ta_init_buffers()
     // to a 1MB boundary (masking with 0xFFFFF should give all 0's). It should
     // be safe to calculate where to put this based on the framebuffer locations,
     // but for some reason this results in stomped on texture RAM.
-    uint32_t bufloc = (((global_buffer_offset[2] & VRAM_MASK) | UNCACHED_MIRROR | VRAM_BASE) + 0xFFFFF) & 0xFFF00000;
+    uint32_t bufloc = ((((global_buffer_offset[2] + TA_SCRATCH_SIZE) & VRAM_MASK) | UNCACHED_MIRROR | VRAM_BASE) + 0xFFFFF) & 0xFFF00000;
     uint32_t curbufloc = bufloc;
 
     // Clear our structure out.
@@ -664,7 +665,7 @@ void _ta_free()
     irq_restore(old_interrupts);
 }
 
-void *ta_palette_bank(int size, int banknum)
+uint32_t *ta_palette_bank(int size, int banknum)
 {
     if (size == TA_PALETTE_CLUT4)
     {
@@ -815,12 +816,18 @@ texture_description_t *ta_texture_desc_malloc_paletted(int uvsize, void *data, i
             case TA_PALETTE_CLUT4:
                 desc->texture_mode = TA_TEXTUREMODE_CLUT4 | TA_TEXTUREMODE_CLUTBANK4(banknum);
                 desc->vram_location = ta_texture_malloc(uvsize, 4);
-                ta_texture_load(desc->vram_location, uvsize, 4, data);
+                if (data)
+                {
+                    ta_texture_load(desc->vram_location, uvsize, 4, data);
+                }
                 break;
             case TA_PALETTE_CLUT8:
                 desc->texture_mode = TA_TEXTUREMODE_CLUT8 | TA_TEXTUREMODE_CLUTBANK8(banknum);
                 desc->vram_location = ta_texture_malloc(uvsize, 8);
-                ta_texture_load(desc->vram_location, uvsize, 8, data);
+                if (data)
+                {
+                    ta_texture_load(desc->vram_location, uvsize, 8, data);
+                }
                 break;
             default:
                 free(desc);
@@ -851,17 +858,26 @@ texture_description_t *ta_texture_desc_malloc_direct(int uvsize, void *data, uin
             case TA_TEXTUREMODE_ARGB1555:
                 desc->texture_mode = TA_TEXTUREMODE_ARGB1555;
                 desc->vram_location = ta_texture_malloc(uvsize, 16);
-                ta_texture_load(desc->vram_location, uvsize, 16, data);
+                if (data)
+                {
+                    ta_texture_load(desc->vram_location, uvsize, 16, data);
+                }
                 break;
             case TA_TEXTUREMODE_RGB565:
                 desc->texture_mode = TA_TEXTUREMODE_RGB565;
                 desc->vram_location = ta_texture_malloc(uvsize, 16);
-                ta_texture_load(desc->vram_location, uvsize, 16, data);
+                if (data)
+                {
+                    ta_texture_load(desc->vram_location, uvsize, 16, data);
+                }
                 break;
             case TA_TEXTUREMODE_ARGB4444:
                 desc->texture_mode = TA_TEXTUREMODE_ARGB4444;
                 desc->vram_location = ta_texture_malloc(uvsize, 16);
-                ta_texture_load(desc->vram_location, uvsize, 16, data);
+                if (data)
+                {
+                    ta_texture_load(desc->vram_location, uvsize, 16, data);
+                }
                 break;
             default:
                 free(desc);

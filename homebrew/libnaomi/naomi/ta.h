@@ -301,36 +301,47 @@ void ta_render_wait();
 
 // Functions for sending list data to the TA to be rendered upon calling ta_render().
 // Note that you should send something to the TA using these functions before calling ta_render()
-// as these set up the TA to be able to render a frame.
+// as these set up the TA to be able to render a frame. Note also that all of the commands
+// submitted using ta_commit_list() must be of the same polygon type. When calling ta_commit_end()
+// your thread will be parked until the TA acknowledges that it has processed all commands
+// that were submitted with ta_commit_list(). If you have threads disabled, it will instead
+// spinloop until the TA is done and no other work can get done.
 void ta_commit_begin();
 void ta_commit_list(void *list, int size);
 void ta_commit_end();
 
 // Set the background color for TA renders, specifically for areas where there is not any
-// polygon to draw.
+// polygon to draw. This is the TA/PVR equivalent to video_set_background_color().
 void ta_set_background_color(color_t color);
 
 // Defines for the size of a ta_commit_list() call.
 #define TA_LIST_SHORT 32
 #define TA_LIST_LONG 64
 
-// Given a particular palette lookup size and a bank, return the palette RAM pointer.
+// Given a particular palette lookup size and a bank, return the palette RAM pointer to
+// the start of that bank. You can access either 16 or 256 individual palette entries
+// for that palette bank depending on the size.
+uint32_t *ta_palette_bank(int size, int banknum);
+
+// Defines for the size of a palette in a ta_palette_bank() call.
 #define TA_PALETTE_NONE 0
 #define TA_PALETTE_CLUT4 1
 #define TA_PALETTE_CLUT8 2
 
-void *ta_palette_bank(int size, int banknum);
-
-// Given an RGBA value, return a packed color suitable for palettes.
+// Given an RGBA value, return a packed color suitable for inserting into palette RAM.
 uint32_t ta_palette_entry(color_t color);
 
-// Get a pointer to the base texture RAM that is safe to use.
+// Get a pointer to the base texture RAM that is safe to use. Note that ta_texture_malloc()
+// will allocate starting at this base so if you are going to manually lay out your texture
+// RAM do not also use ta_texture_malloc().
 void *ta_texture_base();
 
-// Given a UVsize (allowed sizes are 8, 16, 32, 64, 128, 256, 512 or 1024), allocate space
-// in the texture RAM suitable for a texture of size UVsize * UVsize. If there is not enough
+// Given a uvsize (allowed sizes are 8, 16, 32, 64, 128, 256, 512 or 1024), allocate space
+// in the texture RAM suitable for a square texture of size uvsize. If there is not enough
 // room in the texture RAM, returns a null pointer. Note that the returned pointer is in
-// texture RAM and as such must be accessed in 16-bit increments only.
+// texture RAM and as such must be accessed in 16-bit increments only. It is recommended to
+// only deal with twiddled textures and use ta_texture_load() or ta_texture_load_sprite()
+// to add data to a texture returned by ta_texture_malloc().
 void *ta_texture_malloc(int uvsize, int bitsize);
 
 // Free a previously allocated texture.
@@ -339,18 +350,20 @@ void ta_texture_free(void *texture);
 // Get statistics about the allocations in texture memory.
 struct mallinfo ta_texture_mallinfo();
 
-// Given a raw offset into texture RAM and a texture size, load the texture into texture
+// Given a raw offset into texture RAM (returned by ta_texture_malloc() or calculated by
+// your own manual layout calculations) and a texture size, load the texture into texture
 // RAM in twiddled format required by several video modes. Note that the texture size is
 // the size in pixels of one side. The only allowed sizes are 8, 16, 32, 64, 128, 256, 512
-// and 1024.
+// and 1024. The uvsize value should match the one given to ta_texture_malloc() if you are
+// using this to allocate textures.
 int ta_texture_load(void *offset, int uvsize, int bitsize, void *data);
 
 // Given a raw offset into texture RAM and a texture size, load a sprite into the texture
 // RAM as if it was a spritemap, in twiddled format required by several video modes. Note
-// that the texture size is the size in pixels of one side. Similar restrictions on texture
-// sizes as ta_texture_load() are also here. Note that when loading 4bpp sprites, the y
-// offset and height must both be a multiple of 4, and when loading 8bpp sprites, the y offset
-// and height must must both be a multiple of 2.
+// that the uvsize is the size in pixels of one side and should match what you give to
+// ta_texture_malloc(). Similar restrictions on texture sizes as ta_texture_load() are also
+// here. Note that when loading 4bpp sprites, the y offset and height must both be a multiple
+// of 4, and when loading 8bpp sprites, the y offset and height must both be a multiple of 2.
 int ta_texture_load_sprite(void *offset, int uvsize, int bitsize, int x, int y, int width, int height, void *data);
 
 // Data type for standalone UV coordinates.
@@ -363,11 +376,21 @@ typedef struct
 // Data type for tracking a texture and its attributes.
 typedef struct
 {
+    // The actual location of this texture in VRAM, as returned by ta_texture_malloc().
     void *vram_location;
+    // The calculated texture mode suitable for building displaylists.
     uint32_t texture_mode;
+    // The calculated uvsize suitable for building displaylists. Do not pass this value
+    // into the "uvsize" parameter of various functions, it is not the same!
     uint32_t uvsize;
+    // Whether the VRAM location is owned by this structure or manually given to it
+    // by the user.
     int vram_owned;
+    // The width in pixels of this texture. This is identical to the "uvsize" parameter
+    // of various functions.
     int width;
+    // The height in pixels of this texture. This is identical to the "uvsize" parameter
+    // of various functions.
     int height;
 } texture_description_t;
 
@@ -377,15 +400,17 @@ typedef struct
 // texture entries, the mode should be one of TA_TEXTUREMODE_ARGB1555,
 // TA_TEXTUREMODE_RGB565 or TA_TEXTUREMODE_ARGB4444. In both cases, the offset should
 // be the VRAM offset of the texture you got from a ta_texture_malloc() and filled
-// with a ta_texture_load(). Also, in both cases, the uvsize is the size in pixels
-// of the texture in both the U and V direction, similar to what you would give to
-// a ta_texture_malloc() call.
+// with a ta_texture_load() or one or more ta_texture_load_sprite() calls. Also, in
+// both cases, the uvsize is the size in pixels of the texture in both the U and V
+// direction, similar to what you would give to a ta_texture_malloc() call.
 texture_description_t *ta_texture_desc_paletted(void *offset, int uvsize, int size, int banknum);
 texture_description_t *ta_texture_desc_direct(void *offset, int uvsize, uint32_t mode);
 
 // The following functions work identical to the above functions. However, they instead
 // take a data offset in main RAM, allocate a new texture using ta_texture_malloc(), then
-// load the texture using ta_texture_load() and finally initialize the description.
+// load the texture using ta_texture_load() and finally initialize the description. Optionaly,
+// you can give a null pointer for the data argument and these functions will skip loading
+// the data.
 texture_description_t *ta_texture_desc_malloc_paletted(int uvsize, void *data, int size, int banknum);
 texture_description_t *ta_texture_desc_malloc_direct(int uvsize, void *data, uint32_t mode);
 
@@ -399,12 +424,14 @@ void ta_texture_desc_free(texture_description_t *desc);
 // The type shold be one of TA_CMD_POLYGON_TYPE_OPAQUE, TA_CMD_POLYGON_TYPE_TRANSPARENT
 // or TA_CMD_POLYGON_TYPE_PUNCHTHRU. The verticies should be specified in order of lower
 // left, upper left, upper right, lower right. However, they may have affine transformations
-// applied to them using matrix math should you wish to scale/rotate/shear the box.
+// applied to them using matrix math should you wish to scale/rotate/shear the box. Note
+// that this is monitor orientation aware.
 void ta_fill_box(uint32_t type, vertex_t *verticies, color_t color);
 
 // Given a box bounded by identical conditions to the above function, draw a sprite
 // with a particular texture. All caveats and conditions from above apply here, but
-// the box is drawn textured instead of filled.
+// the box is drawn textured instead of filled. Note that these are monitor orientation
+// aware.
 void ta_draw_sprite(uint32_t type, textured_vertex_t *verticies, texture_description_t *texture);
 void ta_draw_sprite_uv(uint32_t type, vertex_t *verticies, uv_t *texcoords, texture_description_t *texture);
 
@@ -413,6 +440,11 @@ void ta_draw_sprite_uv(uint32_t type, vertex_t *verticies, uv_t *texcoords, text
 // The type is the same as ta_fill_box()'s type, specifying whether the triangle is opaque,
 // transparent or punchthru. The verticies should be in order of bottom left, top left, bottom
 // right for the first triangle, and then alternating up and down for the strip beyond that.
+// Note that these have no concept of the camera, monitor orientation or anything else. If
+// you wish to get all of that "for free", you should first call matrix_init_perspective(),
+// then perform your camera transforms using matrix operations, and finally use either
+// matrix_perspective_transform_vertex() or matrix_perspective_transform_textured_vertex()
+// on your verticies to place them correctly on the screen.
 void ta_draw_triangle_strip(uint32_t type, uint32_t striplen, textured_vertex_t *verticies, texture_description_t *texture);
 void ta_draw_triangle_strip_uv(uint32_t type, uint32_t striplen, vertex_t *verticies, uv_t *uvcoords, texture_description_t *texture);
 

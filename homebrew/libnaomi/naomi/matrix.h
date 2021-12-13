@@ -46,12 +46,14 @@ typedef struct
 } textured_vertex_t;
 
 // Dirty trick to make indexing programatically into matrixes possible.
+// This is zero indexed, so a11 would be matrix_index(m, 0, 0).
 #define matrix_index(matrix, row, col) (*((&(matrix).a11) + ((row) * 4) + (col)))
 
 // Initialize the system matrix with a 4x4 identity matrix.
 void matrix_init_identity();
 
-// Initialize the system matrix with a 4x4 projection matrix.
+// Initialize the system matrix with a 4x4 projection matrix. Note that
+// this is screen size and orentation aware.
 void matrix_init_perspective(float fovy, float zNear, float zFar);
 
 // Set a 4x4 matrix into the system matrix.
@@ -61,14 +63,14 @@ void matrix_set(matrix_t *matrix);
 void matrix_get(matrix_t *matrix);
 
 // Push the system matrix onto a saved matrix stack, to be popped later
-// in order to restore it.
+// in order to restore it. You can have up to 16 saved matrixes.
 void matrix_push();
 
 // Pop a previously stored system matrix off the stack and place it into
 // the system matrix.
 void matrix_pop();
 
-// Invert the system matrix, such that if Ma = x, M-1x = a.
+// Invert the system matrix, such that if Ma = x, (M^-1)x = a.
 void matrix_invert();
 
 // Apply another 4x4 matrix to the system matrix by multiplying it.
@@ -98,17 +100,18 @@ void matrix_translate_z(float amount);
 // rotating/transforming/scaling objects in worldspace) by extending them to homogenous
 // coordinates and then multiplying them by the system matrix. Note that this does not
 // divide the resulting coordinates by w and it is simply discarded, so this should not
-// be used to calcualte final screen coordinates of some coordinate list. The only difference
+// be used to calcualte final screen coordinates of a coordinate list. The only difference
 // between the two functions is whether the coordinates include texture information or not.
 void matrix_affine_transform_vertex(vertex_t *src, vertex_t *dest, int n);
 void matrix_affine_transform_textured_vertex(textured_vertex_t *src, textured_vertex_t *dest, int n);
 
-// Transform a series of x, y, z coordinates from worldspace to system matrix space
+// Transform a series of x, y, z coordinates from worldspace to screen space
 // by extending them to homogenous coordinates and then multiplying them by the
 // system matrix. Note that this also divides the resulting x, y, z coordinates by
 // the extended w coordinate as required for submitting vertexes to the TA/PVR.
 // The only difference between the two functions is whether the coordinates include
-// texture information or not.
+// texture information or not. For the resulting x, y, z values to make any sense,
+// you should at very minimum initialize the system matrix with matrix_init_perspective().
 void matrix_perspective_transform_vertex(vertex_t *src, vertex_t *dest, int n);
 void matrix_perspective_transform_textured_vertex(textured_vertex_t *src, textured_vertex_t *dest, int n);
 

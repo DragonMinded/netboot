@@ -13,6 +13,12 @@ extern "C" {
 // once it is indeterminate what will display on the screen. It is recommended
 // not to interact with the video system across multiple threads.
 
+// Note that if you wish to mix TA/PVR rendering with the framebuffer rendering
+// functions found here, you should only do so after calling ta_render(). The
+// TA/PVR will overwrite the entire framebuffer during rendering so the only
+// safe time to render using software is after it is finished and before calling
+// video_display_on_vblank().
+
 // Defines for the color argument of the below function.
 #define VIDEO_COLOR_1555 2
 #define VIDEO_COLOR_8888 4
@@ -28,13 +34,17 @@ void video_free();
 
 // Wait for an appropriate time to swap buffers and then do so. Also fills
 // the next screen's background with a previously set background color if
-// a background color was set, while waiting for vblank to happen.
+// a background color was set, while waiting for vblank to happen. Releases
+// the current thread so other threads can continue processing as long as
+// threads are enabled. If threads are disabled, this will instead spinloop
+// until ready and no other work can get done.
 void video_display_on_vblank();
 
 // Request that every frame be cleared to this color (use rgb() or
 // rgba() to generate the color for this). Without this, you are
 // responsible for clearing previous-frame garbage using video_fill_screen()
-// or similar.
+// or similar. Note that if you are using the TA/PVR, you want to instead
+// us ta_set_background_color() as documented in ta.h.
 void video_set_background_color(color_t color);
 
 // The width in pixels of the drawable video area. This could change
@@ -50,11 +60,13 @@ unsigned int video_height();
 unsigned int video_depth();
 
 // The current framebuffer that we are rendering to, for instances where
-// you need direct access.
+// you need direct access. Note that this is uncached and in VRAM.
 void *video_framebuffer();
 
 // Scratch memory area in the VRAM region safe to modify without possibly
-// corrupting video contents.
+// corrupting video contents. Note that you have 128kb (1024 * 128) of
+// space here before you hit TA/PVR memory if you are rendering using
+// hardware acceleration.
 void *video_scratch_area();
 
 // Returns nonzero if the screen is in vertical orientation, or zero if
@@ -91,7 +103,9 @@ void video_draw_box(int x0, int y0, int x1, int y1, color_t color);
 // Given an x, y coordinate, a sprite width and height, and a packed chunk
 // of sprite data (should be video_depth() bytes per pixel in the sprite),
 // draws the sprite to the screen at that x, y position. This is orientation
-// aware and will skip drawing pixels with an alpha of 0.
+// aware and will skip drawing pixels with an alpha of 0. In VIDEO_COLOR_8888
+// mode this will perform software alpha-blending of the sprite with the
+// existing pixels in the framebuffer.
 void video_draw_sprite(int x, int y, int width, int height, void *data);
 
 // Draw a debug character, string or formatted string of a certain color to

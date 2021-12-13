@@ -20,7 +20,9 @@ void console_free();
 // manually call it for some reason.
 void console_render();
 
-// Show or hide an initialized console.
+// Show or hide an initialized console. Note that setting a console visibility to 0 will
+// make calls to console_render() into a no-op. Setting visibility to 0 will also cause
+// video_display_on_vblank() to skip rendering the console.
 void console_set_visible(unsigned int visible);
 
 #ifdef __cplusplus
