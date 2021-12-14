@@ -131,11 +131,46 @@ uint8_t *eeprom_serial();
 #define GAME_LEN_LOC_1 2
 #define GAME_LEN_LOC_2 3
 
-// API for working with raw eeprom chunks.
+// Given a chunk of raw data and a length in bytes, return the 16-bit
+// CRC over that data suitable for writing in an EEPROM.
 uint16_t eeprom_crc(uint8_t *data, unsigned int len);
-int eeprom_system_valid(uint8_t *data);
-int eeprom_game_valid(uint8_t *data);
+
+// Defines for the bank argument for the below functions.
+#define EEPROM_BANK_1 1
+#define EEPROM_BANK_2 2
+
+// Given a 128-byte EEPROM file in data, returns true if the system
+// chunk is valid for a given bank. Under normal circumstances, both
+// banks should be valid and contain the same data. However, if power
+// is lost during a write, one of the banks could become corrupted.
+int eeprom_system_valid(uint8_t *data, int bank);
+
+// Given a 128-byte EEPROM file in data, retursn true if the game
+// chunk is valid for a given bank. Much like the system chunk, this
+// should always be true for both banks unless there was a failure
+// mid-write. Note that a blank game section (All 0xFF) is not
+// considered a valid game EEPROM and will return false here.
+int eeprom_game_valid(uint8_t *data, int bank);
+
+// Given a 128-byte EEPROM file in data, returns true if the EEPROM
+// passes the syste and game validity checks for at least one bank.
+// Note that not necessarily the same bank might be bad during a failure
+// to write as they are addressed independently. Note also that if
+// the game section is blank, this is considered valid for the purpose
+// of verifying that an entire EEPROM image is acceptable or not.
 int eeprom_valid(uint8_t *data);
+
+// Given a 128-byte EEPROM file in data and a pointer to an eeprom_t
+// srtucture, parses the data from the EEPROM file into the parsed
+// eeprom_t structure. If a part of the EEPROM (either system or game)
+// has no valid bank it fills in the defaults for that bank. Otherwise
+// it fills in data from the first valid bank it finds.
+void parse_eeprom(uint8_t *data, eeprom_t *eeprom);
+
+// Given a 128-byte EEPROM file in data and a pointer to an eeprom_t
+// structure, updates the EEPROM file to contain the data in the
+// eeprom_t structure.
+void unparse_eeprom(uint8_t *data, eeprom_t *eeprom);
 
 #ifdef __cplusplus
 }
