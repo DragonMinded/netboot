@@ -22,11 +22,16 @@ extern "C" {
 typedef struct dirent
 {
     ino_t d_ino;
-    int d_type;
     char d_name[NAME_MAX + 1];
-    // TODO: Depending on what software is being ported, we might need
-    // to add a few more placeholder values here so it will compile.
+    // The following are not part of the POSIX specification but are often
+    // used by other software. So, present them here and do our best to
+    // fill them in. In particular, d_type is filled in with the entry
+    // type (file, directory, etc) as best we can.
+    unsigned char d_type;
 };
+
+// Advertise that we have the d_type extension.
+#define _DIRENT_HAVE_D_TYPE 1
 
 typedef struct
 {
