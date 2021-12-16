@@ -20,6 +20,12 @@
 
 #define DIM 0x8
 
+// Constant for how much room we have in our response buffer.
+#define RESPONSE_BUFFER_SIZE 1024
+
+// Constant for VT-100 escape character.
+#define VT100_ESCAPE 0x1B
+
 // Constants for the upper byte of render_attrs.
 #define REVERSE 0x100
 #define UNDERSCORE 0x200
@@ -42,6 +48,8 @@ static int last_escape_numbers[10] = { 0 };
 static void *cur_hooks = 0;
 static uint16_t saved_attr = 0;
 static int saved_pos = 0;
+static char *response_buffer = 0;
+static int response_pos = 0;
 
 #define TAB_WIDTH 4
 
@@ -49,6 +57,22 @@ static int saved_pos = 0;
     memmove(render_buffer, render_buffer + console_width, (console_width * (console_height - 1))); \
     memmove(render_attrs, render_attrs + console_width, sizeof(render_attrs[0]) * (console_width * (console_height - 1))); \
     pos -= console_width;
+
+static void __write_response( const char * const resp, unsigned int len )
+{
+    // Note, this expects interrupts to be disabled by the calling function to be
+    // thread-safe.
+    if (!response_buffer)
+    {
+        return;
+    }
+
+    if ((RESPONSE_BUFFER_SIZE - response_pos) >= len)
+    {
+        memcpy(&response_buffer[response_pos], resp, len);
+        response_pos += len;
+    }
+}
 
 static int __console_write( const char * const buf, unsigned int len )
 {
@@ -74,7 +98,21 @@ static int __console_write( const char * const buf, unsigned int len )
 
         if (cur_escape_flags & ESCAPE_FLAGS_PROCESSING)
         {
-            /* Process escape codes */
+            /* Process escape codes. There is a lot missing from here. For instance,
+             * there is no way to move the cursor up or down, left or right (A/B/C/D
+             * commands) or to a specific row/col (H/f commands). There is no support
+             * for non-wrapping mode ([7l command) nor is there support for alternate
+             * fonts. There is also no RGB color support and there is no proper
+             * screen scrollback buffer so therefore there is no scrolling support
+             * either (aside from auto-scrolling when you print into the last character).
+             * Erasing text, saving and loading the cursor position and a bunch of other
+             * basic but useful stuff like color/style/etc is all supported and used
+             * for various things like the on-target unit test stub.
+             *
+             * I'm not sure the omission of the rest of this stuff is a big deal. Its
+             * not like anyone is going to be porting curses over to an arcade platform
+             * (right....? right guys?) and the extended console is basicallly provided
+             * as a poppable debug console that is displayed on-target. */
             int done = 0;
             switch(buf[x])
             {
@@ -82,7 +120,12 @@ static int __console_write( const char * const buf, unsigned int len )
                 {
                     if (cur_escape_flags & ESCAPE_FLAGS_BRACKET)
                     {
-                        /* TODO: If we ever support stdin, report the device code here. */
+                        if (cur_escape_number == -1 || cur_escape_number == 0)
+                        {
+                            /* Report back base VT-100, no options. */
+                            char response[7] = { VT100_ESCAPE, '[', '?', '1', ';', '0', 'c' };
+                            __write_response(response, 7);
+                        }
                     }
                     else
                     {
@@ -208,11 +251,22 @@ static int __console_write( const char * const buf, unsigned int len )
                         switch(cur_escape_number)
                         {
                             case 5:
-                                /* TODO: A device status query was requested, send that back if we support stdin. */
+                            {
+                                char response[4] = { VT100_ESCAPE, '[', '0', 'n' };
+                                __write_response(response, 4);
                                 break;
+                            }
                             case 6:
-                                /* TODO: A cursor position query was requested, send that back if we support stdin. */
+                            {
+                                char response[64];
+                                int calccol = pos % console_width;
+                                int calcrow = pos / console_width;
+
+                                /* According to online searches, the home position is 1, 1. */
+                                sprintf(response, "%c[%d;%dR", VT100_ESCAPE, calcrow + 1, calccol + 1);
+                                __write_response(response, strlen(response));
                                 break;
+                            }
                         }
                     }
                     done = 1;
@@ -225,7 +279,8 @@ static int __console_write( const char * const buf, unsigned int len )
                         switch(cur_escape_number)
                         {
                             case 7:
-                                /* TODO: Enable line wrap, we don't support nonwrap mode. */
+                                /* Enable line wrap, we don't support nonwrap mode, so just
+                                 * ignore this altogether. */
                                 break;
                         }
                     }
@@ -239,7 +294,8 @@ static int __console_write( const char * const buf, unsigned int len )
                         switch(cur_escape_number)
                         {
                             case 7:
-                                /* TODO: Disable line wrap, we don't support nonwrap mode. */
+                                /* Disable line wrap, we don't support nonwrap mode, so just
+                                 * ignore this altogether. */
                                 break;
                         }
                     }
@@ -501,7 +557,7 @@ static int __console_write( const char * const buf, unsigned int len )
                     }
                     break;
                 }
-                case 0x1B:
+                case VT100_ESCAPE:
                 {
                     /* Escape sequence start */
                     cur_escape_flags = ESCAPE_FLAGS_PROCESSING;
@@ -532,10 +588,55 @@ static int __console_write( const char * const buf, unsigned int len )
     return len;
 }
 
+static int __console_read(char * const data, unsigned int len)
+{
+    uint32_t old_interrupts = irq_disable();
+    if (len == 0)
+    {
+        // Nothing requested for reading.
+        irq_restore(old_interrupts);
+        return 0;
+    }
+    if (response_pos == 0)
+    {
+        // Nothing to read.
+        irq_restore(old_interrupts);
+        return 0;
+    }
+    if (len > response_pos)
+    {
+        // We want more data than is available, cap it off.
+        len = response_pos;
+    }
+
+    // Copy the buffer amount to data as the "read".
+    memcpy(data, response_buffer, len);
+
+    // Move the rest of the data and mark it as read.
+    if (len < RESPONSE_BUFFER_SIZE)
+    {
+        memmove(&response_buffer[0], &response_buffer[len], RESPONSE_BUFFER_SIZE - len);
+    }
+    response_pos -= len;
+
+    // Inform the caller that we returned some data.
+    irq_restore(old_interrupts);
+    return len;
+}
+
 void console_init(unsigned int overscan)
 {
     if (!render_buffer || !render_attrs)
     {
+        /* Get memory for response buffer */
+        response_buffer = malloc(RESPONSE_BUFFER_SIZE);
+        if (response_buffer == 0)
+        {
+            _irq_display_invariant("malloc failure", "failed to allocate memory for console!");
+        }
+        memset(response_buffer, 0, RESPONSE_BUFFER_SIZE);
+        response_pos = 0;
+
         /* Calculate size of the console */
         console_width = (video_width() - (overscan * 2)) / 8;
         console_height = (video_height() - (overscan * 2)) / 8;
@@ -564,24 +665,27 @@ void console_init(unsigned int overscan)
         saved_pos = console_pos;
 
         /* Register ourselves with newlib */
-        stdio_t console_calls = { 0, __console_write, 0 };
+        stdio_t console_calls = { __console_read, __console_write, 0 };
         cur_hooks = hook_stdio_calls( &console_calls );
     }
 }
 
 void console_free()
 {
-    if (render_buffer && render_attrs)
+    if (response_buffer && render_buffer && render_attrs)
     {
         /* Nuke the console buffer */
+        free(response_buffer);
         free(render_buffer);
         free(render_attrs);
 
+        response_buffer = 0;
         render_buffer = 0;
         render_attrs = 0;
         console_width = 0;
         console_height = 0;
         console_pos = 0;
+        response_pos = 0;
         cur_attr = 0;
         cur_escape_flags = 0;
 
