@@ -20,14 +20,13 @@ static uint32_t saved_vbr;
 static int halted;
 
 // Whether we're in the IRQ handler currently or not.
-static int in_interrupt;
+int _irq_in_interrupt;
 
 // Size we wish our stack to be.
 #define IRQ_STACK_SIZE 16384
 
 // Definitions from sh-crt0.s that we use here.
 extern uint8_t *irq_stack;
-extern irq_state_t *irq_state;
 static irq_state_t *irq_freed_state = 0;
 
 #define TRA *((volatile uint32_t *)0xFF000020)
@@ -73,7 +72,6 @@ int _dimm_command_handler(int halted, irq_state_t *cur_state);
 // Prototypes of functions we don't want in the public headers.
 void _irq_set_vector_table();
 int _timer_interrupt(int timer);
-uint32_t _irq_enable();
 uint32_t _irq_read_sr();
 uint32_t _irq_read_vbr();
 
@@ -130,37 +128,10 @@ void _irq_display_exception(int signal, irq_state_t *cur_state, char *failure, i
     }
 }
 
-// Syscall for capturing registers if we need it.
-#define _irq_capture_regs() asm("trapa #254")
-
 void _irq_display_invariant(char *msg, char *failure, ...)
 {
-    // Force thread system to only ever run us from now on.
-    _thread_disable_switching();
-
-    // Make sure that interrupts are already initialized. If not, we have no chance
-    // of capturing proper stack traces.
-    if (irq_state != 0)
-    {
-        // We only care to do anything below if we aren't in interrupt context. If
-        // we are, we already have the correct stack trace in irq_state so we don't
-        // need to do any gymnastics to get registers so GDB can perform backtraces.
-        if (!in_interrupt)
-        {
-            if (_irq_is_disabled(_irq_get_sr()))
-            {
-                // Re-enable interrupts so that we can call a syscall to force the
-                // current register block to be correct. This ensures that stack
-                // traces are correct even when interrupts are disabled when we hit
-                // an invariant call.
-                _irq_enable();
-            }
-
-            // Capture registers for backtraces to make sense if we were called
-            // in user context instead of interrupt context.
-            _irq_capture_regs();
-        }
-    }
+    // Grab the registers at this point of the failure.
+    _irq_capture_regs(0);
 
     // Threads should normally already be disabled, but lets be sure.
     irq_disable();
@@ -515,7 +486,7 @@ irq_state_t * _irq_external_interrupt(irq_state_t *cur_state)
 void _irq_handler(uint32_t source)
 {
     // Mark that we're in interrupt context.
-    in_interrupt = 1;
+    _irq_in_interrupt = 1;
 
     // Keep track of stats for debugging purposes.
     stats.last_source = source;
@@ -539,7 +510,7 @@ void _irq_handler(uint32_t source)
     }
 
     // No longer need to mark this.
-    in_interrupt = 0;
+    _irq_in_interrupt = 0;
 }
 
 void _irq_init()
@@ -559,7 +530,7 @@ void _irq_init()
 
     // Make sure we aren't halted.
     halted = 0;
-    in_interrupt = 0;
+    _irq_in_interrupt = 0;
     disable_debugging = 0;
 
     // Initialize our stats.

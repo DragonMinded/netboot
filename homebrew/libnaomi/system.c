@@ -1,5 +1,6 @@
 #include <signal.h>
 #include <string.h>
+#include <setjmp.h>
 #include "naomi/system.h"
 #include "naomi/interrupt.h"
 #include "naomi/thread.h"
@@ -49,18 +50,38 @@ void _gdb_set_haltreason(int reason);
 // debug us properly.
 int _dimm_command_handler(int halted, irq_state_t *cur_state);
 
+static irq_state_t exit_state;
+static jmp_buf exit_env;
+static void (*requested_call)();
+
+void _save_exit_stack(int exitstatus)
+{
+    // Just call out to the IRQ function that saves state. GDB will show the
+    // exitstatus local as a parameter in the function backtrace.
+    _irq_capture_regs(&exit_state);
+}
+
 void _exit(int status)
 {
-    // TODO: Make sure if a user connects with GDB, the backtrace points at
-    // our function call here.
-    irq_state_t state;
-    memset(&state, 0, sizeof(state));
-    state.pc = (uint32_t)&_exit;
+    // Save system registers at this point, so stack traces make sense
+    // if we get here. This will also re-enable interrupts but with the
+    // current thread forced as the only thread.
+    _save_exit_stack(status);
 
+    // We don't want to call anything unamanaged, this is a normal exit.
+    requested_call = 0;
+
+    // Go back to our spot in the main thread right before
+    // calling main, so that we can safely shut down.
+    longjmp(exit_env, 1);
+}
+
+void _halt()
+{
     // We don't have an OS to "go back to", so just infinite-loop.
     while( 1 )
     {
-        int halted = _dimm_command_handler(halted, &state);
+        int halted = _dimm_command_handler(halted, &exit_state);
         if (halted == 0)
         {
             // User continued, not valid, so re-raise the exception.
@@ -107,6 +128,14 @@ void _startup()
 
 void _shutdown()
 {
+    // Run fini sections.
+    uint32_t *dtor_ptr = &__dtors;
+    while (dtor_ptr < &__dtors_end)
+    {
+        (*((func_ptr *)dtor_ptr))();
+        dtor_ptr++;
+    }
+
     // Free anything that was possibly initialized by the user.
     audio_free();
     video_free();
@@ -119,14 +148,6 @@ void _shutdown()
     _maple_free();
     _thread_free();
     _timer_free();
-
-    // Run fini sections.
-    uint32_t *dtor_ptr = &__dtors;
-    while (dtor_ptr < &__dtors_end)
-    {
-        (*((func_ptr *)dtor_ptr))();
-        dtor_ptr++;
-    }
 }
 
 void _enter()
@@ -159,21 +180,35 @@ void _enter()
 
     // Execute main/test executable based on boot variable set in
     // sh-crt0.s which comes from the entrypoint used to start the code.
-    int status;
-    if(_boot_mode == 0)
+    if (!setjmp(exit_env))
     {
-        status = main();
-    }
-    else
-    {
-        status = test();
+        int status;
+        if(_boot_mode == 0)
+        {
+            status = main();
+        }
+        else
+        {
+            status = test();
+        }
+
+        // Save system registers at this point, so stack traces make sense
+        // if we get here.
+        _save_exit_stack(status);
     }
 
     // Shut everything down in reverse order.
     _shutdown();
 
-    // Finally, exit from the program.
-    _exit(status);
+    // If there was a requested unmanaged call, do it here.
+    if (requested_call)
+    {
+        requested_call();
+    }
+
+    // Finally, halt execution forever in a spinloop that accepts GDB connections
+    // in case somebody is trying to figure out why their code stopped.
+    _halt();
 }
 
 int hw_memset(void *addr, uint32_t value, unsigned int amount)
@@ -368,14 +403,17 @@ int hw_memcpy(void *dest, void *src, unsigned int amount)
 
 void call_unmanaged(void (*call)())
 {
-    // Initiate kernel shutdown.
-    _shutdown();
+    // Save system registers at this point, so stack traces make sense
+    // if we try to debug after an unmanaged call.
+    _irq_capture_regs(&exit_state);
 
-    // Call the unmanaged function.
-    call();
+    // Request that the startup code call this after tearing
+    // down the system.
+    requested_call = call;
 
-    // Finally, exit from the program if it ever returns.
-    _exit(0);
+    // Go back to our spot in the main thread right before
+    // calling main, so that we can safely shut down.
+    longjmp(exit_env, 1);
 }
 
 void enter_test_mode()
