@@ -902,8 +902,8 @@ void ta_texture_desc_free(texture_description_t *desc)
 
 void ta_fill_box(uint32_t type, vertex_t *verticies, color_t color)
 {
-    struct polygon_list_sprite mypoly;
-    struct vertex_list_sprite myvertex;
+    struct polygon_list_quad mypoly;
+    struct vertex_list_quad myvertex;
 
     mypoly.cmd =
         TA_CMD_SPRITE |
@@ -1131,10 +1131,10 @@ uint32_t _ta_16bit_uv(float uv)
     return ((f2i.i) >> 16) & 0xFFFF;
 }
 
-void ta_draw_sprite(uint32_t type, textured_vertex_t *verticies, texture_description_t *texture)
+void ta_draw_quad(uint32_t type, textured_vertex_t *verticies, texture_description_t *texture)
 {
-    struct polygon_list_sprite mypoly;
-    struct vertex_list_sprite myvertex;
+    struct polygon_list_quad mypoly;
+    struct vertex_list_quad myvertex;
 
     mypoly.cmd =
         TA_CMD_SPRITE |
@@ -1198,7 +1198,7 @@ void ta_draw_sprite(uint32_t type, textured_vertex_t *verticies, texture_descrip
     ta_commit_list(&myvertex, TA_LIST_LONG);
 }
 
-void ta_draw_sprite_uv(uint32_t type, vertex_t *verticies, uv_t *texcoords, texture_description_t *texture)
+void ta_draw_quad_uv(uint32_t type, vertex_t *verticies, uv_t *texcoords, texture_description_t *texture)
 {
     // This might be faster if we just copy-pasta'd the above algorithm here and accessed
     // both uvcoords and verticies directly. Might be worth it to squeeze more speed out
@@ -1209,5 +1209,5 @@ void ta_draw_sprite_uv(uint32_t type, vertex_t *verticies, uv_t *texcoords, text
         { verticies[2].x, verticies[2].y, verticies[2].z, texcoords[2].u, texcoords[2].v },
         { verticies[3].x, verticies[3].y, verticies[3].z, texcoords[3].u, texcoords[3].v },
     };
-    ta_draw_sprite(type, real, texture);
+    ta_draw_quad(type, real, texture);
 }

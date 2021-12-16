@@ -200,7 +200,7 @@ void main()
         matrix_affine_transform_textured_vertex(sprite, sprite, 4);
 
         /* Draw the sprite to the screen. */
-        ta_draw_sprite(TA_CMD_POLYGON_TYPE_TRANSPARENT, sprite, tex[6]);
+        ta_draw_quad(TA_CMD_POLYGON_TYPE_TRANSPARENT, sprite, tex[6]);
 
         /* Mark the end of the command list */
         ta_commit_end();

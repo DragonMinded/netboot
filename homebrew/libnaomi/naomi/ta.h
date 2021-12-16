@@ -56,17 +56,17 @@ struct polygon_list_intensity
 /*
  * Command: Polygon / Modifier volume
  *
- * Usable with textured and untextured sprites (quads with no perspective).
+ * Usable with textured and untextured quads with no perspective.
  */
-struct polygon_list_sprite
+struct polygon_list_quad
 {
     unsigned int cmd;
     unsigned int mode1;
     unsigned int mode2;
-    /* When using untextured sprites, the texture word is left at 0 */
+    /* When using untextured quads, the texture word is left at 0 */
     unsigned int texture;
     unsigned int mult_color;
-    /* When using untextured sprites, the additive color is ignored */
+    /* When using untextured quads, the additive color is ignored */
     unsigned int add_color;
     int not_used[2];
 };
@@ -102,9 +102,9 @@ struct vertex_list_packed_color_32bit_uv
 /*
  * Command: Vertex
  *
- * Usable with both textured and untextured sprites.
+ * Usable with both textured and untextured quads.
  */
-struct vertex_list_sprite
+struct vertex_list_quad
 {
     unsigned int cmd;
     float ax;
@@ -118,7 +118,7 @@ struct vertex_list_sprite
     float cz;
     float dx;
     float dy;
-    /* Only used for textured sprites. For untextured,
+    /* Only used for textured quads. For untextured,
      * these four are ignored. */
     int not_used;
     unsigned int au_av;
@@ -432,8 +432,8 @@ void ta_fill_box(uint32_t type, vertex_t *verticies, color_t color);
 // with a particular texture. All caveats and conditions from above apply here, but
 // the box is drawn textured instead of filled. Note that these are monitor orientation
 // aware.
-void ta_draw_sprite(uint32_t type, textured_vertex_t *verticies, texture_description_t *texture);
-void ta_draw_sprite_uv(uint32_t type, vertex_t *verticies, uv_t *texcoords, texture_description_t *texture);
+void ta_draw_quad(uint32_t type, textured_vertex_t *verticies, texture_description_t *texture);
+void ta_draw_quad_uv(uint32_t type, vertex_t *verticies, uv_t *texcoords, texture_description_t *texture);
 
 // Draw a triangle strip consisting of striplen TA_CMD_POLYGON_STRIPLENGTH_1,
 // TA_CMD_POLYGON_STRIPLENGTH_2, TA_CMD_POLYGON_STRIPLENGTH_4 or TA_CMD_POLYGON_STRIPLENGTH_6.

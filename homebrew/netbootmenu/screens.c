@@ -538,7 +538,7 @@ void display_sprite(int x, int y, texture_description_t *texture)
     };
 
     /* Draw the sprite to the screen. */
-    ta_draw_sprite(TA_CMD_POLYGON_TYPE_TRANSPARENT, sprite, texture);
+    ta_draw_quad(TA_CMD_POLYGON_TYPE_TRANSPARENT, sprite, texture);
 }
 
 void display_filled_box(int x0, int y0, int x1, int y1, color_t color)

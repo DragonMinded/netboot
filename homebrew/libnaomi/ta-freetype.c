@@ -203,11 +203,11 @@ void _ta_draw_cached_bitmap_horiz(int x, int y, unsigned int width, unsigned int
             { (float)(x + high_x), (float)(y + high_y), 1.0, uhigh, vhigh },
         };
 
-        // This doesn't use the sprite draw routines as it is slightly different
-        // (modulates the color against an all-white sprite instead of just using
+        // This doesn't use the quad draw routines as it is slightly different
+        // (modulates the color against an all-white quad instead of just using
         // decal mode).
-        struct polygon_list_sprite mypoly;
-        struct vertex_list_sprite myvertex;
+        struct polygon_list_quad mypoly;
+        struct vertex_list_quad myvertex;
 
         mypoly.cmd =
             TA_CMD_SPRITE |
@@ -314,11 +314,11 @@ void _ta_draw_cached_bitmap_vert(int x, int y, unsigned int width, unsigned int 
             { (float)(x + high_x), (float)(y + high_y), 1.0, uhigh, vhigh },
         };
 
-        // This doesn't use the sprite draw routines as it is slightly different
-        // (modulates the color against an all-white sprite instead of just using
+        // This doesn't use the quad draw routines as it is slightly different
+        // (modulates the color against an all-white quad instead of just using
         // decal mode).
-        struct polygon_list_sprite mypoly;
-        struct vertex_list_sprite myvertex;
+        struct polygon_list_quad mypoly;
+        struct vertex_list_quad myvertex;
 
         mypoly.cmd =
             TA_CMD_SPRITE |
