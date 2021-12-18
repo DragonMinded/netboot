@@ -16,7 +16,7 @@ START_ADDR = 0xDFC0000
 BARE_METAL = 1
 
 # Pick up base makefile rules so we don't have to rewrite the makefile from scratch.
-include ../Makefile.base
+include ${NAOMI_BASE}/tools/Makefile.base
 
 # We don't put a header on the raw binary since we will just shove it into an existing ROM.
 settingstrojan.bin: build/naomi.bin

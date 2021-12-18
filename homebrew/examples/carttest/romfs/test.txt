@@ -1,1 +1,0 @@
-This is read from a ROMFS file!

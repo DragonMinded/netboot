@@ -27,7 +27,7 @@ LIBS += -lnaomimessage -lfreetype -lbz2 -lz -lpng16
 SERIAL = BRP0
 
 # Pick up base makefile rules common to all examples.
-include ../Makefile.base
+include ${NAOMI_BASE}/tools/Makefile.base
 
 # Specific buildrule for PNG files for this project. Note that these
 # *MUST* be a multiple of 8 both in width and height.
