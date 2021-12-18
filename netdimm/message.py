@@ -18,17 +18,21 @@ CONFIG_REGISTER: int = 0xC0DE40
 SCRATCH1_REGISTER: int = 0xC0DE50
 SCRATCH2_REGISTER: int = 0xC0DE60
 
+SEND_STATUS_REGISTER_SEED: int = 3
+RECV_STATUS_REGISTER_SEED: int = 7
+CONFIG_REGISTER_SEED: int = 19
+
 CONFIG_MESSAGE_EXISTS: int = 0x00000001
 CONFIG_MESSAGE_HAS_ZLIB: int = 0x00000002
 
 
-def checksum_valid(data: int) -> bool:
-    sumval = (data & 0xFF) + ((data >> 8) & 0xFF) + ((data >> 16) & 0xFF)
+def checksum_valid(data: int, seed: int) -> bool:
+    sumval = (data & 0xFF) + ((data >> 8) & 0xFF) + ((data >> 16) & 0xFF) + seed
     return ((data >> 24) & 0xFF) == ((~sumval) & 0xFF)
 
 
-def checksum_stamp(data: int) -> int:
-    sumval = (data & 0xFF) + ((data >> 8) & 0xFF) + ((data >> 16) & 0xFF)
+def checksum_stamp(data: int, seed: int) -> int:
+    sumval = (data & 0xFF) + ((data >> 8) & 0xFF) + ((data >> 16) & 0xFF) + seed
     return (((~sumval) & 0xFF) << 24) | (data & 0x00FFFFFF)
 
 
@@ -63,7 +67,7 @@ def read_send_status_register(netdimm: NetDimm) -> Optional[int]:
             while status == 0 or status == 0xFFFFFFFF and (time.time() - start <= MAX_READ_TIMEOUT):
                 status = netdimm.peek(SEND_STATUS_REGISTER, PeekPokeTypeEnum.TYPE_LONG)
 
-            valid = checksum_valid(status)
+            valid = checksum_valid(status, SEND_STATUS_REGISTER_SEED)
             if not valid and (time.time() - start > MAX_READ_TIMEOUT):
                 return None
 
@@ -72,7 +76,7 @@ def read_send_status_register(netdimm: NetDimm) -> Optional[int]:
 
 def write_send_status_register(netdimm: NetDimm, value: int) -> None:
     with netdimm.connection():
-        netdimm.poke(SEND_STATUS_REGISTER, PeekPokeTypeEnum.TYPE_LONG, checksum_stamp(value))
+        netdimm.poke(SEND_STATUS_REGISTER, PeekPokeTypeEnum.TYPE_LONG, checksum_stamp(value, SEND_STATUS_REGISTER_SEED))
 
 
 def read_recv_status_register(netdimm: NetDimm) -> Optional[int]:
@@ -86,7 +90,7 @@ def read_recv_status_register(netdimm: NetDimm) -> Optional[int]:
             while status == 0 or status == 0xFFFFFFFF and (time.time() - start <= MAX_READ_TIMEOUT):
                 status = netdimm.peek(RECV_STATUS_REGISTER, PeekPokeTypeEnum.TYPE_LONG)
 
-            valid = checksum_valid(status)
+            valid = checksum_valid(status, RECV_STATUS_REGISTER_SEED)
             if not valid and (time.time() - start > MAX_READ_TIMEOUT):
                 return None
 
@@ -95,7 +99,7 @@ def read_recv_status_register(netdimm: NetDimm) -> Optional[int]:
 
 def write_recv_status_register(netdimm: NetDimm, value: int) -> None:
     with netdimm.connection():
-        netdimm.poke(RECV_STATUS_REGISTER, PeekPokeTypeEnum.TYPE_LONG, checksum_stamp(value))
+        netdimm.poke(RECV_STATUS_REGISTER, PeekPokeTypeEnum.TYPE_LONG, checksum_stamp(value, RECV_STATUS_REGISTER_SEED))
 
 
 def read_config_register(netdimm: NetDimm) -> Optional[int]:
@@ -109,7 +113,7 @@ def read_config_register(netdimm: NetDimm) -> Optional[int]:
             while config == 0 or config == 0xFFFFFFFF and (time.time() - start <= MAX_READ_TIMEOUT):
                 config = netdimm.peek(CONFIG_REGISTER, PeekPokeTypeEnum.TYPE_LONG)
 
-            valid = checksum_valid(config)
+            valid = checksum_valid(config, CONFIG_REGISTER_SEED)
             if not valid and (time.time() - start > MAX_READ_TIMEOUT):
                 return None
 
