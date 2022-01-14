@@ -4,6 +4,7 @@
 import argparse
 import enum
 import sys
+import time
 from arcadeutils import FileBytes, BinaryDiff
 from netboot import TargetEnum
 from netdimm import NetDimm, NetDimmVersionEnum
@@ -109,6 +110,13 @@ def main() -> int:
         help="Disable displaying the \"NOW LOADING...\" screen when sending the game",
     )
 
+    # Prevent ERROR 33 GATEWAY IS NOT FOUND due to bad, or missing PIC chip.
+    parser.add_argument(
+        '--keyless-boot',
+        action="store_true",
+        help="Enable boot without Key Chip, by using the 'time hack'",
+    )
+
     args = parser.parse_args()
 
     # If the user specifies a key (not normally done), convert it
@@ -150,6 +158,11 @@ def main() -> int:
         netdimm.reboot()
         print("ok!", file=sys.stderr)
 
+        if args.keyless_boot:
+            print("keyless boot: infinite set_time_limit() loop")
+            while True:
+                netdimm.set_time_limit()
+                time.sleep(5)
     return 0
 
 
