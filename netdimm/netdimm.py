@@ -233,7 +233,7 @@ class NetDimm:
 
     def set_time_limit(self, limit: int) -> None:
         with self.connection():
-            # set time limit to 10 minutes.
+            # set time limit to specified number of minutes.
             self.__set_time_limit(limit)
 
     def peek(self, addr: int, type: PeekPokeTypeEnum) -> int:
