@@ -161,7 +161,7 @@ def main() -> int:
         if args.keyless_boot:
             print("keyless boot: infinite set_time_limit() loop")
             while True:
-                netdimm.set_time_limit()
+                netdimm.set_time_limit(10)
                 time.sleep(5)
     return 0
 
