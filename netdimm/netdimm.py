@@ -2,6 +2,7 @@
 # Triforce Netfirm Toolbox, put into the public domain.
 # Please attribute properly, but only if you want.
 import os
+import sys
 import socket
 import struct
 import time
@@ -285,9 +286,15 @@ class NetDimm:
         # - pre-type3 triforces jumpered to satellite mode.
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.sock.settimeout(1)
-            self.sock.connect((self.ip, 10703))
-            self.sock.settimeout(10)
+            if sys.platform == 'darwin':
+                self.sock.settimeout(15)
+                self.sock.setblocking(True)
+                self.sock.connect((self.ip, 10703))
+            else:
+                self.sock.settimeout(1)
+                self.sock.connect((self.ip, 10703))
+                self.sock.settimeout(10)
+
         except Exception as e:
             raise NetDimmException("Could not connect to NetDimm") from e
 
