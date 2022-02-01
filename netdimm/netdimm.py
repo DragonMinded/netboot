@@ -286,7 +286,19 @@ class NetDimm:
         # - pre-type3 triforces jumpered to satellite mode.
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            if sys.platform == 'darwin':
+
+            # OSX can be a bit difficult to deal with. It appears that their handling of
+            # socket timeouts differs enough from Linux-based systems that we need our
+            # own code path. Specifically, I don't think that it respects timeouts set
+            # after a connection has been made. Without this, OSX-based systems will
+            # time out when trying to reboot and send a game. Note that this behavior
+            # has been seen on some niche Linux-based OSes as well, so I am including an
+            # environment-based escape hatch to enable/disable this just in case. If you
+            # are on OSX the alternate timeout handling will be automatically enabled unless
+            # you set the 'DEFAULT_TIMEOUT_HANDLING' environment variable. If you are not
+            # on OSX and you set 'ALTERNATE_TIMEOUT_HANDLING' the alternate will be enabled
+            # as well.
+            if (sys.platform == 'darwin' or os.environ.get('ALTERNATE_TIMEOUT_HANDLING')) and (not os.environ.get('DEFAULT_TIMEOUT_HANDLING')):
                 self.sock.settimeout(15)
                 self.sock.setblocking(True)
                 self.sock.connect((self.ip, 10703))
