@@ -305,7 +305,7 @@ class NetDimm:
             else:
                 self.sock.settimeout(1)
                 self.sock.connect((self.ip, 10703))
-                self.sock.settimeout(10)
+                self.sock.settimeout(15)
 
         except Exception as e:
             raise NetDimmException("Could not connect to NetDimm") from e

@@ -540,9 +540,7 @@ def main() -> int:
 
                                     settingdata += struct.pack("<I", setting.current or setting.default or 0)
 
-                                    if setting.read_only is True:
-                                        settingdata += struct.pack("<i", READ_ONLY_ALWAYS)
-                                    elif setting.read_only is False:
+                                    if setting.read_only is False:
                                         settingdata += struct.pack("<i", READ_ONLY_NEVER)
                                     elif isinstance(setting.read_only, ReadOnlyCondition):
                                         settingdata += struct.pack("<iII", setting_map[setting.read_only.name], 1 if setting.read_only.negate else 0, len(setting.read_only.values))
