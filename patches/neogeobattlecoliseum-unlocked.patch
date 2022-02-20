@@ -1,0 +1,6 @@
+# Description: Force Unlocked
+# File size: 251658240
+B9E6C: 3E 8B -> 09 00
+B9E84: 01 89 -> 09 00
+11D6D8: 02 8B -> 09 00
+16DF00: 90 67 8E 67 D0 66 CE 66 90 07 -> 75 F9 21 02 B6 83 A1 83 2D 2C
