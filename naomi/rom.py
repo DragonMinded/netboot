@@ -244,11 +244,21 @@ class NaomiRom:
         sections: Dict[NaomiRomRegionEnum, NaomiEEPROMDefaults] = {}
         texts: List[str] = self.sequencetexts
 
+        # It turns out that somebody tagged some of the Atomiswave conversions
+        # floating around the internet, so we must do error checking here to
+        # avoid their garbage in the header.
+        def get_text(val: int) -> str:
+            try:
+                return texts[val]
+            except IndexError:
+                return texts[0]
+
         # The following list must remain sorted in order to output correctly.
         for region in [
             NaomiRomRegionEnum.REGION_JAPAN, NaomiRomRegionEnum.REGION_USA, NaomiRomRegionEnum.REGION_EXPORT, NaomiRomRegionEnum.REGION_KOREA, NaomiRomRegionEnum.REGION_AUSTRALIA
         ]:
             location = 0x1E0 + (0x10 * region.value)
+            sequences = [get_text(self._sanitize_uint8(location + 8 + x)) for x in range(8)]
 
             sections[region] = NaomiEEPROMDefaults(
                 region=region,
@@ -261,7 +271,7 @@ class NaomiRom:
                 coin_2_rate=self._sanitize_uint8(location + 5),
                 credit_rate=self._sanitize_uint8(location + 6),
                 bonus=self._sanitize_uint8(location + 7),
-                sequences=[texts[self._sanitize_uint8(location + 8 + x)] for x in range(8)],
+                sequences=sequences,
             )
         return sections
 
