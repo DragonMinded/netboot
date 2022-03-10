@@ -1,0 +1,14 @@
+# Description: force free-play
+# File size: 204394496
+# Force this patch to only apply to the correct serial
+134: 42 45 4D 41 -> 42 45 4D 41
+1E0: * -> 01
+1E3: 01 -> 1B
+1F0: * -> 01
+1F3: 01 -> 1B
+200: * -> 01
+203: 01 -> 1B
+210: * -> 01
+213: 01 -> 1B
+220: * -> 01
+223: 01 -> 1B

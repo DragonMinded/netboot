@@ -1,0 +1,11 @@
+# Description: force silent attract mode
+# File size: 247736320
+# Force this patch to only apply to the correct serial
+134: 42 46 4B 41 -> 42 46 4B 41
+1E0: * -> 01
+1E1: 00 -> 02
+1F0: * -> 01
+200: * -> 01
+201: 00 -> 02
+210: * -> 01
+220: * -> 01
