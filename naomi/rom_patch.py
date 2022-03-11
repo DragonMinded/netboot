@@ -1,7 +1,6 @@
 #! /usr/bin/env python3
 import os
 import struct
-from enum import Enum
 from typing import Generic, Optional, Tuple, TypeVar, Union, cast, overload
 
 from arcadeutils import FileBytes
@@ -354,12 +353,6 @@ class NaomiSettingsInfo:
         self.date = NaomiSettingsDate(date[0], date[1], date[2])
 
 
-class NaomiSettingsTypeEnum(Enum):
-    TYPE_NONE = 0
-    TYPE_EEPROM = 1
-    TYPE_SRAM = 2
-
-
 BytesLike = TypeVar("BytesLike", bound=Union[bytes, FileBytes])
 
 
@@ -383,7 +376,8 @@ class NaomiSettingsPatcher(Generic[BytesLike]):
         if trojan is not None and len(trojan) > NaomiSettingsPatcher.MAX_TROJAN_SIZE:
             raise Exception("Logic error! Adjust the max trojan size to match the compiled tojan!")
         self.__rom: Optional[NaomiRom] = None
-        self.__type: Optional[NaomiSettingsTypeEnum] = None
+        self.__has_sram: Optional[bool] = None
+        self.__has_eeprom: Optional[bool] = None
 
     @property
     def data(self) -> BytesLike:
@@ -406,32 +400,13 @@ class NaomiSettingsPatcher(Generic[BytesLike]):
         return naomi
 
     @property
-    def type(self) -> NaomiSettingsTypeEnum:
-        if self.__type is None:
-            # First, try looking at the start address of any executable sections.
-            naomi = self.__rom or NaomiRom(self.__data)
-            self.__rom = naomi
-
-            for section in naomi.main_executable.sections:
-                if section.load_address == self.SRAM_LOCATION and section.length == self.SRAM_SIZE:
-                    self.__type = NaomiSettingsTypeEnum.TYPE_SRAM
-                    break
-            else:
-                if self.info is not None:
-                    # This is for sure an EEPROM settings, we only get info about the
-                    # settings for EEPROM type since it is an executable with configuration.
-                    self.__type = NaomiSettingsTypeEnum.TYPE_EEPROM
-                else:
-                    # We have no settings attached.
-                    self.__type = NaomiSettingsTypeEnum.TYPE_NONE
-
-        # Now, return the calculated type.
-        if self.__type is None:
-            raise Exception("Logic error!")
-        return self.__type
+    def has_eeprom(self) -> bool:
+        if self.__has_eeprom is None:
+            self.__has_eeprom = (self.eeprom_info is not None)
+        return self.__has_eeprom
 
     @property
-    def info(self) -> Optional[NaomiSettingsInfo]:
+    def eeprom_info(self) -> Optional[NaomiSettingsInfo]:
         # Parse the ROM header so we can narrow our search.
         naomi = self.__rom or NaomiRom(self.__data)
         self.__rom = naomi
@@ -456,7 +431,7 @@ class NaomiSettingsPatcher(Generic[BytesLike]):
 
         return None
 
-    def get_settings(self) -> Optional[bytes]:
+    def get_eeprom(self) -> Optional[bytes]:
         # Parse the ROM header so we can narrow our search.
         naomi = self.__rom or NaomiRom(self.__data)
         self.__rom = naomi
@@ -464,15 +439,6 @@ class NaomiSettingsPatcher(Generic[BytesLike]):
         # Only look at main executables.
         executable = naomi.main_executable
         for sec in executable.sections:
-            # First, check and see if it is a SRAM settings.
-            if sec.load_address == self.SRAM_LOCATION and sec.length == self.SRAM_SIZE:
-                # It is!
-                if self.__type is None:
-                    self.__type = NaomiSettingsTypeEnum.TYPE_SRAM
-                elif self.__type != NaomiSettingsTypeEnum.TYPE_SRAM:
-                    raise Exception("Logic error!")
-                return self.__data[sec.offset:(sec.offset + sec.length)]
-
             # Constrain the search to the section that we jump to, since that will always
             # be where our trojan is.
             if executable.entrypoint >= sec.load_address and executable.entrypoint < (sec.load_address + sec.length):
@@ -484,73 +450,97 @@ class NaomiSettingsPatcher(Generic[BytesLike]):
                     # entrypoint will be the old trojan EXE.
                     get_config(self.__data, start=sec.offset, end=sec.offset + sec.length)
 
-                    # Returns the requested EEPRom settings that should be written prior
-                    # to the game starting.
+                    # Returns the requested EEPRom that should be written prior to the game starting.
                     for i in range(sec.offset, sec.offset + sec.length - (self.EEPROM_SIZE - 1)):
                         if NaomiEEPRom.validate(self.__data[i:(i + self.EEPROM_SIZE)], serial=naomi.serial):
-                            if self.__type is None:
-                                self.__type = NaomiSettingsTypeEnum.TYPE_EEPROM
-                            elif self.__type != NaomiSettingsTypeEnum.TYPE_EEPROM:
-                                raise Exception("Logic error!")
+                            self.__has_eeprom = True
                             return self.__data[i:(i + self.EEPROM_SIZE)]
                 except Exception:
                     pass
 
         # Couldn't find a section that matched.
-        if self.__type is None:
-            self.__type = NaomiSettingsTypeEnum.TYPE_NONE
-        elif self.__type != NaomiSettingsTypeEnum.TYPE_NONE:
-            raise Exception("Logic error!")
+        self.__has_eeprom = False
         return None
 
-    def put_settings(self, settings: bytes, *, enable_debugging: bool = False, verbose: bool = False) -> None:
+    def put_eeprom(self, eeprom: bytes, *, enable_debugging: bool = False, verbose: bool = False) -> None:
         # First, parse the ROM we were given.
         naomi = self.__rom or NaomiRom(self.__data)
 
-        # Now, determine the type of the settings.
-        if len(settings) == self.EEPROM_SIZE:
+        # Now make sure the EEPROM is valid.
+        if len(eeprom) == self.EEPROM_SIZE:
             # First, we need to modify the settings trojan with this ROM's load address and
             # the EEPROM we want to add. Make sure the EEPRom we were given is valid.
-            if not NaomiEEPRom.validate(settings, serial=naomi.serial):
-                raise NaomiSettingsPatcherException("Settings is incorrectly formed!")
-            if naomi.serial != settings[3:7] or naomi.serial != settings[21:25]:
-                raise NaomiSettingsPatcherException("Settings is not for this game!")
-            if self.__type == NaomiSettingsTypeEnum.TYPE_SRAM:
-                # This is technically feasible but we don't have the interface to make it work
-                # and I am not sure making this code more complicated is worth it.
-                raise NaomiSettingsPatcherException("Cannot attach both an EEPROM and an SRAM settings file!")
-            self.__type = NaomiSettingsTypeEnum.TYPE_EEPROM
-
-        elif len(settings) == self.SRAM_SIZE:
-            if self.__type == NaomiSettingsTypeEnum.TYPE_EEPROM:
-                # This is technically feasible but we don't have the interface to make it work
-                # and I am not sure making this code more complicated is worth it.
-                raise NaomiSettingsPatcherException("Cannot attach both an EEPROM and an SRAM settings file!")
-            self.__type = NaomiSettingsTypeEnum.TYPE_SRAM
+            if not NaomiEEPRom.validate(eeprom, serial=naomi.serial):
+                raise NaomiSettingsPatcherException("EEPROM is incorrectly formed!")
+            if naomi.serial != eeprom[3:7] or naomi.serial != eeprom[21:25]:
+                raise NaomiSettingsPatcherException("EEPROM is not for this game!")
 
         else:
-            raise NaomiSettingsPatcherException("Unknown settings type to attach to Naomi ROM!")
+            raise NaomiSettingsPatcherException("Invalid EEPROM size to attach to a Naomi ROM!")
 
-        # Finally, make the requested modification.
-        if self.__type == NaomiSettingsTypeEnum.TYPE_EEPROM:
-            # Now we need to add an EXE init section to the ROM.
-            if self.__trojan is None or not self.__trojan:
-                raise NaomiSettingsPatcherException("Cannot have an empty trojan when attaching EEPROM settings!")
+        # Now we need to add an EXE init section to the ROM.
+        if self.__trojan is None or not self.__trojan:
+            raise NaomiSettingsPatcherException("Cannot have an empty trojan when attaching EEPROM settings!")
 
-            # Patch the trojan onto the ROM, updating the settings in the trojan accordingly.
-            self.__data = add_or_update_trojan(
-                self.__data,
-                self.__trojan,
-                1 if enable_debugging else 0,
-                0,
-                datachunk=settings,
-                header=naomi,
-                verbose=verbose,
-            )
+        # Patch the trojan onto the ROM, updating the settings in the trojan accordingly.
+        self.__data = add_or_update_trojan(
+            self.__data,
+            self.__trojan,
+            1 if enable_debugging else 0,
+            0,
+            datachunk=eeprom,
+            header=naomi,
+            verbose=verbose,
+        )
 
-        elif self.__type == NaomiSettingsTypeEnum.TYPE_SRAM:
-            # Patch the section directly onto the ROM.
-            self.__data = add_or_update_section(self.__data, self.SRAM_LOCATION, settings, header=naomi, verbose=verbose)
+        # Also, write back the new ROM.
+        self.__rom = naomi
+        self.__has_eeprom = True
+
+    @property
+    def has_sram(self) -> bool:
+        if self.__has_sram is None:
+            # Need to see if there is an attached SRAM section in this exe.
+            naomi = self.__rom or NaomiRom(self.__data)
+            self.__rom = naomi
+
+            for section in naomi.main_executable.sections:
+                if section.load_address == self.SRAM_LOCATION and section.length == self.SRAM_SIZE:
+                    self.__has_sram = True
+                    break
+            else:
+                self.__has_sram = False
+        return self.__has_sram
+
+    def get_sram(self) -> Optional[bytes]:
+        # Parse the ROM header so we can narrow our search.
+        naomi = self.__rom or NaomiRom(self.__data)
+        self.__rom = naomi
+
+        # Only look at main executables.
+        executable = naomi.main_executable
+        for sec in executable.sections:
+            # Check and see if it is a SRAM chunk.
+            if sec.load_address == self.SRAM_LOCATION and sec.length == self.SRAM_SIZE:
+                # It is!
+                self.__has_sram = True
+                return self.__data[sec.offset:(sec.offset + sec.length)]
+
+        # Couldn't find a section that matched.
+        self.__has_sram = False
+        return None
+
+    def put_sram(self, sram: bytes, *, verbose: bool = False) -> None:
+        # First, parse the ROM we were given.
+        naomi = self.__rom or NaomiRom(self.__data)
+
+        # Now make sure the SRAM is valid.
+        if len(sram) != self.SRAM_SIZE:
+            raise NaomiSettingsPatcherException("Invalid SRAM size to attach to a Naomi ROM!")
+
+        # Patch the section directly onto the ROM.
+        self.__has_sram = True
+        self.__data = add_or_update_section(self.__data, self.SRAM_LOCATION, sram, header=naomi, verbose=verbose)
 
         # Also, write back the new ROM.
         self.__rom = naomi

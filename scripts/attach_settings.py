@@ -4,7 +4,7 @@ import os
 import sys
 
 from arcadeutils import FileBytes
-from naomi import NaomiRomRegionEnum, NaomiSettingsPatcher, NaomiSettingsTypeEnum
+from naomi import NaomiRomRegionEnum, NaomiSettingsPatcher
 from naomi.settings import SettingsEditor, SettingsManager, ReadOnlyCondition, SettingsParseException, SettingsSaveException
 
 
@@ -160,10 +160,7 @@ def main() -> int:
 
             # Now, patch it onto the data.
             patcher = NaomiSettingsPatcher(data, exe)
-            if patcher.type != NaomiSettingsTypeEnum.TYPE_NONE and patcher.type != NaomiSettingsTypeEnum.TYPE_EEPROM:
-                print("Attached settings are not an EEPROM settings file! Perhaps you meant to use \"attach_sram\"?", file=sys.stderr)
-                return 1
-            patcher.put_settings(eeprom, enable_debugging=args.enable_debugging, verbose=True)
+            patcher.put_eeprom(eeprom, enable_debugging=args.enable_debugging, verbose=True)
 
             if args.output_file:
                 print(f"Added EEPROM settings to {args.output_file}.")
@@ -180,7 +177,7 @@ def main() -> int:
 
             # Now, search for the settings.
             patcher = NaomiSettingsPatcher(data, None)
-            settings = patcher.get_settings()
+            settings = patcher.get_eeprom()
 
             if settings is None:
                 print("ROM does not have any EEPROM settings attached!", file=sys.stderr)
@@ -201,10 +198,7 @@ def main() -> int:
 
             # Now, search for the settings.
             patcher = NaomiSettingsPatcher(data, None)
-            if patcher.type != NaomiSettingsTypeEnum.TYPE_NONE and patcher.type != NaomiSettingsTypeEnum.TYPE_EEPROM:
-                print("Attached settings are not an EEPROM settings file! Perhaps you meant to use \"attach_sram\"?", file=sys.stderr)
-                return 1
-            info = patcher.info
+            info = patcher.eeprom_info
 
             if info is None:
                 print("ROM does not have any EEPROM settings attached!")
@@ -214,7 +208,7 @@ def main() -> int:
 
                 # Grab the actual EEPRom so we can print the settings within.
                 manager = SettingsManager(args.settings_directory)
-                eepromdata = patcher.get_settings()
+                eepromdata = patcher.get_eeprom()
                 config = None
 
                 try:
@@ -276,10 +270,7 @@ def main() -> int:
 
             # First, try to extract existing eeprom for editing.
             patcher = NaomiSettingsPatcher(data, exe)
-            if patcher.type != NaomiSettingsTypeEnum.TYPE_NONE and patcher.type != NaomiSettingsTypeEnum.TYPE_EEPROM:
-                print("Attached settings are not an EEPROM settings file! Perhaps you meant to use \"attach_sram\"?", file=sys.stderr)
-                return 1
-            eepromdata = patcher.get_settings()
+            eepromdata = patcher.get_eeprom()
 
             manager = SettingsManager(args.settings_directory)
             if eepromdata is None:
@@ -302,7 +293,7 @@ def main() -> int:
                 # If the editor signals to us that the user wanted to save the settings
                 # then we should patch them into the binary.
                 eepromdata = manager.to_eeprom(parsedsettings)
-                patcher.put_settings(
+                patcher.put_eeprom(
                     eepromdata,
                     enable_debugging=args.enable_debugging,
                     verbose=True,

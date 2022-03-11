@@ -9,7 +9,7 @@ import sys
 import threading
 import time
 from enum import Enum
-from typing import Any, Optional, Sequence, Tuple, Union, overload
+from typing import Any, Dict, Optional, Sequence, Tuple, Union, overload
 
 from arcadeutils import FileBytes, BinaryDiff
 from netboot.log import log
@@ -23,17 +23,22 @@ class TargetEnum(Enum):
     TARGET_TRIFORCE = "triforce"
 
 
+class SettingsEnum(Enum):
+    SETTINGS_EEPROM = "eeprom"
+    SETTINGS_SRAM = "sram"
+
+
 @overload
-def _handle_patches(data: bytes, target: TargetEnum, patches: Sequence[str], settings: Optional[bytes]) -> bytes:
+def _handle_patches(data: bytes, target: TargetEnum, patches: Sequence[str], settings: Dict[SettingsEnum, bytes]) -> bytes:
     ...
 
 
 @overload
-def _handle_patches(data: FileBytes, target: TargetEnum, patches: Sequence[str], settings: Optional[bytes]) -> FileBytes:
+def _handle_patches(data: FileBytes, target: TargetEnum, patches: Sequence[str], settings: Dict[SettingsEnum, bytes]) -> FileBytes:
     ...
 
 
-def _handle_patches(data: Union[bytes, FileBytes], target: TargetEnum, patches: Sequence[str], settings: Optional[bytes]) -> Union[bytes, FileBytes]:
+def _handle_patches(data: Union[bytes, FileBytes], target: TargetEnum, patches: Sequence[str], settings: Dict[SettingsEnum, bytes]) -> Union[bytes, FileBytes]:
     # Patch it
     for patch in patches:
         with open(patch, "r") as pp:
@@ -41,12 +46,19 @@ def _handle_patches(data: Union[bytes, FileBytes], target: TargetEnum, patches: 
         differences = [d.strip() for d in differences if d.strip()]
         data = BinaryDiff.patch(data, differences)
 
-    # Attach any settings file requested.
-    if target == TargetEnum.TARGET_NAOMI:
-        if settings is not None:
-            patcher = NaomiSettingsPatcher(data, get_default_naomi_trojan())
-            patcher.put_settings(settings)
-            data = patcher.data
+    for typ, setting in settings.items():
+        if typ == SettingsEnum.SETTINGS_EEPROM:
+            # Attach any settings file requested.
+            if target == TargetEnum.TARGET_NAOMI:
+                patcher = NaomiSettingsPatcher(data, get_default_naomi_trojan())
+                patcher.put_eeprom(setting)
+                data = patcher.data
+        elif typ == SettingsEnum.SETTINGS_SRAM:
+            # Attach any settings file requested.
+            if target == TargetEnum.TARGET_NAOMI:
+                patcher = NaomiSettingsPatcher(data, get_default_naomi_trojan())
+                patcher.put_sram(setting)
+                data = patcher.data
 
     return data
 
@@ -55,7 +67,7 @@ def _send_file_to_host(
     host: str,
     filename: str,
     patches: Sequence[str],
-    settings: Optional[bytes],
+    settings: Dict[SettingsEnum, bytes],
     target: TargetEnum,
     version: NetDimmVersionEnum,
     parent_pid: int,
@@ -250,7 +262,7 @@ class Host:
             self.__proc = None
             return
 
-    def send(self, filename: str, patches: Sequence[str], settings: Optional[bytes]) -> None:
+    def send(self, filename: str, patches: Sequence[str], settings: Dict[SettingsEnum, bytes]) -> None:
         with self.__lock:
             if self.__proc is not None:
                 raise HostException("Host has active transfer already")
@@ -266,7 +278,7 @@ class Host:
             while self.__lastprogress == (-1, -1) and self.__proc is not None:
                 self.__update_progress()
 
-    def crc(self, filename: str, patches: Sequence[str], settings: Optional[bytes]) -> int:
+    def crc(self, filename: str, patches: Sequence[str], settings: Dict[SettingsEnum, bytes]) -> int:
         # Grab the image itself
         with open(filename, "rb") as fp:
             data = FileBytes(fp)

@@ -3,7 +3,7 @@ import argparse
 import sys
 
 from arcadeutils import FileBytes
-from naomi import NaomiSettingsPatcher, NaomiSettingsTypeEnum
+from naomi import NaomiSettingsPatcher
 
 
 def main() -> int:
@@ -75,11 +75,7 @@ def main() -> int:
                 return 1
 
             patcher = NaomiSettingsPatcher(data, None)
-            if patcher.type != NaomiSettingsTypeEnum.TYPE_NONE and patcher.type != NaomiSettingsTypeEnum.TYPE_SRAM:
-                print("Attached settings are not an SRAM settings file! Perhaps you meant to use \"attach_settings\"?", file=sys.stderr)
-                return 1
-
-            patcher.put_settings(sram, verbose=True)
+            patcher.put_sram(sram, verbose=True)
 
             if args.output_file:
                 print(f"Added SRAM init to the end of {args.output_file}.", file=sys.stderr)
@@ -96,7 +92,7 @@ def main() -> int:
 
             # Now, search for the settings.
             patcher = NaomiSettingsPatcher(data, None)
-            settings = patcher.get_settings()
+            settings = patcher.get_sram()
 
             if settings is None:
                 print("ROM does not have any SRAM settings attached!", file=sys.stderr)

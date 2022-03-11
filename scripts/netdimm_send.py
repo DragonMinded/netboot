@@ -91,12 +91,15 @@ def main() -> int:
         '--settings-file',
         metavar='FILE',
         type=str,
+        action='append',
         help=(
             'Settings to apply to image on-the-fly while sending to the NetDimm. '
             'Currently only supported for the Naomi platform. For Naomi, the '
             'settings file should be a valid 128-byte EEPROM file as obtained '
             'from an emulator or as created using the "edit_settings" utility, '
-            'or a 32-kbyte SRAM file as obtained from an emulator.'
+            'or a 32-kbyte SRAM file as obtained from an emulator. You can apply '
+            'both an EEPROM and a SRAM settings file by specifying this argument '
+            'twice.'
         ),
     )
     parser.add_argument(
@@ -144,13 +147,23 @@ def main() -> int:
 
         # Grab any settings file that should be included.
         if args.target == TargetEnum.TARGET_NAOMI:
-            if args.settings_file:
-                with open(args.settings_file, "rb") as fp:
+            for sfile in args.settings_file or []:
+                with open(sfile, "rb") as fp:
                     settings = fp.read()
 
                 patcher = NaomiSettingsPatcher(data, get_default_naomi_trojan())
-                patcher.put_settings(settings)
+                if len(settings) == NaomiSettingsPatcher.SRAM_SIZE:
+                    patcher.put_sram(settings)
+                elif len(settings) == NaomiSettingsPatcher.EEPROM_SIZE:
+                    patcher.put_eeprom(settings)
+                else:
+                    print(f"Could not attach {sfile}: not the right size to be an SRAM or EEPROM settings", file=sys.stderr)
+                    return 1
                 data = patcher.data
+        else:
+            for sfile in args.settings_file or []:
+                print(f"Could not attach {sfile}: not a Naomi ROM!")
+                return 1
 
         # Send the binary, reboot into the game.
         netdimm.send(data, key, disable_crc_check=args.disable_crc, disable_now_loading=args.disable_now_loading)

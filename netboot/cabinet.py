@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from naomi import NaomiSettingsPatcher
 from netdimm import NetDimmInfo, NetDimmException, NetDimmVersionEnum, CRCStatusEnum
-from netboot.hostutils import Host, HostStatusEnum, TargetEnum
+from netboot.hostutils import Host, HostStatusEnum, TargetEnum, SettingsEnum
 from netboot.log import log
 
 
@@ -140,9 +140,15 @@ class Cabinet:
                             info = self.__host.info()
                         except NetDimmException:
                             info = None
+
+                        settings: Dict[SettingsEnum, bytes] = {}
+                        eeprom = self.settings.get(self.__new_filename, None)
+                        if eeprom is not None:
+                            settings[SettingsEnum.SETTINGS_EEPROM] = eeprom
+
                         if info is not None and info.current_game_crc != 0:
                             # Its worth trying to CRC this game and seeing if it matches.
-                            crc = self.__host.crc(self.__new_filename, self.patches.get(self.__new_filename, []), self.settings.get(self.__new_filename, None))
+                            crc = self.__host.crc(self.__new_filename, self.patches.get(self.__new_filename, []), settings)
                             if crc == info.current_game_crc:
                                 if info.game_crc_status == CRCStatusEnum.STATUS_VALID:
                                     self.__print(f"Cabinet {self.ip} already running game {self.__new_filename}.")
@@ -157,7 +163,7 @@ class Cabinet:
 
                         self.__print(f"Cabinet {self.ip} sending game {self.__new_filename}.")
                         self.__current_filename = self.__new_filename
-                        self.__host.send(self.__new_filename, self.patches.get(self.__new_filename, []), self.settings.get(self.__new_filename, None))
+                        self.__host.send(self.__new_filename, self.patches.get(self.__new_filename, []), settings)
                         self.__state = (CabinetStateEnum.STATE_SEND_CURRENT_GAME, 0)
                 return
 

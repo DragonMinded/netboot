@@ -10,7 +10,7 @@ import yaml
 from typing import Dict, List, Optional, Set, Tuple
 
 from arcadeutils import FileBytes, BinaryDiff
-from naomi import NaomiRom, NaomiRomRegionEnum, NaomiSettingsPatcher, NaomiSettingsTypeEnum, get_default_trojan, add_or_update_section
+from naomi import NaomiRom, NaomiRomRegionEnum, NaomiSettingsPatcher, get_default_trojan, add_or_update_section
 from naomi.settings import SettingsManager, Setting, ReadOnlyCondition, SettingsWrapper, get_default_settings_directory
 from netdimm import NetDimm, NetDimmException, Message, send_message, receive_message, write_scratch1_register, MESSAGE_HOST_STDOUT, MESSAGE_HOST_STDERR
 from netboot import PatchManager
@@ -453,18 +453,17 @@ def main() -> int:
 
                                 # Now, attach any eeprom settings.
                                 if gamesettings.force_settings and gamesettings.eeprom is not None:
+                                    print(f"Applying EEPROM settings to {filename}...")
                                     patcher = NaomiSettingsPatcher(gamedata, get_default_trojan())
-                                    if patcher.type != NaomiSettingsTypeEnum.TYPE_SRAM:
-                                        print(f"Applying EEPROM settings to {filename}...")
-                                        try:
-                                            patcher.put_settings(
-                                                gamesettings.eeprom,
-                                                enable_debugging=args.debug_mode,
-                                                verbose=verbose,
-                                            )
-                                            gamedata = patcher.data
-                                        except Exception as e:
-                                            print(f"Could not apply EEPROM settings to {filename}: {str(e)}", file=sys.stderr)
+                                    try:
+                                        patcher.put_eeprom(
+                                            gamesettings.eeprom,
+                                            enable_debugging=args.debug_mode,
+                                            verbose=verbose,
+                                        )
+                                        gamedata = patcher.data
+                                    except Exception as e:
+                                        print(f"Could not apply EEPROM settings to {filename}: {str(e)}", file=sys.stderr)
 
                                 # Finally, send it!
                                 send_message(netdimm, Message(MESSAGE_LOAD_PROGRESS, struct.pack("<ii", len(gamedata), 0)), verbose=verbose)
@@ -493,23 +492,19 @@ def main() -> int:
                                     data = FileBytes(fp)
 
                                     eepromdata = gamesettings.eeprom
-                                    has_settings = True
                                     if eepromdata is None:
                                         # Possibly they edited the ROM directly, still let them edit the settings.
                                         patcher = NaomiSettingsPatcher(data, get_default_trojan())
-                                        if patcher.type == NaomiSettingsTypeEnum.TYPE_EEPROM:
-                                            eepromdata = patcher.get_settings()
-                                        elif patcher.type == NaomiSettingsTypeEnum.TYPE_SRAM:
-                                            has_settings = False
+                                        if patcher.has_eeprom:
+                                            eepromdata = patcher.get_eeprom()
 
-                                    if has_settings:
-                                        manager = SettingsManager(get_default_settings_directory())
-                                        if eepromdata is None:
-                                            # We need to make them up from scratch.
-                                            parsedsettings = manager.from_rom(patcher.rom, region=settings.system_region)
-                                        else:
-                                            # We have an eeprom to edit.
-                                            parsedsettings = manager.from_eeprom(eepromdata)
+                                    manager = SettingsManager(get_default_settings_directory())
+                                    if eepromdata is None:
+                                        # We need to make them up from scratch.
+                                        parsedsettings = manager.from_rom(patcher.rom, region=settings.system_region)
+                                    else:
+                                        # We have an eeprom to edit.
+                                        parsedsettings = manager.from_eeprom(eepromdata)
 
                                 # Now, create the message back to the Naomi.
                                 response = struct.pack("<IB", index, len(patches))
@@ -551,7 +546,7 @@ def main() -> int:
 
                                     return settingdata
 
-                                if has_settings and parsedsettings is not None:
+                                if parsedsettings is not None:
                                     # Remember the settings we parsed so we can save them later.
                                     last_game_parsed_settings = parsedsettings
 

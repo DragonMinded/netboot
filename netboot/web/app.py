@@ -8,7 +8,7 @@ from typing import Callable, Dict, List, Any, Optional, cast
 from flask import Flask, Response, request, render_template, make_response, jsonify as flask_jsonify
 from werkzeug.routing import PathConverter
 from arcadeutils import FileBytes, BinaryDiff, BinaryDiffException
-from naomi import NaomiRom, NaomiSettingsPatcher, NaomiSettingsTypeEnum, NaomiRomRegionEnum, get_default_trojan
+from naomi import NaomiRom, NaomiSettingsPatcher, NaomiRomRegionEnum, get_default_trojan
 from naomi.settings import SettingsWrapper, SettingsManager
 from netdimm import NetDimmVersionEnum
 from netboot import Cabinet, CabinetRegionEnum, CabinetManager, DirectoryManager, PatchManager, TargetEnum
@@ -460,47 +460,47 @@ def romsforcabinet(ip: str) -> Dict[str, Any]:
                     # does, disallow the following section from being created.
                     patcher = NaomiSettingsPatcher(data, get_default_trojan())
                     manager = SettingsManager(app.config['settings_directory'])
-                    if patcher.type != NaomiSettingsTypeEnum.TYPE_SRAM:
-                        # First, try to load any previously configured EEPROM.
-                        settingsdata = cabinet.settings.get(full_filename, None)
+
+                    # First, try to load any previously configured EEPROM.
+                    settingsdata = cabinet.settings.get(full_filename, None)
+                    if settingsdata is not None:
+                        if len(settingsdata) != NaomiSettingsPatcher.EEPROM_SIZE:
+                            raise Exception("We don't support non-EEPROM settings!")
+
+                        settings = manager.from_eeprom(settingsdata)
+                    else:
+                        # Second, if we didn't configure one, see if there's a previously configured
+                        # one in the ROM itself.
+                        settingsdata = patcher.get_eeprom()
                         if settingsdata is not None:
                             if len(settingsdata) != NaomiSettingsPatcher.EEPROM_SIZE:
                                 raise Exception("We don't support non-EEPROM settings!")
 
                             settings = manager.from_eeprom(settingsdata)
                         else:
-                            # Second, if we didn't configure one, see if there's a previously configured
-                            # one in the ROM itself.
-                            settingsdata = patcher.get_settings()
-                            if settingsdata is not None:
-                                if len(settingsdata) != NaomiSettingsPatcher.EEPROM_SIZE:
-                                    raise Exception("We don't support non-EEPROM settings!")
+                            # Finally, attempt to patch with any patches that fit in the first
+                            # chunk, so the defaults we get below match any force settings
+                            # patches we did to the header.
+                            for patch in cabinet.patches.get(full_filename, []):
+                                with open(patch, "r") as pp:
+                                    differences = pp.readlines()
+                                differences = [d.strip() for d in differences if d.strip()]
+                                try:
+                                    data = BinaryDiff.patch(data, differences, ignore_size_differences=True)
+                                except BinaryDiffException:
+                                    # Patch was for something not in the header.
+                                    pass
 
-                                settings = manager.from_eeprom(settingsdata)
-                            else:
-                                # Finally, attempt to patch with any patches that fit in the first
-                                # chunk, so the defaults we get below match any force settings
-                                # patches we did to the header.
-                                for patch in cabinet.patches.get(full_filename, []):
-                                    with open(patch, "r") as pp:
-                                        differences = pp.readlines()
-                                    differences = [d.strip() for d in differences if d.strip()]
-                                    try:
-                                        data = BinaryDiff.patch(data, differences, ignore_size_differences=True)
-                                    except BinaryDiffException:
-                                        # Patch was for something not in the header.
-                                        pass
-
-                                rom = NaomiRom(data)
-                                if rom.valid:
-                                    naomi_region = {
-                                        CabinetRegionEnum.REGION_JAPAN: NaomiRomRegionEnum.REGION_JAPAN,
-                                        CabinetRegionEnum.REGION_USA: NaomiRomRegionEnum.REGION_USA,
-                                        CabinetRegionEnum.REGION_EXPORT: NaomiRomRegionEnum.REGION_EXPORT,
-                                        CabinetRegionEnum.REGION_KOREA: NaomiRomRegionEnum.REGION_KOREA,
-                                        CabinetRegionEnum.REGION_AUSTRALIA: NaomiRomRegionEnum.REGION_AUSTRALIA,
-                                    }.get(cabinet.region, NaomiRomRegionEnum.REGION_JAPAN)
-                                    settings = manager.from_rom(rom, naomi_region)
+                            rom = NaomiRom(data)
+                            if rom.valid:
+                                naomi_region = {
+                                    CabinetRegionEnum.REGION_JAPAN: NaomiRomRegionEnum.REGION_JAPAN,
+                                    CabinetRegionEnum.REGION_USA: NaomiRomRegionEnum.REGION_USA,
+                                    CabinetRegionEnum.REGION_EXPORT: NaomiRomRegionEnum.REGION_EXPORT,
+                                    CabinetRegionEnum.REGION_KOREA: NaomiRomRegionEnum.REGION_KOREA,
+                                    CabinetRegionEnum.REGION_AUSTRALIA: NaomiRomRegionEnum.REGION_AUSTRALIA,
+                                }.get(cabinet.region, NaomiRomRegionEnum.REGION_JAPAN)
+                                settings = manager.from_rom(rom, naomi_region)
 
                 if settings is not None:
                     # TODO: If we ever support editing SRAM from the frontend, this
