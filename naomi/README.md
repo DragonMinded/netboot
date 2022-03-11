@@ -299,43 +299,37 @@ Returns a `NaomiRom` instance that encapsulates the ROM passed into the patcher.
 instance should not be edited, as it will not be read again when performing the patches.
 Note that this property is read-only.
 
-### info property
+### has_eeprom property
 
-Returns an optional instance of NaomiSettingsInfo if the ROM has a configured settings
-section. If the ROM does not have a configured settings section, this returns None.
-The NaomiSettingsInfo instance represents the configuration passed to `put_settings()`
+Returns `True` if the ROM passed into the patcher has an attached EEPROM file. Returns
+`False` otherwise.
+
+### eeprom_info property
+
+Returns an optional instance of NaomiSettingsInfo if the ROM has a configured EEPROM
+section. If the ROM does not have a configured EEPROM section, this returns `None`.
+The NaomiSettingsInfo instance represents the configuration passed to `put_eeprom()`
 on a previous invocation. Note that this property is read-only.
 
-### type property
+### get_eeprom() method
 
-Returns an instance of NaomiSettingsTypeEnum enumeration for what type of settings
-is attached. The only two types of settings supported are EEPROM (128 bytes) and
-SRAM (32kbytes). Note that this poperty is read-only.
+Returns a 128-byte EEPROM bytestring that was previously attached to the Naomi ROM,
+or `None` if this ROM does not include any EEPROM settings.
 
-### get_settings() method
+### put_eeprom() method
 
-Returns a 128-byte EEPROM bytestring or 32k-byte SRAM bytestring that was previously
-attached to the Naomi ROM, or None if this ROM does not include any EEPROM or SRAM
-settings.
-
-### put_settings() method
-
-given a bytes "settings" argument which is a valid 128-byte EEPROM or a valid 32k-byte
-SRAM, ensures that it is attached to the Naomi ROM such that the settings are written
-when netbooting the ROM image. If there are already settings attached to the ROM, this
-overwrites those with new settings. If there are not already settings attached, this
-does the work necessary to attach the settings file as well as the writing trojan
-supplied to the `NaomiSettingsPatcher` constructor.
+given a bytes "eeprom" argument which is a valid 128-byte EEPROM, ensures that it
+is attached to the Naomi ROM such that the settings are written when netbooting the
+ROM image. If there are already EEPROM settings attached to the ROM, this overwrites
+those with new settings. If there are not already settings attached, this does the
+work necessary to attach the settings file as well as the writing trojan supplied to
+the `NaomiSettingsPatcher` constructor.
 
 Valid EEPROM files can be obtained form a number of places. If you use an emulator
 to set up system and game settings, then the EEPROM file that emulator writes can
 usually be supplied here to make your game boot to the same settings. If you use
 the `NaomiEEPRom` class to manipulate an EEPROM, the data it produces can also be
 supplied here to force the Naomi to use the same settings.
-
-Valid SRAM files can be obtained from an emulator that is capable of writing an SRAM
-file. This only makes sense to use in the context of atomiswave conversions and in
-a select few Naomi games that store their settings in SRAM such as Ikaruga.
 
 Optionally, pass in the boolean keyword argument "enable_sentinel" set to True and
 the Naomi ROM will re-initialize the settings when netbooting even if the last game
@@ -348,6 +342,33 @@ Optionally, pass in the boolean keyword argument "enable_debugging" set to True
 which forces the Naomi to display debugging information on the screen before booting
 the game. Use this to see what is actually going on under the hood when using the
 settings patching feature.
+
+Optionally, pass in the boolean keyword argument "verbose" set to True which forces
+the `put_eeprom()` function to output progress text to stdout. Use this if you are
+making a command-line tool and wish to display information about the patch process
+to the user.
+
+### has_sram property
+
+Returns `True` if the ROM passed into the patcher has an attached SRAM file. Returns
+`False` otherwise.
+
+### get_sram() method
+
+Returns a 32k-byte SRAM bytestring that was previously attached to the Naomi ROM, or
+`None` if this ROM does not include any SRAM settings.
+
+### put_sram() method
+
+given a bytes "settings" argument which is a valid 32k-byte SRAM, ensures that it is
+attached to the Naomi ROM such that the settings are written when netbooting the ROM
+image. If there are already SRAM settings attached to the ROM, this overwrites those
+with new settings. If there are not already settings attached, this does the work
+necessary to attach the settings file.
+
+Valid SRAM files can be obtained from an emulator that is capable of writing an SRAM
+file. This only makes sense to use in the context of atomiswave conversions and in
+a select few Naomi games that store their settings in SRAM such as Ikaruga.
 
 Optionally, pass in the boolean keyword argument "verbose" set to True which forces
 the `put_settings()` function to output progress text to stdout. Use this if you are
