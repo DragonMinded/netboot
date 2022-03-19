@@ -3,6 +3,7 @@ from netboot.cabinet import Cabinet, CabinetManager, CabinetStateEnum, CabinetRe
 from netboot.directory import DirectoryManager
 from netboot.patch import PatchManager
 from netboot.sram import SRAMManager
+from netboot.settings import SettingsManager
 
 __all__ = [
     "TargetEnum",
@@ -17,4 +18,5 @@ __all__ = [
     "DirectoryManager",
     "PatchManager",
     "SRAMManager",
+    "SettingsManager",
 ]

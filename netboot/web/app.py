@@ -3,15 +3,13 @@ import os.path
 import yaml
 import traceback
 from functools import wraps
-from typing import Callable, Dict, List, Any, Optional, cast
+from typing import Callable, Dict, List, Any, cast
 
 from flask import Flask, Response, request, render_template, make_response, jsonify as flask_jsonify
 from werkzeug.routing import PathConverter
-from arcadeutils import FileBytes, BinaryDiff, BinaryDiffException
-from naomi import NaomiRom, NaomiSettingsPatcher, NaomiRomRegionEnum, get_default_trojan
-from naomi.settings import SettingsWrapper, SettingsManager
 from netdimm import NetDimmVersionEnum
-from netboot import Cabinet, CabinetRegionEnum, CabinetManager, DirectoryManager, PatchManager, SRAMManager, TargetEnum
+from naomi import NaomiRomRegionEnum
+from netboot import Cabinet, CabinetRegionEnum, CabinetManager, DirectoryManager, PatchManager, SRAMManager, SettingsManager, TargetEnum
 
 
 current_directory: str = os.path.abspath(os.path.dirname(__file__))
@@ -107,11 +105,10 @@ def systemconfig() -> Response:
     srams: List[Dict[str, Any]] = []
     for directory in sramman.directories:
         srams.append({'name': directory, 'files': sorted(sramman.srams(directory))})
-    # TODO: This should be a general manager, not Naomi-specific
-    manager = SettingsManager(app.config['settings_directory'])
-    settings: List[Dict[str, Any]] = [
-        {'name': app.config['settings_directory'], 'files': sorted([f for f, _ in manager.files.items()])}
-    ]
+    settingsman = app.config['SettingsManager']
+    settings: List[Dict[str, Any]] = []
+    for directory in settingsman.directories:
+        settings.append({'name': directory, 'files': sorted(settingsman.settings(directory))})
 
     return make_response(
         render_template(
@@ -259,31 +256,27 @@ def applicablepatches(filename: str) -> Dict[str, Any]:
 @app.route('/settings/<filename:filename>')
 @jsonify
 def applicablesettings(filename: str) -> Dict[str, Any]:
-    manager = SettingsManager(app.config['settings_directory'])
-    settings: List[Dict[str, Any]] = []
-
-    # TODO: This should be a general manager, not Naomi-specific
+    settingsman = app.config['SettingsManager']
+    directories = set(settingsman.directories)
+    settings_by_directory: Dict[str, List[str]] = {}
     try:
-        with open(filename, "rb") as fp:
-            data = FileBytes(fp)
-            rom = NaomiRom(data)
-            if rom.valid:
-                settings = [
-                    {'name': app.config['settings_directory'], 'files': sorted([f for f, _ in manager.files_for_rom(rom).items()])}
-                ]
+        settings = settingsman.settings_for_game(filename)
     except FileNotFoundError:
         if not filename.startswith('/'):
             filename = "/" + filename
-        with open(filename, "rb") as fp:
-            data = FileBytes(fp)
-            rom = NaomiRom(data)
-            if rom.valid:
-                settings = [
-                    {'name': app.config['settings_directory'], 'files': sorted([f for f, _ in manager.files_for_rom(rom).items()])}
-                ]
-
+        settings = settingsman.settings_for_game(filename)
+    for setting in settings:
+        dirname, filename = os.path.split(setting)
+        if dirname not in directories:
+            raise Exception("Expected all settings to be inside managed directories!")
+        if dirname not in settings_by_directory:
+            settings_by_directory[dirname] = []
+        settings_by_directory[dirname].append(filename)
     return {
-        'settings': sorted(settings, key=lambda setting: cast(str, setting['name'])),
+        'settings': sorted(
+            [{'name': dirname, 'files': sorted(settings_by_directory[dirname])} for dirname in settings_by_directory],
+            key=lambda patch: cast(str, patch['name']),
+        )
     }
 
 
@@ -369,12 +362,10 @@ def recalculateapplicablesrams(filename: str) -> Response:
 @app.route('/settings')
 @jsonify
 def settings() -> Dict[str, Any]:
-    # TODO: This should be a general manager, not Naomi-specific
-    manager = SettingsManager(app.config['settings_directory'])
-    settings: List[Dict[str, Any]] = [
-        {'name': app.config['settings_directory'], 'files': sorted([f for f, _ in manager.files.items()])}
-    ]
-
+    settingsman = app.config['SettingsManager']
+    settings: List[Dict[str, Any]] = []
+    for directory in settingsman.directories:
+        settings.append({'name': directory, 'files': sorted(settingsman.settings(directory))})
     return {
         'settings': sorted(settings, key=lambda direntry: cast(str, direntry['name'])),
     }
@@ -487,6 +478,7 @@ def romsforcabinet(ip: str) -> Dict[str, Any]:
     dirman = app.config['DirectoryManager']
     patchman = app.config['PatchManager']
     sramman = app.config['SRAMManager']
+    settingsman = app.config['SettingsManager']
     cabinet = cabman.cabinet(ip)
 
     roms: List[Dict[str, Any]] = []
@@ -510,65 +502,24 @@ def romsforcabinet(ip: str) -> Dict[str, Any]:
             # Calculate whether we are allowed to modify settings or not, and
             # if so, is there a setting enabled for this game.
             if cabinet.target == TargetEnum.TARGET_NAOMI:
-                settings: Optional[SettingsWrapper] = None
-
-                # TODO: This is Naomi-specific and really should be moved into
-                # "Cabinet". However, if we do that we need to generalize the
-                # settings so it isn't naomi-specific.
-                with open(full_filename, "rb") as fp:
-                    data = FileBytes(fp)
-
-                    # Check to make sure its not already got an SRAM section. If it
-                    # does, disallow the following section from being created.
-                    patcher = NaomiSettingsPatcher(data, get_default_trojan())
-                    manager = SettingsManager(app.config['settings_directory'])
-
-                    # First, try to load any previously configured EEPROM.
-                    settingsdata = cabinet.settings.get(full_filename, None)
-                    if settingsdata is not None:
-                        if len(settingsdata) != NaomiSettingsPatcher.EEPROM_SIZE:
-                            raise Exception("We don't support non-EEPROM settings!")
-
-                        settings = manager.from_eeprom(settingsdata)
-                    else:
-                        # Second, if we didn't configure one, see if there's a previously configured
-                        # one in the ROM itself.
-                        settingsdata = patcher.get_eeprom()
-                        if settingsdata is not None:
-                            if len(settingsdata) != NaomiSettingsPatcher.EEPROM_SIZE:
-                                raise Exception("We don't support non-EEPROM settings!")
-
-                            settings = manager.from_eeprom(settingsdata)
-                        else:
-                            # Finally, attempt to patch with any patches that fit in the first
-                            # chunk, so the defaults we get below match any force settings
-                            # patches we did to the header.
-                            for patch in cabinet.patches.get(full_filename, []):
-                                with open(patch, "r") as pp:
-                                    differences = pp.readlines()
-                                differences = [d.strip() for d in differences if d.strip()]
-                                try:
-                                    data = BinaryDiff.patch(data, differences, ignore_size_differences=True)
-                                except BinaryDiffException:
-                                    # Patch was for something not in the header.
-                                    pass
-
-                            rom = NaomiRom(data)
-                            if rom.valid:
-                                naomi_region = {
-                                    CabinetRegionEnum.REGION_JAPAN: NaomiRomRegionEnum.REGION_JAPAN,
-                                    CabinetRegionEnum.REGION_USA: NaomiRomRegionEnum.REGION_USA,
-                                    CabinetRegionEnum.REGION_EXPORT: NaomiRomRegionEnum.REGION_EXPORT,
-                                    CabinetRegionEnum.REGION_KOREA: NaomiRomRegionEnum.REGION_KOREA,
-                                    CabinetRegionEnum.REGION_AUSTRALIA: NaomiRomRegionEnum.REGION_AUSTRALIA,
-                                }.get(cabinet.region, NaomiRomRegionEnum.REGION_JAPAN)
-                                settings = manager.from_rom(rom, naomi_region)
-
-                if settings is not None:
+                naomi_region = {
+                    CabinetRegionEnum.REGION_JAPAN: NaomiRomRegionEnum.REGION_JAPAN,
+                    CabinetRegionEnum.REGION_USA: NaomiRomRegionEnum.REGION_USA,
+                    CabinetRegionEnum.REGION_EXPORT: NaomiRomRegionEnum.REGION_EXPORT,
+                    CabinetRegionEnum.REGION_KOREA: NaomiRomRegionEnum.REGION_KOREA,
+                    CabinetRegionEnum.REGION_AUSTRALIA: NaomiRomRegionEnum.REGION_AUSTRALIA,
+                }.get(cabinet.region, NaomiRomRegionEnum.REGION_JAPAN)
+                settings, present = settingsman.get_naomi_settings(
+                    full_filename,
+                    cabinet.settings.get(full_filename, None),
+                    patches=cabinet.patches.get(full_filename, []),
+                    region=naomi_region,
+                )
+                if settings:
                     patches.append({
                         'file': 'eeprom',
                         'type': 'settings',
-                        'enabled': settingsdata is not None,
+                        'enabled': present,
                         'settings': settings.to_json(),
                     })
 
@@ -602,6 +553,7 @@ def updateromsforcabinet(ip: str) -> Response:
     if request.json is None:
         raise Exception("Expected JSON data in request!")
     cabman = app.config['CabinetManager']
+    settingsman = app.config['SettingsManager']
     cabinet = cabman.cabinet(ip)
     for game in request.json['games']:
         if not game['enabled']:
@@ -624,22 +576,16 @@ def updateromsforcabinet(ip: str) -> Response:
             sram = allsrams[0] if allsrams else None
 
             if cabinet.target == TargetEnum.TARGET_NAOMI:
-                # TODO: This is also Naomi-specific, much like the get method
-                # above. It should be moved into cabman and generalized.
                 if settings is not None and settings['enabled']:
                     # Gotta convert this from JSON and set the settings.
-                    manager = SettingsManager(app.config['settings_directory'])
-                    parsedsettings = manager.from_json(settings['settings'])
-                    eepromdata = manager.to_eeprom(parsedsettings)
-                    cabinet.settings[game['file']] = eepromdata
+                    cabinet.settings[game['file']] = settingsman.put_naomi_settings(settings['settings'])
                 else:
                     cabinet.settings[game['file']] = None
 
-                if sram is not None:
-                    if sram['active']:
-                        cabinet.srams[game['file']] = sram['active']
-                    else:
-                        cabinet.srams[game['file']] = None
+                if sram is not None and sram['active']:
+                    cabinet.srams[game['file']] = sram['active']
+                else:
+                    cabinet.srams[game['file']] = None
             else:
                 cabinet.settings[game['file']] = None
                 cabinet.srams[game['file']] = None
@@ -718,10 +664,10 @@ def spawn_app(config_file: str, debug: bool = False) -> Flask:
         raise AppException(f"Invalid YAML file format for {config_file}, expected directory or list of directories for sram directory setting!")
 
     if 'settings_directory' not in data:
-        raise AppException(f"Invalid YAML file format for {config_file}, missing settings directory setting!")
-    settings = data['settings_directory']
-    if not isinstance(settings, str):
-        raise AppException(f"Invalid YAML file format for {config_file}, expected directory for settings directory setting!")
+        raise AppException(f"Invalid YAML file format for {config_file}, missing naomi settings directory setting!")
+    naomi_settings = data['settings_directory']
+    if not isinstance(naomi_settings, str):
+        raise AppException(f"Invalid YAML file format for {config_file}, expected directory for naomi settings directory setting!")
 
     # Allow use of relative paths (relative to config file).
     patches = [os.path.abspath(os.path.join(config_dir, d)) for d in patches]
@@ -738,7 +684,7 @@ def spawn_app(config_file: str, debug: bool = False) -> Flask:
     app.config['DirectoryManager'] = DirectoryManager(directories, checksums)
     app.config['PatchManager'] = PatchManager(patches)
     app.config['SRAMManager'] = SRAMManager(srams)
-    app.config['settings_directory'] = os.path.abspath(settings)
+    app.config['SettingsManager'] = SettingsManager(os.path.abspath(naomi_settings))
     app.config['config_file'] = os.path.abspath(config_file)
     app.config['cabinet_file'] = cabinet_file
 
@@ -751,7 +697,7 @@ def serialize_app(app: Flask) -> None:
         'rom_directory': app.config['DirectoryManager'].directories,
         'patch_directory': app.config['PatchManager'].directories,
         'sram_directory': app.config['SRAMManager'].directories,
-        'settings_directory': app.config['settings_directory'],
+        'settings_directory': app.config['SettingsManager'].naomi_directory,
         'filenames': app.config['DirectoryManager'].checksums,
     }
     with open(app.config['config_file'], "w") as fp:
