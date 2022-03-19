@@ -698,7 +698,7 @@ def spawn_app(config_file: str, debug: bool = False) -> Flask:
             raise AppException(f"Invalid YAML file format for {config_file}, {directory} is not a directory!")
 
     if 'patch_directory' not in data:
-        raise AppException(f"Invalid YAML file format for {config_file}, missing patch directory setting!")
+        data['patch_directory'] = 'patches'
     directory_or_list = data['patch_directory']
     if isinstance(directory_or_list, str):
         patches = [directory_or_list]
@@ -708,7 +708,7 @@ def spawn_app(config_file: str, debug: bool = False) -> Flask:
         raise AppException(f"Invalid YAML file format for {config_file}, expected directory or list of directories for patch directory setting!")
 
     if 'sram_directory' not in data:
-        raise AppException(f"Invalid YAML file format for {config_file}, missing sram directory setting!")
+        data['sram_directory'] = 'srams'
     directory_or_list = data['sram_directory']
     if isinstance(directory_or_list, str):
         srams = [directory_or_list]
