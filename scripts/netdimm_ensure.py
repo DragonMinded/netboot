@@ -96,6 +96,13 @@ def main() -> int:
         ),
     )
 
+    # Prevent ERROR 33 GATEWAY IS NOT FOUND due to bad, or missing PIC chip.
+    parser.add_argument(
+        '--keyless-boot',
+        action="store_true",
+        help="Enable boot without Key Chip, by using the 'time hack'",
+    )
+
     args = parser.parse_args()
 
     settings: Optional[bytes] = None
@@ -128,6 +135,7 @@ def main() -> int:
         {args.image: sram},
         target=args.target,
         version=args.version,
+        time_hack=args.keyless_boot,
         enabled=True,
         quiet=True,
     )

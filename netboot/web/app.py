@@ -62,6 +62,7 @@ def cabinet_to_dict(cab: Cabinet, dirmanager: DirectoryManager) -> Dict[str, Any
         'status': status.value,
         'progress': progress,
         'enabled': cab.enabled,
+        'time_hack': cab.time_hack,
     }
 
 
@@ -425,6 +426,7 @@ def createcabinet(ip: str) -> Dict[str, Any]:
         target=TargetEnum(request.json['target']),
         version=NetDimmVersionEnum(request.json['version']),
         enabled=True,
+        time_hack=request.json['time_hack'],
     )
     cabman.add_cabinet(new_cabinet)
     serialize_app(app)
@@ -438,22 +440,17 @@ def updatecabinet(ip: str) -> Dict[str, Any]:
         raise Exception("Expected JSON data in request!")
     cabman = app.config['CabinetManager']
     dirman = app.config['DirectoryManager']
-    old_cabinet = cabman.cabinet(ip)
-    new_cabinet = Cabinet(
-        ip=ip,
+    cabman.update_cabinet(
+        ip,
         region=CabinetRegionEnum(request.json['region']),
         description=request.json['description'],
-        filename=old_cabinet.filename,
-        patches=old_cabinet.patches,
-        settings=old_cabinet.settings,
-        srams=old_cabinet.srams,
         target=TargetEnum(request.json['target']),
         version=NetDimmVersionEnum(request.json['version']),
         enabled=request.json['enabled'],
+        time_hack=request.json['time_hack'],
     )
-    cabman.update_cabinet(new_cabinet)
     serialize_app(app)
-    return cabinet_to_dict(new_cabinet, dirman)
+    return cabinet_to_dict(cabman.cabinet(ip), dirman)
 
 
 @app.route('/cabinets/<ip>', methods=['DELETE'])
@@ -753,6 +750,7 @@ def serialize_app(app: Flask) -> None:
         'cabinet_config': app.config['cabinet_file'],
         'rom_directory': app.config['DirectoryManager'].directories,
         'patch_directory': app.config['PatchManager'].directories,
+        'sram_directory': app.config['SRAMManager'].directories,
         'settings_directory': app.config['settings_directory'],
         'filenames': app.config['DirectoryManager'].checksums,
     }

@@ -113,12 +113,13 @@ class HostStatusEnum(Enum):
 class Host:
     DEBOUNCE_SECONDS = 3
 
-    def __init__(self, ip: str, target: Optional[TargetEnum] = None, version: Optional[NetDimmVersionEnum] = None, quiet: bool = False) -> None:
+    def __init__(self, ip: str, target: Optional[TargetEnum] = None, version: Optional[NetDimmVersionEnum] = None, time_hack: bool = False, quiet: bool = False) -> None:
         self.target: TargetEnum = target or TargetEnum.TARGET_NAOMI
         self.version: NetDimmVersionEnum = version or NetDimmVersionEnum.VERSION_4_01
         self.ip: str = ip
         self.alive: bool = False
         self.quiet: bool = quiet
+        self.time_hack: bool = time_hack
         self.__queue: "multiprocessing.Queue[Tuple[str, Any]]" = multiprocessing.Queue()
         self.__lock: multiprocessing.synchronize.Lock = multiprocessing.Lock()
         self.__proc: Optional[multiprocessing.Process] = None
@@ -139,6 +140,7 @@ class Host:
         success_count: int = 0
         failure_count: int = 0
         on_windows: bool = platform.system() == "Windows"
+        last_timehack: float = time.time()
 
         while True:
             # Dont bother if we're actively sending
@@ -163,6 +165,19 @@ class Host:
                             if self.alive != alive:
                                 self.__print(f"Host {self.ip} started responding to ping, marking up.")
                             self.alive = True
+
+                    # Perform the time hack if so requested.
+                    current = time.time()
+                    if (current - last_timehack) >= 5.0:
+                        last_timehack = current
+                        with self.__lock:
+                            if self.time_hack:
+                                netdimm = NetDimm(self.ip, version=self.version)
+                                try:
+                                    netdimm.set_time_limit(10)
+                                    self.__print(f"Host {self.ip} reset time limit with time hack.")
+                                except NetDimmException:
+                                    pass
                 else:
                     success_count = 0
                     failure_count += 1

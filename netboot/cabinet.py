@@ -46,6 +46,7 @@ class Cabinet:
         srams: Dict[str, Optional[str]],
         target: Optional[TargetEnum] = None,
         version: Optional[NetDimmVersionEnum] = None,
+        time_hack: bool = False,
         enabled: bool = True,
         quiet: bool = False,
     ) -> None:
@@ -56,7 +57,7 @@ class Cabinet:
         self.srams: Dict[str, Optional[str]] = {rom: srams[rom] for rom in srams}
         self.quiet = quiet
         self.__enabled = enabled
-        self.__host: Host = Host(ip, target=target, version=version, quiet=self.quiet)
+        self.__host: Host = Host(ip, target=target, version=version, time_hack=time_hack, quiet=self.quiet)
         self.__lock: threading.Lock = threading.Lock()
         self.__current_filename: Optional[str] = filename
         self.__new_filename: Optional[str] = filename
@@ -64,7 +65,7 @@ class Cabinet:
 
     def __repr__(self) -> str:
         with self.__lock:
-            return f"Cabinet(ip={repr(self.ip)}, enabled={repr(self.__enabled)} description={repr(self.description)}, filename={repr(self.filename)}, patches={repr(self.patches)} settings={repr(self.settings)}, srams={repr(self.srams)} target={repr(self.target)}, version={repr(self.version)})"
+            return f"Cabinet(ip={repr(self.ip)}, enabled={repr(self.__enabled)}, time_hack={repr(self.time_hack)}, description={repr(self.description)}, filename={repr(self.filename)}, patches={repr(self.patches)}, settings={repr(self.settings)}, srams={repr(self.srams)}, target={repr(self.target)}, version={repr(self.version)})"
 
     @property
     def ip(self) -> str:
@@ -105,6 +106,14 @@ class Cabinet:
     def enabled(self, enabled: bool) -> None:
         with self.__lock:
             self.__enabled = enabled
+
+    @property
+    def time_hack(self) -> bool:
+        return self.__host.time_hack
+
+    @time_hack.setter
+    def time_hack(self, time_hack: bool) -> None:
+        self.__host.time_hack = time_hack
 
     def __print(self, string: str, newline: bool = True) -> None:
         if not self.quiet:
@@ -270,6 +279,13 @@ class Cabinet:
                 return None
 
 
+class EmptyObject:
+    pass
+
+
+empty = EmptyObject()
+
+
 class CabinetManager:
     def __init__(self, cabinets: Sequence[Cabinet]) -> None:
         self.__cabinets: Dict[str, Cabinet] = {cab.ip: cab for cab in cabinets}
@@ -327,6 +343,7 @@ class CabinetManager:
                 target=TargetEnum(str(cab['target'])) if 'target' in cab else None,
                 version=NetDimmVersionEnum(str(cab['version'])) if 'version' in cab else None,
                 enabled=(True if 'disabled' not in cab else (not cab['disabled'])),
+                time_hack=(False if 'time_hack' not in cab else bool(cab['time_hack'])),
             )
             if cabinet.target == TargetEnum.TARGET_NAOMI:
                 # Make sure that the settings are correct for the EEPROM size.
@@ -356,6 +373,7 @@ class CabinetManager:
                 'target': cab.target.value,
                 'version': cab.version.value,
                 'filename': cab.filename,
+                'time_hack': cab.time_hack,
                 'roms': cab.patches,
                 # Bytes isn't a serializable type, so serialize it as a list of ints. If the settings is
                 # None for a ROM, serialize it as an empty list.
@@ -401,22 +419,46 @@ class CabinetManager:
                 raise CabinetException(f"There is no cabinet with the IP {ip}")
             del self.__cabinets[ip]
 
-    def update_cabinet(self, cab: Cabinet) -> None:
+    def update_cabinet(
+        self,
+        ip: str,
+        *,
+        region: Optional[CabinetRegionEnum] = None,
+        description: Optional[str] = None,
+        filename: Union[Optional[str], EmptyObject] = empty,
+        patches: Optional[Dict[str, Sequence[str]]] = None,
+        settings: Optional[Dict[str, Optional[bytes]]] = None,
+        srams: Optional[Dict[str, Optional[str]]] = None,
+        target: Union[Optional[TargetEnum], EmptyObject] = empty,
+        version: Union[Optional[NetDimmVersionEnum], EmptyObject] = empty,
+        time_hack: Optional[bool] = None,
+        enabled: Optional[bool] = None,
+    ) -> None:
         with self.__lock:
-            ip = cab.ip
             if ip not in self.__cabinets:
                 raise CabinetException(f"There is no cabinet with the IP {ip}")
             # Make sure we don't reboot the cabinet if we update settings.
             existing_cab = self.__cabinets[ip]
-            existing_cab.description = cab.description
-            existing_cab.target = cab.target
-            existing_cab.region = cab.region
-            existing_cab.version = cab.version
-            existing_cab.patches = cab.patches
-            existing_cab.settings = cab.settings
-            existing_cab.srams = cab.srams
-            existing_cab.filename = cab.filename
-            existing_cab.enabled = cab.enabled
+            if description is not None:
+                existing_cab.description = description
+            if not isinstance(target, EmptyObject):
+                existing_cab.target = target or TargetEnum.TARGET_NAOMI
+            if region is not None:
+                existing_cab.region = region
+            if not isinstance(version, EmptyObject):
+                existing_cab.version = version or NetDimmVersionEnum.VERSION_4_01
+            if patches is not None:
+                existing_cab.patches = {rom: [p for p in patches[rom]] for rom in patches}
+            if settings is not None:
+                existing_cab.settings = {rom: settings[rom] for rom in settings}
+            if srams is not None:
+                existing_cab.srams = {rom: srams[rom] for rom in srams}
+            if not isinstance(filename, EmptyObject):
+                existing_cab.filename = filename
+            if enabled is not None:
+                existing_cab.enabled = enabled
+            if time_hack is not None:
+                existing_cab.time_hack = time_hack
 
     def cabinet_exists(self, ip: str) -> bool:
         with self.__lock:

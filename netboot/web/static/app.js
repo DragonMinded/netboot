@@ -353,6 +353,10 @@ Vue.component('cabinetconfig', {
                             <option v-for="version in versions" v-bind:value="version">{{ version }}</option>
                         </select>
                     </dd>
+                    <dt>Keyless Boot</dt><dd>
+                        <input id="time_hack" type="checkbox" v-model="cabinet.time_hack" />
+                        <label for="time_hack">allow boot without key chip, by using the 'time hack'</label>
+                    </dd>
                     <dt>Enabled</dt><dd>
                         <input id="enabled" type="checkbox" v-model="cabinet.enabled" />
                         <label for="enabled">allow management of this cabinet</label>
@@ -592,6 +596,7 @@ Vue.component('newcabinet', {
             cabinet: {
                 'description': '',
                 'ip': '',
+                'time_hack': false,
                 'region': window.regions[0],
                 'target': window.targets[0],
                 'version': window.versions[0],
@@ -653,6 +658,10 @@ Vue.component('newcabinet', {
                     <select v-model="cabinet.version">
                         <option v-for="version in versions" v-bind:value="version">{{ version }}</option>
                     </select>
+                </dd>
+                <dt>Keyless Boot</dt><dd>
+                    <input id="time_hack" type="checkbox" v-model="cabinet.time_hack" />
+                    <label for="time_hack">allow boot without key chip, by using the 'time hack'</label>
                 </dd>
             </dl>
             <button v-on:click="save">Add Cabinet</button>
