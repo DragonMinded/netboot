@@ -24,7 +24,7 @@ class PatchManager:
     def patches(self, directory: str) -> List[str]:
         with self.__lock:
             if directory not in self.__directories:
-                raise Exception(f"Directory {directory} is not managed by us!")
+                raise PatchException(f"Directory {directory} is not managed by us!")
             return sorted([f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))])
 
     def recalculate(self, filename: Optional[str] = None) -> None:

@@ -11,7 +11,7 @@ from arcadeutils import FileBytes, BinaryDiff, BinaryDiffException
 from naomi import NaomiRom, NaomiSettingsPatcher, NaomiRomRegionEnum, get_default_trojan
 from naomi.settings import SettingsWrapper, SettingsManager
 from netdimm import NetDimmVersionEnum
-from netboot import Cabinet, CabinetRegionEnum, CabinetManager, DirectoryManager, PatchManager, TargetEnum
+from netboot import Cabinet, CabinetRegionEnum, CabinetManager, DirectoryManager, PatchManager, SRAMManager, TargetEnum
 
 
 current_directory: str = os.path.abspath(os.path.dirname(__file__))
@@ -102,6 +102,10 @@ def systemconfig() -> Response:
     patches: List[Dict[str, Any]] = []
     for directory in patchman.directories:
         patches.append({'name': directory, 'files': sorted(patchman.patches(directory))})
+    sramman = app.config['SRAMManager']
+    srams: List[Dict[str, Any]] = []
+    for directory in sramman.directories:
+        srams.append({'name': directory, 'files': sorted(sramman.srams(directory))})
     # TODO: This should be a general manager, not Naomi-specific
     manager = SettingsManager(app.config['settings_directory'])
     settings: List[Dict[str, Any]] = [
@@ -114,6 +118,7 @@ def systemconfig() -> Response:
             roms=sorted(roms, key=lambda rom: cast(str, rom['name'])),
             patches=sorted(patches, key=lambda patch: cast(str, patch['name'])),
             settings=sorted(settings, key=lambda setting: cast(str, setting['name'])),
+            srams=sorted(srams, key=lambda sram: cast(str, sram['name'])),
         ),
         200,
     )
@@ -299,8 +304,65 @@ def patches() -> Dict[str, Any]:
     for directory in patchman.directories:
         patches.append({'name': directory, 'files': sorted(patchman.patches(directory))})
     return {
-        'patches': sorted(patches, key=lambda patch: cast(str, patch['name'])),
+        'patches': sorted(patches, key=lambda direntry: cast(str, direntry['name'])),
     }
+
+
+@app.route('/srams')
+@jsonify
+def srams() -> Dict[str, Any]:
+    sramman = app.config['SRAMManager']
+    srams: List[Dict[str, Any]] = []
+    for directory in sramman.directories:
+        srams.append({'name': directory, 'files': sorted(sramman.srams(directory))})
+    return {
+        'srams': sorted(srams, key=lambda direntry: cast(str, direntry['name'])),
+    }
+
+
+@app.route('/srams', methods=['DELETE'])
+@jsonify
+def recalculateallsrams() -> Dict[str, Any]:
+    sramman = app.config['SRAMManager']
+    sramman.recalculate()
+    return {}
+
+
+@app.route('/srams/<filename:filename>')
+@jsonify
+def applicablesrams(filename: str) -> Dict[str, Any]:
+    sramman = app.config['SRAMManager']
+    directories = set(sramman.directories)
+    srams_by_directory: Dict[str, List[str]] = {}
+    try:
+        srams = sramman.srams_for_game(filename)
+    except FileNotFoundError:
+        if not filename.startswith('/'):
+            filename = "/" + filename
+        srams = sramman.srams_for_game(filename)
+    for sram in srams:
+        dirname, filename = os.path.split(sram)
+        if dirname not in directories:
+            raise Exception("Expected all SRAM files to be inside managed directories!")
+        if dirname not in srams_by_directory:
+            srams_by_directory[dirname] = []
+        srams_by_directory[dirname].append(filename)
+    return {
+        'srams': sorted(
+            [{'name': dirname, 'files': sorted(srams_by_directory[dirname])} for dirname in srams_by_directory],
+            key=lambda sram: cast(str, sram['name']),
+        )
+    }
+
+
+@app.route('/srams/<filename:filename>', methods=['DELETE'])
+def recalculateapplicablesrams(filename: str) -> Response:
+    sramman = app.config['SRAMManager']
+    sramman.recalculate(filename)
+    if not filename.startswith('/'):
+        filename = "/" + filename
+    sramman.recalculate(filename)
+    return applicablesrams(filename)
 
 
 @app.route('/settings')
@@ -313,7 +375,7 @@ def settings() -> Dict[str, Any]:
     ]
 
     return {
-        'settings': sorted(settings, key=lambda setting: cast(str, setting['name'])),
+        'settings': sorted(settings, key=lambda direntry: cast(str, direntry['name'])),
     }
 
 
@@ -359,6 +421,7 @@ def createcabinet(ip: str) -> Dict[str, Any]:
         filename=None,
         patches={rom: [] for rom in roms},
         settings={rom: None for rom in roms},
+        srams={rom: None for rom in roms},
         target=TargetEnum(request.json['target']),
         version=NetDimmVersionEnum(request.json['version']),
         enabled=True,
@@ -383,6 +446,7 @@ def updatecabinet(ip: str) -> Dict[str, Any]:
         filename=old_cabinet.filename,
         patches=old_cabinet.patches,
         settings=old_cabinet.settings,
+        srams=old_cabinet.srams,
         target=TargetEnum(request.json['target']),
         version=NetDimmVersionEnum(request.json['version']),
         enabled=request.json['enabled'],
@@ -425,6 +489,7 @@ def romsforcabinet(ip: str) -> Dict[str, Any]:
     cabman = app.config['CabinetManager']
     dirman = app.config['DirectoryManager']
     patchman = app.config['PatchManager']
+    sramman = app.config['SRAMManager']
     cabinet = cabman.cabinet(ip)
 
     roms: List[Dict[str, Any]] = []
@@ -503,14 +568,27 @@ def romsforcabinet(ip: str) -> Dict[str, Any]:
                                 settings = manager.from_rom(rom, naomi_region)
 
                 if settings is not None:
-                    # TODO: If we ever support editing SRAM from the frontend, this
-                    # needs to change to also support SRAM file types, and the code
-                    # in app.js also would need updating. For now we don't support it.
                     patches.append({
                         'file': 'eeprom',
                         'type': 'settings',
                         'enabled': settingsdata is not None,
                         'settings': settings.to_json(),
+                    })
+
+                srams = sramman.srams_for_game(full_filename)
+                if srams:
+                    activesram = cabinet.srams.get(full_filename, None)
+                    patches.append({
+                        'file': 'sram',
+                        'type': 'sram',
+                        'active': activesram or "",
+                        'choices': [
+                            {
+                                "v": "",
+                                "t": "No SRAM File",
+                            },
+                            *[{"v": f, "t": sramman.sram_name(f)} for f in srams]
+                        ],
                     })
 
             roms.append({
@@ -535,13 +613,18 @@ def updateromsforcabinet(ip: str) -> Response:
         else:
             cabinet.patches[game['file']] = [
                 p['file'] for p in game['patches']
-                if p['enabled'] and p['type'] == 'patch'
+                if p['type'] == 'patch' and p['enabled']
             ]
 
             allsettings = [p for p in game['patches'] if p['type'] == 'settings']
             if len(allsettings) not in {0, 1}:
                 raise Exception("Logic error, expected zero or one patch section!")
             settings = allsettings[0] if allsettings else None
+
+            allsrams = [p for p in game['patches'] if p['type'] == 'sram']
+            if len(allsrams) not in {0, 1}:
+                raise Exception("Logic error, expected zero or one SRAM file section!")
+            sram = allsrams[0] if allsrams else None
 
             if cabinet.target == TargetEnum.TARGET_NAOMI:
                 # TODO: This is also Naomi-specific, much like the get method
@@ -554,8 +637,15 @@ def updateromsforcabinet(ip: str) -> Response:
                     cabinet.settings[game['file']] = eepromdata
                 else:
                     cabinet.settings[game['file']] = None
+
+                if sram is not None:
+                    if sram['active']:
+                        cabinet.srams[game['file']] = sram['active']
+                    else:
+                        cabinet.srams[game['file']] = None
             else:
                 cabinet.settings[game['file']] = None
+                cabinet.srams[game['file']] = None
     serialize_app(app)
     return romsforcabinet(ip)
 
@@ -620,6 +710,16 @@ def spawn_app(config_file: str, debug: bool = False) -> Flask:
     else:
         raise AppException(f"Invalid YAML file format for {config_file}, expected directory or list of directories for patch directory setting!")
 
+    if 'sram_directory' not in data:
+        raise AppException(f"Invalid YAML file format for {config_file}, missing sram directory setting!")
+    directory_or_list = data['sram_directory']
+    if isinstance(directory_or_list, str):
+        srams = [directory_or_list]
+    elif isinstance(directory_or_list, list):
+        srams = directory_or_list
+    else:
+        raise AppException(f"Invalid YAML file format for {config_file}, expected directory or list of directories for sram directory setting!")
+
     if 'settings_directory' not in data:
         raise AppException(f"Invalid YAML file format for {config_file}, missing settings directory setting!")
     settings = data['settings_directory']
@@ -640,6 +740,7 @@ def spawn_app(config_file: str, debug: bool = False) -> Flask:
     app.config['CabinetManager'] = CabinetManager.from_yaml(cabinet_file)
     app.config['DirectoryManager'] = DirectoryManager(directories, checksums)
     app.config['PatchManager'] = PatchManager(patches)
+    app.config['SRAMManager'] = SRAMManager(srams)
     app.config['settings_directory'] = os.path.abspath(settings)
     app.config['config_file'] = os.path.abspath(config_file)
     app.config['cabinet_file'] = cabinet_file

@@ -2,7 +2,7 @@ body {
     font-family: Arial;
 }
 
-div.cabinet, div.config, div.romlist, div.patchlist, div.gamelist, div.romconfig, div.game {
+div.cabinet, div.config, div.romlist, div.patchlist, div.sramlist, div.gamelist, div.romconfig, div.game {
     margin: 20px;
     border: 1px solid #bbbbbb;
     padding: 20px;
@@ -39,7 +39,7 @@ div.cabinet div.query {
     padding-top: 5px;
 }
 
-div.cabinet h3, div.romlist h3, div.patchlist h3, div.gamelist h3, div.romconfig h3, div.game h3 {
+div.cabinet h3, div.romlist h3, div.patchlist h3, div.sramlist h3, div.gamelist h3, div.romconfig h3, div.game h3 {
     margin: 0px 0px 5px 0px;
 }
 
@@ -70,6 +70,10 @@ div.settings table td:first-child {
 
 div.romconfig input {
     width: 100%;
+}
+
+div.patch select {
+    margin-top: 3px;
 }
 
 div.information {

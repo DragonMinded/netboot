@@ -220,7 +220,7 @@ To try it out with the test server run the following:
 ./host_debug_server --config config.yaml
 ```
 
-Like the other scripts, you can run this command with the `--help` flag to see additional options. By default, the config will look for roms in the `roms/` directory, patches in the `patches/` directory and Naomi settings definitions files in the `naomi/settings/definitions` directory. It will listen on port 80. You do not want to run the above script to serve traffic on a production setup as it is single-threaded and will dump its caches if you change any files. By default, the server interface will hide advanced options, such as cabinet configuration. To show the options, either type the word 'config' on the home page, or go to the `/config` page. Both of these will un-hide the configuration options until you choose again to hide them.
+Like the other scripts, you can run this command with the `--help` flag to see additional options. By default, the config will look for ROMs in the `roms/` directory, patches in the `patches/` directory, SRAM files in the `srams/` directory and Naomi settings definitions files in the `naomi/settings/definitions` directory. It will listen on port 80. You do not want to run the above script to serve traffic on a production setup as it is single-threaded and will dump its caches if you change any files. By default, the server interface will hide advanced options, such as cabinet configuration. To show the options, either type the word 'config' on the home page, or go to the `/config` page. Both of these will un-hide the configuration options until you choose again to hide them.
 
 ### Production Setup
 
@@ -279,13 +279,13 @@ With the above scripts, you should be able to visit `https://your.domain.here.co
 The tools here are fully typed, and should be kept that way. To verify type hints, run the following:
 
 ```
-mypy --strict .
+mypy .
 ```
 
 The tools are also lint clean (save for line length lints which are useless drivel). To verify lint, run the following:
 
 ```
-flake8 --ignore E501 .
+flake8 .
 ```
 
 ## Including This Package

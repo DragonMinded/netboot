@@ -7,6 +7,7 @@ import time
 import enum
 from netboot import Cabinet, CabinetStateEnum, CabinetRegionEnum, TargetEnum
 from netdimm import NetDimmVersionEnum
+from naomi import NaomiSettingsPatcher
 from typing import Any, Optional
 
 
@@ -83,21 +84,38 @@ def main() -> int:
         '--settings-file',
         metavar='FILE',
         type=str,
+        action='append',
         help=(
             'Settings to apply to image on-the-fly while sending to the NetDimm. '
             'Currently only supported for the Naomi platform. For Naomi, the '
             'settings file should be a valid 128-byte EEPROM file as obtained '
             'from an emulator or as created using the "edit_settings" utility, '
-            'or a 32-kbyte SRAM file as obtained from an emulator.'
+            'or a 32-kbyte SRAM file as obtained from an emulator. You can apply '
+            'both an EEPROM and a SRAM settings file by specifying this argument '
+            'twice.'
         ),
     )
 
     args = parser.parse_args()
 
     settings: Optional[bytes] = None
-    if args.settings_file:
-        with open(args.settings_file, "rb") as fp:
-            settings = fp.read()
+    sram: Optional[str] = None
+    if args.target == TargetEnum.TARGET_NAOMI:
+        for sfile in args.settings_file or []:
+            with open(sfile, "rb") as fp:
+                data = fp.read()
+
+            if len(data) == NaomiSettingsPatcher.SRAM_SIZE:
+                sram = sfile
+            elif len(data) == NaomiSettingsPatcher.EEPROM_SIZE:
+                settings = data
+            else:
+                print(f"Could not attach {sfile}: not the right size to be an SRAM or EEPROM settings", file=sys.stderr)
+                return 1
+    else:
+        for sfile in args.settings_file or []:
+            print(f"Could not attach {sfile}: not a Naomi ROM!")
+            return 1
 
     print(f"managing {args.ip} to ensure {args.image} is always loaded")
     cabinet = Cabinet(
@@ -107,6 +125,7 @@ def main() -> int:
         args.image,
         {args.image: args.patch_file or []},
         {args.image: settings},
+        {args.image: sram},
         target=args.target,
         version=args.version,
         enabled=True,

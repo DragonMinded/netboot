@@ -111,6 +111,7 @@ elif 'NETDIMM_INSTALLATION' in os.environ:
         install_requires=[
             'pycryptodome',
             'arcadeutils',
+            'naomiutils',
         ],
         python_requires=">=3.6",
     )

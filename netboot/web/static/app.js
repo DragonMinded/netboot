@@ -237,6 +237,12 @@ Vue.component('patch', {
                 <label v-bind:for="game.file + patch.file">force custom settings on boot</label>
                 <settingscollection v-if="patch.enabled" v-bind:settings="patch.settings"></settingscollection>
             </div>
+            <div v-if="patch.type == 'sram'">
+                Attach SRAM File:
+                <select v-bind:id="game.file + patch.file" v-model="patch.active">
+                    <option v-for="option in patch.choices" :value="option.v">{{option.t}}</option>
+                </select>
+            </div>
         </div>
     `,
 });
@@ -499,7 +505,7 @@ Vue.component('availablepatches', {
         };
     },
     methods: {
-        recalculate: function() {
+        recalculatepatches: function() {
             this.loading = true;
             axios.delete('/patches/' + encodeURI(filename)).then(result => {
                 if (!result.data.error) {
@@ -516,7 +522,43 @@ Vue.component('availablepatches', {
             <div v-if="loading">loading...</div>
             <div v-if="!loading && Object.keys(patches).length === 0">no applicable patches</div>
             <div>&nbsp;</div>
-            <button v-on:click="recalculate">Recalculate Patch Files</button>
+            <button v-on:click="recalculatepatches">Recalculate Patch Files</button>
+        </div>
+    `,
+});
+
+Vue.component('availablesrams', {
+    data: function() {
+        axios.get('/srams/' + encodeURI(filename)).then(result => {
+            if (!result.data.error) {
+                this.srams = result.data.srams;
+                this.loading = false;
+            }
+        });
+        return {
+            loading: true,
+            srams: {}
+        };
+    },
+    methods: {
+        recalculatesrams: function() {
+            this.loading = true;
+            axios.delete('/srams/' + encodeURI(filename)).then(result => {
+                if (!result.data.error) {
+                    this.srams = result.data.srams;
+                    this.loading = false;
+                }
+            });
+        },
+    },
+    template: `
+        <div class='sramlist'>
+            <h3>Available SRAM Files For This Rom</h3>
+            <directory v-if="!loading" v-for="sram in srams" v-bind:dir="sram" v-bind:key="sram"></directory>
+            <div v-if="loading">loading...</div>
+            <div v-if="!loading && Object.keys(srams).length === 0">no applicable SRAM files</div>
+            <div>&nbsp;</div>
+            <button v-on:click="recalculatesrams">Recalculate SRAM Files</button>
         </div>
     `,
 });
@@ -653,7 +695,8 @@ Vue.component('roms', {
     data: function() {
         return {
             roms: window.roms,
-            deleted: false,
+            deletedpatches: false,
+            deletedsrams: false,
         };
     },
     methods: {
@@ -664,11 +707,19 @@ Vue.component('roms', {
                 }
             });
         },
-        recalculate: function() {
-            this.deleted = false;
+        recalculatepatches: function() {
+            this.deletedpatches = false;
             axios.delete('/patches').then(result => {
                 if (!result.data.error) {
-                    this.deleted = true;
+                    this.deletedpatches = true;
+                }
+            });
+        },
+        recalculatesrams: function() {
+            this.deletedsrams = false;
+            axios.delete('/srams').then(result => {
+                if (!result.data.error) {
+                    this.deletedsrams = true;
                 }
             });
         },
@@ -683,8 +734,11 @@ Vue.component('roms', {
             <h3>Available ROMs</h3>
             <romlist v-for="rom in roms" v-bind:dir="rom" v-bind:key="rom"></romlist>
             <div>&nbsp;</div>
-            <button v-on:click="recalculate">Recalculate All Patch Files</button>
-            <span class="successindicator" v-if="deleted">&check; recalculated</span>
+            <button v-on:click="recalculatepatches">Recalculate All Patch Files</button>
+            <span class="successindicator" v-if="deletedpatches">&check; recalculated</span>
+            <div>&nbsp;</div>
+            <button v-on:click="recalculatesrams">Recalculate All SRAM Files</button>
+            <span class="successindicator" v-if="deletedsrams">&check; recalculated</span>
         </div>
     `,
 });
@@ -713,6 +767,34 @@ Vue.component('patches', {
         <div class='patchlist'>
             <h3>Available Patches</h3>
             <directory v-for="patch in patches" v-bind:dir="patch" v-bind:key="patch"></directory>
+        </div>
+    `,
+});
+
+Vue.component('srams', {
+    data: function() {
+        return {
+            srams: window.srams,
+        };
+    },
+    methods: {
+        refresh: function() {
+            axios.get('/srams').then(result => {
+                if (!result.data.error) {
+                    this.srams = result.data.srams;
+                }
+            });
+        },
+    },
+    mounted: function() {
+        setInterval(function () {
+            this.refresh();
+        }.bind(this), 5000);
+    },
+    template: `
+        <div class='sramlist'>
+            <h3>Available SRAM Files</h3>
+            <directory v-for="sram in srams" v-bind:dir="sram" v-bind:key="sram"></directory>
         </div>
     `,
 });

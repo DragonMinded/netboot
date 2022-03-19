@@ -2,6 +2,7 @@ from netboot.hostutils import Host, HostException, HostStatusEnum, TargetEnum, S
 from netboot.cabinet import Cabinet, CabinetManager, CabinetStateEnum, CabinetRegionEnum
 from netboot.directory import DirectoryManager
 from netboot.patch import PatchManager
+from netboot.sram import SRAMManager
 
 __all__ = [
     "TargetEnum",
@@ -15,4 +16,5 @@ __all__ = [
     "CabinetRegionEnum",
     "DirectoryManager",
     "PatchManager",
+    "SRAMManager",
 ]

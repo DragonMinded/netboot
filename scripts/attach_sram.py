@@ -87,8 +87,8 @@ def main() -> int:
 
     elif args.action == "extract":
         # Grab the rom, parse it.
-        with open(args.bin, "rb") as fp:
-            data = FileBytes(fp)
+        with open(args.bin, "rb") as rfp:
+            data = FileBytes(rfp)
 
             # Now, search for the settings.
             patcher = NaomiSettingsPatcher(data, None)
@@ -103,8 +103,8 @@ def main() -> int:
                 return 1
 
             print(f"Wrote SRAM settings to {args.sram}.")
-            with open(args.sram, "wb") as fp:
-                fp.write(settings)
+            with open(args.sram, "wb") as wfp:
+                wfp.write(settings)
 
     return 0
 

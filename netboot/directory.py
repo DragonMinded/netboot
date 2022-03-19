@@ -32,7 +32,7 @@ class DirectoryManager:
     def games(self, directory: str) -> List[str]:
         with self.__lock:
             if directory not in self.__directories:
-                raise Exception(f"Directory {directory} is not managed by us!")
+                raise DirectoryException(f"Directory {directory} is not managed by us!")
             return sorted([f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))])
 
     def game_name(self, filename: str, region: CabinetRegionEnum) -> str:

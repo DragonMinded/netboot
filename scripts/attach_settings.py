@@ -172,8 +172,8 @@ def main() -> int:
 
     elif args.action == "extract":
         # Grab the rom, parse it.
-        with open(args.rom, "rb") as fp:
-            data = FileBytes(fp)
+        with open(args.rom, "rb") as rfp:
+            data = FileBytes(rfp)
 
             # Now, search for the settings.
             patcher = NaomiSettingsPatcher(data, None)
@@ -188,8 +188,8 @@ def main() -> int:
                 return 1
 
             print(f"Wrote EEPROM settings to {args.eeprom}.")
-            with open(args.eeprom, "wb") as fp:
-                fp.write(settings)
+            with open(args.eeprom, "wb") as wfp:
+                wfp.write(settings)
 
     elif args.action == "info":
         # Grab the rom, parse it.

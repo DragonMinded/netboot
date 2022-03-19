@@ -43,6 +43,7 @@ class Cabinet:
         filename: Optional[str],
         patches: Dict[str, Sequence[str]],
         settings: Dict[str, Optional[bytes]],
+        srams: Dict[str, Optional[str]],
         target: Optional[TargetEnum] = None,
         version: Optional[NetDimmVersionEnum] = None,
         enabled: bool = True,
@@ -52,6 +53,7 @@ class Cabinet:
         self.region: CabinetRegionEnum = region
         self.patches: Dict[str, List[str]] = {rom: [p for p in patches[rom]] for rom in patches}
         self.settings: Dict[str, Optional[bytes]] = {rom: settings[rom] for rom in settings}
+        self.srams: Dict[str, Optional[str]] = {rom: srams[rom] for rom in srams}
         self.quiet = quiet
         self.__enabled = enabled
         self.__host: Host = Host(ip, target=target, version=version, quiet=self.quiet)
@@ -62,7 +64,7 @@ class Cabinet:
 
     def __repr__(self) -> str:
         with self.__lock:
-            return f"Cabinet(ip={repr(self.ip)}, enabled={repr(self.__enabled)} description={repr(self.description)}, filename={repr(self.filename)}, patches={repr(self.patches)} settings={repr(self.settings)}, target={repr(self.target)}, version={repr(self.version)})"
+            return f"Cabinet(ip={repr(self.ip)}, enabled={repr(self.__enabled)} description={repr(self.description)}, filename={repr(self.filename)}, patches={repr(self.patches)} settings={repr(self.settings)}, srams={repr(self.srams)} target={repr(self.target)}, version={repr(self.version)})"
 
     @property
     def ip(self) -> str:
@@ -145,6 +147,10 @@ class Cabinet:
                         eeprom = self.settings.get(self.__new_filename, None)
                         if eeprom is not None:
                             settings[SettingsEnum.SETTINGS_EEPROM] = eeprom
+                        sram = self.srams.get(self.__new_filename, None)
+                        if sram is not None:
+                            with open(sram, "rb") as bfp:
+                                settings[SettingsEnum.SETTINGS_SRAM] = bfp.read()
 
                         if info is not None and info.current_game_crc != 0:
                             # Its worth trying to CRC this game and seeing if it matches.
@@ -315,26 +321,30 @@ class CabinetManager:
                 filename=str(cab['filename']) if cab['filename'] is not None else None,
                 patches={str(rom): [str(p) for p in cab['roms'][rom]] for rom in cab['roms']},
                 # This is accessed differently since we have older YAML files that might need upgrading.
-                settings={str(rom): (bytes(data) or None) for (rom, data) in cab.get('settings', {}).items()},
+                settings={str(rom): (bytes(data) if bool(data) else None) for (rom, data) in cab.get('settings', {}).items()},
+                # This is accessed differently since we have older YAML files that might need upgrading.
+                srams={str(rom): (str(data) if bool(data) else None) for (rom, data) in cab.get('srams', {}).items()},
                 target=TargetEnum(str(cab['target'])) if 'target' in cab else None,
                 version=NetDimmVersionEnum(str(cab['version'])) if 'version' in cab else None,
                 enabled=(True if 'disabled' not in cab else (not cab['disabled'])),
             )
             if cabinet.target == TargetEnum.TARGET_NAOMI:
-                # Make sure that the settings are correct for one of the possible patch types
+                # Make sure that the settings are correct for the EEPROM size.
                 cabinet.settings = {
-                    name: None if (settings is not None and len(settings) not in {NaomiSettingsPatcher.SRAM_SIZE, NaomiSettingsPatcher.EEPROM_SIZE}) else settings
+                    name: None if (settings is not None and len(settings) != NaomiSettingsPatcher.EEPROM_SIZE) else settings
                     for name, settings in cabinet.settings.items()
                 }
             else:
                 # Nothing can have settings outside of Naomi until we support it.
                 cabinet.settings = {name: None for name in cabinet.settings}
+                # Same goes for SRAM stuff.
+                cabinet.srams = {name: None for name in cabinet.srams}
             cabinets.append(cabinet)
 
         return CabinetManager(cabinets)
 
     def to_yaml(self, yaml_file: str) -> None:
-        data: Dict[str, Dict[str, Optional[Union[bool, str, Dict[str, List[str]], Dict[str, List[int]]]]]] = {}
+        data: Dict[str, Dict[str, Optional[Union[bool, str, Dict[str, List[str]], Dict[str, List[int]], Dict[str, Optional[str]]]]]] = {}
 
         with self.__lock:
             cabinets: List[Cabinet] = sorted([cab for _, cab in self.__cabinets.items()], key=lambda cab: cab.ip)
@@ -350,6 +360,7 @@ class CabinetManager:
                 # Bytes isn't a serializable type, so serialize it as a list of ints. If the settings is
                 # None for a ROM, serialize it as an empty list.
                 'settings': {rom: [x for x in (settings or [])] for (rom, settings) in cab.settings.items()},
+                'srams': cab.srams,
             }
             if not cab.enabled:
                 data[cab.ip]['disabled'] = True
@@ -403,6 +414,7 @@ class CabinetManager:
             existing_cab.version = cab.version
             existing_cab.patches = cab.patches
             existing_cab.settings = cab.settings
+            existing_cab.srams = cab.srams
             existing_cab.filename = cab.filename
             existing_cab.enabled = cab.enabled
 
