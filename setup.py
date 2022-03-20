@@ -2,7 +2,7 @@ import os
 from setuptools import setup
 
 
-VERSION = "0.3.3"
+VERSION = "0.4.0"
 
 
 if 'FULL_INSTALLATION' in os.environ:
@@ -19,6 +19,7 @@ if 'FULL_INSTALLATION' in os.environ:
             'netdimm',
             'naomi',
             'naomi.settings',
+            'settings',
             # Include default trojan.
             'homebrew.settingstrojan',
             # Web server package.
@@ -64,6 +65,7 @@ elif 'NAOMI_INSTALLATION' in os.environ:
             # Package for 3rd party.
             'naomi',
             'naomi.settings',
+            'settings',
             # Include settings definitions.
             'naomi.settings.definitions',
             # Include default trojan.
@@ -73,6 +75,7 @@ elif 'NAOMI_INSTALLATION' in os.environ:
             # Make sure mypy sees us as typed.
             "naomi": ["py.typed", "README.md"],
             "naomi.settings": ["py.typed", "README.md"],
+            "settings": ["py.typed", "README.md"],
             # Make sure to include all existing settings.
             "naomi.settings.definitions": ["*.settings", "README.md"],
             # Make sure to actually include the trojan data.
@@ -129,6 +132,7 @@ else:
             'netdimm',
             'naomi',
             'naomi.settings',
+            'settings',
             # Include settings definitions.
             'naomi.settings.definitions',
             # Include default trojan.
@@ -144,6 +148,7 @@ else:
             "netdimm": ["py.typed", "README.md"],
             "naomi": ["py.typed", "README.md"],
             "naomi.settings": ["py.typed", "README.md"],
+            "settings": ["py.typed", "README.md"],
             # Make sure to include all existing settings.
             "naomi.settings.definitions": ["*.settings", "README.md"],
             # Make sure to actually include the trojan data.

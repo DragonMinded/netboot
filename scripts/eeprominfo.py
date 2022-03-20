@@ -4,7 +4,7 @@ import os
 import sys
 
 from naomi import NaomiEEPRom
-from naomi.settings import SettingsManager, ReadOnlyCondition, SettingsParseException, SettingsSaveException
+from naomi.settings import NaomiSettingsManager, ReadOnlyCondition, SettingsParseException, SettingsSaveException
 
 
 # The root of the repo.
@@ -70,7 +70,7 @@ def main() -> int:
 
         elif args.display_parsed_settings:
             # Grab the actual EEPRom so we can print the settings within.
-            manager = SettingsManager(args.settings_directory)
+            manager = NaomiSettingsManager(args.settings_directory)
 
             try:
                 config = manager.from_eeprom(data)

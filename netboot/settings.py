@@ -5,7 +5,7 @@ import threading
 from typing import Any, Dict, List, Optional, Tuple
 from arcadeutils import FileBytes, BinaryDiff, BinaryDiffException
 from naomi import NaomiRom, NaomiRomRegionEnum, NaomiSettingsPatcher, get_default_trojan
-from naomi.settings import SettingsWrapper as NaomiSettingsWrapper, SettingsManager as NaomiSettingsManager
+from naomi.settings import NaomiSettingsWrapper, NaomiSettingsManager
 
 
 class SettingsException(Exception):

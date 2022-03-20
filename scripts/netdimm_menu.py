@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from arcadeutils import FileBytes, BinaryDiff
 from naomi import NaomiRom, NaomiRomRegionEnum, NaomiSettingsPatcher, get_default_trojan, add_or_update_section
-from naomi.settings import SettingsManager, Setting, ReadOnlyCondition, SettingsWrapper, get_default_settings_directory
+from naomi.settings import NaomiSettingsManager, NaomiSettingsWrapper, get_default_settings_directory, Setting, ReadOnlyCondition
 from netdimm import NetDimm, NetDimmException, Message, send_message, receive_message, write_scratch1_register, MESSAGE_HOST_STDOUT, MESSAGE_HOST_STDERR
 from netboot import PatchManager
 
@@ -404,7 +404,7 @@ def main() -> int:
 
             last_game_selection: Optional[int] = None
             last_game_patches: List[Tuple[str, str]] = []
-            last_game_parsed_settings: Optional[SettingsWrapper] = None
+            last_game_parsed_settings: Optional[NaomiSettingsWrapper] = None
 
             try:
                 # Always show game send progress.
@@ -498,7 +498,7 @@ def main() -> int:
                                         if patcher.has_eeprom:
                                             eepromdata = patcher.get_eeprom()
 
-                                    manager = SettingsManager(get_default_settings_directory())
+                                    manager = NaomiSettingsManager(get_default_settings_directory())
                                     if eepromdata is None:
                                         # We need to make them up from scratch.
                                         parsedsettings = manager.from_rom(patcher.rom, region=settings.system_region)
@@ -621,7 +621,7 @@ def main() -> int:
                                                     setting.current = settings_values[i]
 
                                     if last_game_parsed_settings is not None:
-                                        manager = SettingsManager(get_default_settings_directory())
+                                        manager = NaomiSettingsManager(get_default_settings_directory())
                                         gamesettings.eeprom = manager.to_eeprom(last_game_parsed_settings)
                                         gamesettings.force_settings = force_settings != 0
                                     else:

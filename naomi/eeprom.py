@@ -29,6 +29,10 @@ class ArrayBridge:
     def data(self) -> bytes:
         return self.__parent._data[self.__offset1:(self.__offset1 + self.__length)]
 
+    @data.setter
+    def data(self, databytes: bytes) -> None:
+        self.__setitem__(slice(0, self.__length, 1), databytes)
+
     @overload
     def __getitem__(self, key: int) -> int:
         ...
@@ -189,7 +193,8 @@ class NaomiEEPRom(Generic[BytesLike]):
                     system_array[10] = system_defaults.coin_2_rate
                     system_array[11] = system_defaults.bonus
 
-                # TODO: Skipping out looking up sequence texts for now.
+                # TODO: Skipping out looking up sequence texts for now. Tecchnically we should be setting the upper
+                # and lower nibbles of the last 4 bytes to the system default sequence text values 1-8, but I was lazy.
 
         # Finally, construct the full EEPROM.
         system = bytes(system_array)
@@ -374,6 +379,11 @@ class NaomiEEPRom(Generic[BytesLike]):
     def system(self) -> ArrayBridge:
         return ArrayBridge(self, NaomiEEPRom.__validate_system, "system", 16, 2, 20)
 
+    @system.setter
+    def system(self, data: bytes) -> None:
+        bridge = ArrayBridge(self, NaomiEEPRom.__validate_system, "system", 16, 2, 20)
+        bridge.data = data
+
     @property
     def length(self) -> int:
         # Arbitrarily choose the first enclave.
@@ -408,6 +418,12 @@ class NaomiEEPRom(Generic[BytesLike]):
     def game(self) -> ArrayBridge:
         length = self.length
         return ArrayBridge(self, NaomiEEPRom.__validate_game, "game", length, 44, 44 + length)
+
+    @game.setter
+    def game(self, data: bytes) -> None:
+        length = self.length
+        bridge = ArrayBridge(self, NaomiEEPRom.__validate_game, "game", length, 44, 44 + length)
+        bridge.data = data
 
     @overload
     def __getitem__(self, key: int) -> int:

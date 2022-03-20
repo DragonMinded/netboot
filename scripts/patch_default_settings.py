@@ -6,7 +6,7 @@ from typing import cast, BinaryIO
 
 from arcadeutils import FileBytes, BinaryDiff
 from naomi import NaomiEEPRom, NaomiRom
-from naomi.settings import SettingsManager
+from naomi.settings import NaomiSettingsManager
 
 
 # The root of the repo.
@@ -61,7 +61,7 @@ def main() -> int:
     # First, try to open the EEPRom file.
     with open(args.eeprom, "rb") as fp:
         eeprom = NaomiEEPRom(fp.read())
-        manager = SettingsManager(args.settings_directory)
+        manager = NaomiSettingsManager(args.settings_directory)
         defaults = manager.from_serial(eeprom.serial)
         defaulteeprom = NaomiEEPRom(manager.to_eeprom(defaults))
 

@@ -1,4 +1,9 @@
 from naomi.settings.settings import (
+    NaomiSettingsWrapper,
+    NaomiSettingsManager,
+    get_default_settings_directory,
+)
+from settings.settings import (
     SettingsParseException,
     SettingsSaveException,
     JSONParseException,
@@ -7,16 +12,15 @@ from naomi.settings.settings import (
     DefaultConditionGroup,
     Setting,
     Settings,
-    SettingsWrapper,
-    SettingsManager,
-    get_default_settings_directory,
+    SettingsConfig,
 )
+
 try:
-    from naomi.settings.editor import SettingsEditor
+    from naomi.settings.editor import NaomiSettingsEditor
 except ModuleNotFoundError:
     # DragonCurses not installed, provide a dummy stub.
-    class SettingsEditor:  # type: ignore
-        def __init__(self, settings: SettingsWrapper, enable_unicode: bool = True) -> None:
+    class NaomiSettingsEditor:  # type: ignore
+        def __init__(self, settings: NaomiSettingsWrapper, enable_unicode: bool = True) -> None:
             self.settings = settings
 
         def run(self) -> bool:
@@ -24,6 +28,10 @@ except ModuleNotFoundError:
 
 
 __all__ = [
+    "NaomiSettingsWrapper",
+    "NaomiSettingsManager",
+    "NaomiSettingsEditor",
+    "get_default_settings_directory",
     "SettingsParseException",
     "SettingsSaveException",
     "JSONParseException",
@@ -32,8 +40,5 @@ __all__ = [
     "DefaultConditionGroup",
     "Setting",
     "Settings",
-    "SettingsWrapper",
-    "SettingsManager",
-    "SettingsEditor",
-    "get_default_settings_directory",
+    "SettingsConfig",
 ]

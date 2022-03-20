@@ -5,7 +5,7 @@ import sys
 
 from arcadeutils import FileBytes
 from naomi import NaomiRomRegionEnum, NaomiSettingsPatcher
-from naomi.settings import SettingsEditor, SettingsManager, ReadOnlyCondition, SettingsParseException, SettingsSaveException
+from naomi.settings import NaomiSettingsEditor, NaomiSettingsManager, ReadOnlyCondition, SettingsParseException, SettingsSaveException
 
 
 # The root of the repo.
@@ -207,7 +207,7 @@ def main() -> int:
                 print(f"Debug printing is {'enabled' if info.enable_debugging else 'disabled'}.")
 
                 # Grab the actual EEPRom so we can print the settings within.
-                manager = SettingsManager(args.settings_directory)
+                manager = NaomiSettingsManager(args.settings_directory)
                 eepromdata = patcher.get_eeprom()
                 config = None
 
@@ -272,7 +272,7 @@ def main() -> int:
             patcher = NaomiSettingsPatcher(data, exe)
             eepromdata = patcher.get_eeprom()
 
-            manager = SettingsManager(args.settings_directory)
+            manager = NaomiSettingsManager(args.settings_directory)
             if eepromdata is None:
                 # We need to make them up from scratch.
                 region = {
@@ -288,7 +288,7 @@ def main() -> int:
                 parsedsettings = manager.from_eeprom(eepromdata)
 
             # Now, edit those created or extracted settings.
-            editor = SettingsEditor(parsedsettings)
+            editor = NaomiSettingsEditor(parsedsettings)
             if editor.run():
                 # If the editor signals to us that the user wanted to save the settings
                 # then we should patch them into the binary.

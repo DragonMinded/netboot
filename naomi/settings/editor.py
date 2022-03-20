@@ -26,7 +26,8 @@ from dragoncurses.input import (
 from dragoncurses.settings import Settings as DragonCursesSettings
 from typing import Any, Callable, Dict, List, Tuple, Union
 
-from naomi.settings.settings import SettingsWrapper, Settings, ReadOnlyCondition
+from naomi.settings.settings import NaomiSettingsWrapper
+from settings import Settings, ReadOnlyCondition
 
 
 class ClickableSelectInputComponent(ClickableComponent, SelectInputComponent):
@@ -365,8 +366,8 @@ class EditorScene(Scene):
         return False
 
 
-class SettingsEditor:
-    def __init__(self, settings: SettingsWrapper, enable_unicode: bool = True) -> None:
+class NaomiSettingsEditor:
+    def __init__(self, settings: NaomiSettingsWrapper, enable_unicode: bool = True) -> None:
         self.settings = settings
         DragonCursesSettings.enable_unicode = enable_unicode
 

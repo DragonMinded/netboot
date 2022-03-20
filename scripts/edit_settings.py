@@ -3,7 +3,7 @@ import argparse
 import os
 import sys
 
-from naomi.settings import SettingsEditor, SettingsManager, SettingsParseException, SettingsSaveException
+from naomi.settings import NaomiSettingsEditor, NaomiSettingsManager, SettingsParseException, SettingsSaveException
 
 
 # The root of the repo.
@@ -39,7 +39,7 @@ def main() -> int:
     args = parser.parse_args()
 
     # First, try to open the EEPRom file. If it does not exist, then we need to create a default.
-    manager = SettingsManager(args.settings_directory)
+    manager = NaomiSettingsManager(args.settings_directory)
     try:
         try:
             with open(args.eeprom, "rb") as fp:
@@ -52,7 +52,7 @@ def main() -> int:
         return 1
 
     # Now, invoke the CLI editor so settings can be edited.
-    editor = SettingsEditor(settings)
+    editor = NaomiSettingsEditor(settings)
     if editor.run():
         # Now, write out the EEPROM.
         eeprom = manager.to_eeprom(settings)
