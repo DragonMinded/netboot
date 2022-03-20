@@ -112,7 +112,7 @@ class SettingsManager:
                 data = FileBytes(fp)
                 rom = NaomiRom(data)
                 if rom.valid:
-                    valid_settings = sorted([f for f, _ in self.__naomi_manager.files_for_rom(rom).items()])
+                    valid_settings = sorted([os.path.join(self.__naomi_directory, f) for f, _ in self.__naomi_manager.files_for_rom(rom).items()])
 
             self.__cache[filename] = valid_settings
             return valid_settings
