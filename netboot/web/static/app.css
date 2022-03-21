@@ -119,6 +119,10 @@ span.successindicator {
     color: green;
 }
 
+span.savingindicator {
+    margin-left: 5px;
+}
+
 span.errorindicator {
     margin-left: 5px;
     color: red;

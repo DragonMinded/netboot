@@ -277,6 +277,7 @@ Vue.component('cabinetconfig', {
                 progress: window.cabinet.progress,
             },
             querying: false,
+            saving: false,
             saved: false,
         };
     },
@@ -285,6 +286,8 @@ Vue.component('cabinetconfig', {
             this.saved = false;
         },
         save: function() {
+            this.saving = true;
+            this.saved = false;
             axios.post('/cabinets/' + this.cabinet.ip, this.cabinet).then(result => {
                 if (!result.data.error) {
                     if (this.target != result.data.target) {
@@ -293,6 +296,7 @@ Vue.component('cabinetconfig', {
                     this.cabinet = result.data;
                     this.target = this.cabinet.target;
                     this.saved = true;
+                    this.saving = false;
                 }
             });
         },
@@ -368,6 +372,7 @@ Vue.component('cabinetconfig', {
                 <div class="update">
                     <button v-on:click="save">Update Properties</button>
                     <button v-on:click="remove">Remove Cabinet</button>
+                    <span class="savingindicator" v-if="saving"><img src="/static/loading-16.gif" width=16 height=16 /> saving...</span>
                     <span class="successindicator" v-if="saved">&check; saved</span>
                 </div>
                 <div class="information">
@@ -388,7 +393,7 @@ Vue.component('cabinetconfig', {
                 </dl>
                 <div class="query">
                     <button v-on:click="query" :disabled="info.status == 'send_game' || info.status == 'startup' || info.status == 'disabled' || info.status == 'wait_power_on'">Query Firmware Information</button>
-                    <span class="queryindicator" v-if="querying">querying...</span>
+                    <span class="queryindicator" v-if="querying"><img src="/static/loading-16.gif" width=16 height=16 /> querying...</span>
                 </div>
                 <div class="information">
                     Querying the NetDimm will attempt to load some firmware properties. If the version
@@ -405,6 +410,7 @@ Vue.component('romconfig', {
         return {
             names: window.names,
             saved: false,
+            saving: false,
         };
     },
     methods: {
@@ -412,10 +418,13 @@ Vue.component('romconfig', {
             this.saved = false;
         },
         save: function() {
+            this.saved = false;
+            this.saving = true;
             axios.post('/roms/' + encodeURI(filename), this.names).then(result => {
                 if (!result.data.error) {
                     this.names = result.data;
                     this.saved = true;
+                    this.saving = false;
                 }
             });
         },
@@ -431,6 +440,7 @@ Vue.component('romconfig', {
                 <dt>Name (australia)</dt><dd><input v-model="names.australia" @input="changed"/></dd>
             </dl>
             <button v-on:click="save">Update Names</button>
+            <span class="savingindicator" v-if="saving"><img src="/static/loading-16.gif" width=16 height=16 /> saving...</span>
             <span class="successindicator" v-if="saved">&check; saved</span>
             <div class="information">
                 Game names are pulled out of the ROM header if possible, and if not they are taken
@@ -452,6 +462,7 @@ Vue.component('availablegames', {
         return {
             loading: true,
             saved: false,
+            saving: false,
             games: {}
         };
     },
@@ -467,10 +478,12 @@ Vue.component('availablegames', {
         },
         save: function() {
             this.saved = false;
+            this.saving = true;
             axios.post('/cabinets/' + cabinet.ip + '/games', {games: this.games}).then(result => {
                 if (!result.data.error) {
                     this.games = result.data.games;
                     this.saved = true;
+                    this.saving = false;
                 }
             });
         },
@@ -489,10 +502,11 @@ Vue.component('availablegames', {
                 to the game when it is sent to the cabinet.
             </div>
             <game v-if="!loading" v-for="game in games" v-bind:game="game" v-bind:key="game"></game>
-            <div v-if="loading">loading...</div>
+            <div v-if="loading"><img src="/static/loading-16.gif" width=16 height=16 /> loading...</div>
             <div v-if="!loading && Object.keys(games).length === 0">no applicable games</div>
             <div>&nbsp;</div>
             <button v-on:click="save">Update Games</button>
+            <span class="savingindicator" v-if="saving"><img src="/static/loading-16.gif" width=16 height=16 /> saving...</span>
             <span class="successindicator" v-if="saved">&check; saved</span>
         </div>
     `,
@@ -526,7 +540,7 @@ Vue.component('availablepatches', {
         <div class='patchlist'>
             <h3>Available Patches For This Rom</h3>
             <directory v-if="!loading" v-for="patch in patches" v-bind:dir="patch" v-bind:key="patch"></directory>
-            <div v-if="loading">loading...</div>
+            <div v-if="loading"><img src="/static/loading-16.gif" width=16 height=16 /> loading...</div>
             <div v-if="!loading && Object.keys(patches).length === 0">no applicable patches</div>
             <div>&nbsp;</div>
             <button v-on:click="recalculatepatches">Recalculate Patch Files</button>
@@ -562,7 +576,7 @@ Vue.component('availablesrams', {
         <div class='sramlist'>
             <h3>Available SRAM Files For This Rom</h3>
             <directory v-if="!loading" v-for="sram in srams" v-bind:dir="sram" v-bind:key="sram"></directory>
-            <div v-if="loading">loading...</div>
+            <div v-if="loading"><img src="/static/loading-16.gif" width=16 height=16 /> loading...</div>
             <div v-if="!loading && Object.keys(srams).length === 0">no applicable SRAM files</div>
             <div>&nbsp;</div>
             <button v-on:click="recalculatesrams">Recalculate SRAM Files</button>
@@ -587,7 +601,7 @@ Vue.component('availabledefinitions', {
         <div class='patchlist'>
             <h3>Available Settings Definitions For This Rom</h3>
             <directory v-if="!loading" v-for="setting in settings" v-bind:dir="setting" v-bind:key="setting"></directory>
-            <div v-if="loading">loading...</div>
+            <div v-if="loading"><img src="/static/loading-16.gif" width=16 height=16 /> loading...</div>
             <div v-if="!loading && Object.keys(settings).length === 0">no applicable settings definitions</div>
         </div>
     `,
