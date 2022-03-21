@@ -131,7 +131,7 @@ To output information about an EEPROM file as extracted from demul's `nvram` fol
 
 ### attach_sram
 
-In 'attach' mode, this script will take an SRAM file from an emulator such as demul and attach it to an Atomiswave conversion game so that your Naomi initializes the SRAM with its contents. If an Atomiswave conversion ROM already has an SRAM initialization section, it will overwrite it with the new SRAM. Otherwise, it enlarges the ROM to make room for the init section. Use this to set up defaults for a game using the test menu in an emulator and apply those settings to your game for netbooting with chosen defaults.
+In 'attach' mode, this script will take an SRAM file dumped from a Naomi using `naomi_sram` or obtained from an emulator such as demul and attach it to an Atomiswave conversion game so that your Naomi initializes the SRAM with its contents. If an Atomiswave conversion ROM already has an SRAM initialization section, it will overwrite it with the new SRAM. Otherwise, it enlarges the ROM to make room for the init section. Use this to set up defaults for a game using the test menu in an emulator and apply those settings to your game for netbooting with chosen defaults.
 
 In 'extract' mode, this script will extract a previously-attached SRAM from a Naomi game so that you can load it in an emulator such as demul. If the ROM does not have an attached SRAM section, it will not extract anything.
 
