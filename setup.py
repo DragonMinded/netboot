@@ -2,7 +2,7 @@ import os
 from setuptools import setup
 
 
-VERSION = "0.4.0"
+VERSION = "0.4.1"
 
 
 if 'FULL_INSTALLATION' in os.environ:
@@ -34,7 +34,7 @@ if 'FULL_INSTALLATION' in os.environ:
         package_data={
             # Make sure to actually include the trojan data.
             "homebrew.settingstrojan": ["settingstrojan.bin"],
-            "netboot.web.static": ["*.js", "*.css"],
+            "netboot.web.static": ["*.js", "*.css", "*.gif"],
             "netboot.web.templates": ["*.html"],
         },
         python_requires=">=3.6",
