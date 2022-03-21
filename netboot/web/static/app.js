@@ -59,6 +59,7 @@ Vue.component('cabinet', {
     },
     methods: {
         change: function() {
+            eventBus.$emit('selectingNewGame', true);
             this.selecting = true;
         },
         choose: function() {
@@ -67,11 +68,13 @@ Vue.component('cabinet', {
                     this.choice = result.data.filename;
                     this.cabinet = result.data;
                     this.selecting = false;
+                    eventBus.$emit('selectedNewGame', true);
                 }
             });
         },
         cancel: function() {
             this.selecting = false;
+            eventBus.$emit('selectedNewGame', true);
         },
         update: function() {
             this.admin = getCookie('admin') == 'true';
@@ -677,15 +680,28 @@ Vue.component('cabinetlist', {
     data: function() {
         return {
             cabinets: window.cabinets,
+            allowRefresh: true,
         };
+    },
+    created () {
+        eventBus.$on('selectingNewGame', this.blockUpdates);
+        eventBus.$on('selectedNewGame', this.unblockUpdates);
     },
     methods: {
         refresh: function() {
             axios.get('/cabinets').then(result => {
                 if (!result.data.error) {
-                    this.cabinets = result.data.cabinets;
+                    if (this.allowRefresh) {
+                        this.cabinets = result.data.cabinets;
+                    }
                 }
             });
+        },
+        blockUpdates: function() {
+            this.allowRefresh = false;
+        },
+        unblockUpdates: function() {
+            this.allowRefresh = true;
         },
     },
     mounted: function() {
