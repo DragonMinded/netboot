@@ -186,6 +186,20 @@ This script spawns a command-line EEPROM file editor. Use this to create a new E
 ./edit_settings --help
 ```
 
+### naomi_sram
+
+This script can run in either 'dump' or 'restore' mode. In dump mode, it takes the IP of a net dimm running on a Naomi system and a filename, and dumps the current contents of the SRAM on the Naomi into the file specified. This can then be later attached to an Atomiswave conversion ROM using the `--settings-file` option on either `netdimm_send` or `netdimm_ensure` or placed into an SRAM folder for the web frontend to attach to a game on-the-fly when booting. Use this to set up preferred settings and then dump the SRAM, or to back up high scores that you wish to preserve when net booting into another game. In restore mode, it takes the IP of a net dimm and a filename, and attempts to load an SRAM from the filename and restore it back to the Naomi. This option is somewhat redundant given so many other tools can attach an SRAM to an image or send an SRAM on the fly, but the option is available if necessary. Invoke the script like so to see options:
+
+```
+./naomi_sram dump --help
+```
+
+or
+
+```
+./naomi_sram restore --help
+```
+
 ### Free-Play/No Attract Patch Generators
 
 Both `make_freeplay_patch` and `make_no_attract_patch` can be invoked in the same manner and will produce a patch that applies either forced free-play or forced silent attract mode. Note that these patches are considered obsolete as you can customize all system settings using `attach_settings` or `edit_settings` as documented above. Still, they are provided for posterity assuming you wish to use another netboot package and just want to patch your ROMs to be in free-play. You can run them like so:
