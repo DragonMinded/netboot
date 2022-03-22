@@ -535,7 +535,7 @@ def romsforcabinet(ip: str) -> Dict[str, Any]:
                                 "v": "",
                                 "t": "No SRAM File",
                             },
-                            *sorted([{"v": f, "t": sramman.sram_name(f)} for f in srams], key=lambda e: e['t'])
+                            *sorted([{"v": f, "t": sramman.sram_name(f)} for f in srams], key=lambda e: cast(str, e['t']))
                         ],
                     })
 

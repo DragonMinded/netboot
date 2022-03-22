@@ -417,12 +417,15 @@ class Settings:
         typestr = jsondict.get('type')
         if not isinstance(typestr, str) or typestr != type:
             raise JSONParseException(f"\"type\" key in JSON has invalid data \"{typestr}\"!", context)
-        filename = jsondict.get('filename')
-        if not isinstance(filename, str) or filename != config.filename:
-            raise JSONParseException(f"\"filename\" key in JSON has invalid data \"{filename}\"!", context)
         settings = jsondict.get('settings')
         if not isinstance(settings, list):
             raise JSONParseException(f"\"settings\" key in JSON has invalid data \"{settings}\"!", context)
+        filename = jsondict.get('filename')
+        if not isinstance(filename, str) or filename != config.filename:
+            if filename is None and config.filename == NO_FILE:
+                # This is an empty settings file, just return an empty config.
+                return Settings(config.filename, config.settings, type=type)
+            raise JSONParseException(f"\"filename\" key in JSON has invalid data \"{filename}\"!", context)
 
         # Now, parse out the settings in the dict.
         parsedsettings = [Setting.from_json(config.filename, s, [*context, f"settings[{i}]"]) for (i, s) in enumerate(settings)]
