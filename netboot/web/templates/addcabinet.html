@@ -9,6 +9,7 @@
             window.regions = {{ regions|tojson|safe }};
             window.targets = {{ targets|tojson|safe }};
             window.versions = {{ versions|tojson|safe }};
+            window.timeouts = {{ timeouts|tojson|safe }};
             window.addEventListener("load", function(event) {
                 new Vue({el: '#app'});
             });

@@ -282,7 +282,7 @@ Vue.component('cabinetconfig', {
             invalid_description: false,
             invalid_timeout: false,
             send_timeout_enabled: window.cabinet.send_timeout !== null,
-            send_timeout_seconds: window.cabinet.send_timeout !== null ? window.cabinet.send_timeout : 15,
+            send_timeout_seconds: window.cabinet.send_timeout !== null ? window.cabinet.send_timeout : window.timeouts[window.cabinet.target],
         };
     },
     methods: {
@@ -318,7 +318,7 @@ Vue.component('cabinetconfig', {
                         }
                         this.cabinet = result.data;
                         this.send_timeout_enabled = this.cabinet.send_timeout !== null;
-                        this.send_timeout_seconds = this.send_timeout_enabled ? this.cabinet.send_timeout : 15;
+                        this.send_timeout_seconds = this.send_timeout_enabled ? this.cabinet.send_timeout : window.timeouts[this.cabinet.target],
                         this.target = this.cabinet.target;
                         this.saved = true;
                         this.saving = false;
@@ -364,6 +364,13 @@ Vue.component('cabinetconfig', {
         setInterval(function () {
             this.refresh();
         }.bind(this), 1000);
+    },
+    watch: {
+        'cabinet.target'(newValue) {
+            if (!this.send_timeout_enabled) {
+                this.send_timeout_seconds = window.timeouts[newValue];
+            }
+        },
     },
     template: `
         <div>
@@ -658,7 +665,7 @@ Vue.component('newcabinet', {
                 'ip': '',
                 'time_hack': false,
                 'send_timeout_enabled': false,
-                'send_timeout_seconds': 15,
+                'send_timeout_seconds': window.timeouts[window.targets[0]],
                 'region': window.regions[0],
                 'target': window.targets[0],
                 'version': window.versions[0],
@@ -668,6 +675,13 @@ Vue.component('newcabinet', {
             invalid_timeout: false,
             duplicate_ip: false,
         };
+    },
+    watch: {
+        'cabinet.target'(newValue) {
+            if (!this.cabinet.send_timeout_enabled) {
+                this.cabinet.send_timeout_seconds = window.timeouts[newValue];
+            }
+        },
     },
     methods: {
         save: function() {

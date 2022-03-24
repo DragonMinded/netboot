@@ -10,7 +10,7 @@ import zlib
 from Crypto.Cipher import DES
 from contextlib import contextmanager
 from enum import Enum
-from typing import Any, Callable, Generator, List, Optional, Union, cast
+from typing import Any, Callable, Dict, Generator, List, Optional, Union, cast
 
 from arcadeutils import FileBytes
 
@@ -90,6 +90,13 @@ class NetDimmPacket:
 
 
 class NetDimm:
+    DEFAULT_TIMEOUTS: Dict[NetDimmTargetEnum, int] = {
+        NetDimmTargetEnum.TARGET_UNKNOWN: 15,
+        NetDimmTargetEnum.TARGET_NAOMI: 15,
+        NetDimmTargetEnum.TARGET_CHIHIRO: 40,
+        NetDimmTargetEnum.TARGET_TRIFORCE: 40,
+    }
+
     @staticmethod
     def crc(data: Union[bytes, FileBytes]) -> int:
         crc: int = 0
@@ -121,13 +128,7 @@ class NetDimm:
         # users and some people have reported that this is too fast. So, 15 seconds it is for everything.
         # User reports for Chihiro are that it is super slow, so it needs a longer timeout. I have no
         # idea on Triforce so I set it the same as Chihiro.
-        default_timeout = {
-            NetDimmTargetEnum.TARGET_UNKNOWN: 15,
-            NetDimmTargetEnum.TARGET_NAOMI: 15,
-            NetDimmTargetEnum.TARGET_CHIHIRO: 40,
-            NetDimmTargetEnum.TARGET_TRIFORCE: 40,
-        }[self.target]
-
+        default_timeout = NetDimm.DEFAULT_TIMEOUTS[self.target]
         if timeout is None:
             try:
                 timeout = int(os.environ.get('NETDIMM_TIMEOUT_SECONDS') or default_timeout)

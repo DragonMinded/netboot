@@ -7,7 +7,7 @@ from typing import Callable, Dict, List, Any, cast
 
 from flask import Flask, Response, request, render_template, make_response, jsonify as flask_jsonify
 from werkzeug.routing import PathConverter
-from netdimm import NetDimmVersionEnum, NetDimmTargetEnum
+from netdimm import NetDimm, NetDimmVersionEnum, NetDimmTargetEnum
 from naomi import NaomiRomRegionEnum
 from netboot import Cabinet, CabinetRegionEnum, CabinetManager, DirectoryManager, PatchManager, SRAMManager, SettingsManager
 
@@ -162,6 +162,7 @@ def cabinetconfig(ip: str) -> Response:
             regions=[cr.value for cr in CabinetRegionEnum if cr != CabinetRegionEnum.REGION_UNKNOWN],
             targets=[t.value for t in NetDimmTargetEnum],
             versions=[tv.value for tv in NetDimmVersionEnum],
+            timeouts={k.value: v for k, v in NetDimm.DEFAULT_TIMEOUTS.items()},
         ),
         200
     )
@@ -175,6 +176,7 @@ def addcabinet() -> Response:
             regions=[cr.value for cr in CabinetRegionEnum if cr != CabinetRegionEnum.REGION_UNKNOWN],
             targets=[t.value for t in NetDimmTargetEnum],
             versions=[tv.value for tv in NetDimmVersionEnum],
+            timeouts={k.value: v for k, v in NetDimm.DEFAULT_TIMEOUTS.items()},
         ),
         200
     )
