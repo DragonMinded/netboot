@@ -117,7 +117,15 @@ def main() -> int:
     parser.add_argument(
         '--keyless-boot',
         action="store_true",
-        help="Enable boot without Key Chip, by using the 'time hack'",
+        help="Enable boot without Key Chip",
+    )
+
+    # Give more time to slower netboot on some platforms.
+    parser.add_argument(
+        '--send-timeout',
+        type=int,
+        default=None,
+        help="Specify a different send timeout in seconds",
     )
 
     args = parser.parse_args()
@@ -130,7 +138,7 @@ def main() -> int:
         key = bytes([int(args.key[x:(x + 2)], 16) for x in range(0, len(args.key), 2)])
 
     print("sending...", file=sys.stderr)
-    netdimm = NetDimm(args.ip, version=args.version, log=print)
+    netdimm = NetDimm(args.ip, version=args.version, timeout=args.send_timeout, log=print)
 
     # Grab the binary, patch it with requested patches.
     with open(args.image, "rb") as fp:

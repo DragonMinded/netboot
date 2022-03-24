@@ -279,6 +279,10 @@ Vue.component('cabinetconfig', {
             querying: false,
             saving: false,
             saved: false,
+            invalid_description: false,
+            invalid_timeout: false,
+            send_timeout_enabled: window.cabinet.send_timeout !== null,
+            send_timeout_seconds: window.cabinet.send_timeout !== null ? window.cabinet.send_timeout : 15,
         };
     },
     methods: {
@@ -286,19 +290,41 @@ Vue.component('cabinetconfig', {
             this.saved = false;
         },
         save: function() {
-            this.saving = true;
-            this.saved = false;
-            axios.post('/cabinets/' + this.cabinet.ip, this.cabinet).then(result => {
-                if (!result.data.error) {
-                    if (this.target != result.data.target) {
-                        eventBus.$emit('changeCabinetType', true)
-                    }
-                    this.cabinet = result.data;
-                    this.target = this.cabinet.target;
-                    this.saved = true;
-                    this.saving = false;
+            if (this.cabinet.description.length == 0){
+                this.invalid_description = true;
+            } else {
+                this.invalid_description = false;
+            }
+
+            if (this.send_timeout_enabled) {
+                if (/^\+?(0|[1-9]\d*)$/.test(this.send_timeout_seconds)) {
+                    this.invalid_timeout = false;
+                    this.cabinet.send_timeout = parseInt(this.send_timeout_seconds);
+                } else {
+                    this.invalid_timeout = true;
                 }
-            });
+            } else {
+                this.invalid_timeout = false;
+                this.cabinet.send_timeout = null;
+            }
+
+            if (!this.invalid_description && !this.invalid_timeout) {
+                this.saving = true;
+                this.saved = false;
+                axios.post('/cabinets/' + this.cabinet.ip, this.cabinet).then(result => {
+                    if (!result.data.error) {
+                        if (this.target != result.data.target) {
+                            eventBus.$emit('changeCabinetType', true)
+                        }
+                        this.cabinet = result.data;
+                        this.send_timeout_enabled = this.cabinet.send_timeout !== null;
+                        this.send_timeout_seconds = this.send_timeout_enabled ? this.cabinet.send_timeout : 15;
+                        this.target = this.cabinet.target;
+                        this.saved = true;
+                        this.saving = false;
+                    }
+                });
+            }
         },
         query: function() {
             this.querying = true;
@@ -344,7 +370,10 @@ Vue.component('cabinetconfig', {
             <div class='cabinet'>
                 <dl>
                     <dt>IP Address</dt><dd>{{ cabinet.ip }}</dd>
-                    <dt>Description</dt><dd><input v-model="cabinet.description" @input="changed"/></dd>
+                    <dt>Description</dt><dd>
+                        <input v-model="cabinet.description" @input="changed"/>
+                        <span class="errorindicator" v-if="invalid_description">invalid description</span>
+                    </dd>
                     <dt>Target System</dt><dd>
                         <select v-model="cabinet.target" @input="changed">
                             <option v-for="target in targets" v-bind:value="target">{{ target }}</option>
@@ -362,7 +391,16 @@ Vue.component('cabinetconfig', {
                     </dd>
                     <dt>Keyless Boot</dt><dd>
                         <input id="time_hack" type="checkbox" v-model="cabinet.time_hack" />
-                        <label for="time_hack">allow boot without key chip, by using the 'time hack'</label>
+                        <label for="time_hack">allow boot without key chip</label>
+                    </dd>
+                    <dt>Send Timeout</dt><dd>
+                        <input id="send_timeout_enabled" type="checkbox" v-model="send_timeout_enabled" />
+                        <label for="send_timeout_enabled">enable alternative send timeout</label>
+                    </dd>
+                    <dt v-if="send_timeout_enabled"></dt><dd v-if="send_timeout_enabled">
+                        <input v-model="send_timeout_seconds" />
+                        <span>seconds</span>
+                        <span class="errorindicator" v-if="invalid_timeout">invalid timeout</span>
                     </dd>
                     <dt>Enabled</dt><dd>
                         <input id="enabled" type="checkbox" v-model="cabinet.enabled" />
@@ -614,12 +652,15 @@ Vue.component('newcabinet', {
                 'description': '',
                 'ip': '',
                 'time_hack': false,
+                'send_timeout_enabled': false,
+                'send_timeout_seconds': 15,
                 'region': window.regions[0],
                 'target': window.targets[0],
                 'version': window.versions[0],
             },
             invalid_ip: false,
             invalid_description: false,
+            invalid_timeout: false,
             duplicate_ip: false,
         };
     },
@@ -632,11 +673,23 @@ Vue.component('newcabinet', {
             }
             if (/^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(this.cabinet.ip)) {
                 this.invalid_ip = false;
-            } else{
+            } else {
                 this.invalid_ip = true;
             }
 
-            if (!this.invalid_ip && !this.invalid_description) {
+            if (this.cabinet.send_timeout_enabled) {
+                if (/^\+?(0|[1-9]\d*)$/.test(this.cabinet.send_timeout_seconds)) {
+                    this.invalid_timeout = false;
+                    this.cabinet.send_timeout = parseInt(this.cabinet.send_timeout_seconds);
+                } else {
+                    this.invalid_timeout = true;
+                }
+            } else {
+                this.invalid_timeout = false;
+                this.cabinet.send_timeout = null;
+            }
+
+            if (!this.invalid_ip && !this.invalid_description && !this.invalid_timeout) {
                 axios.put('/cabinets/' + this.cabinet.ip, this.cabinet).then(result => {
                     if (!result.data.error) {
                         // Saved, go to cabinet screen
@@ -678,7 +731,16 @@ Vue.component('newcabinet', {
                 </dd>
                 <dt>Keyless Boot</dt><dd>
                     <input id="time_hack" type="checkbox" v-model="cabinet.time_hack" />
-                    <label for="time_hack">allow boot without key chip, by using the 'time hack'</label>
+                    <label for="time_hack">allow boot without key chip</label>
+                </dd>
+                <dt>Send Timeout</dt><dd>
+                    <input id="send_timeout_enabled" type="checkbox" v-model="cabinet.send_timeout_enabled" />
+                    <label for="send_timeout_enabled">enable alternative send timeout</label>
+                </dd>
+                <dt v-if="cabinet.send_timeout_enabled"></dt><dd v-if="cabinet.send_timeout_enabled">
+                    <input v-model="cabinet.send_timeout_seconds" />
+                    <span>seconds</span>
+                    <span class="errorindicator" v-if="invalid_timeout">invalid timeout</span>
                 </dd>
             </dl>
             <button v-on:click="save">Add Cabinet</button>

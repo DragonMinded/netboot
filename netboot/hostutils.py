@@ -70,6 +70,7 @@ def _send_file_to_host(
     settings: Dict[SettingsEnum, bytes],
     target: TargetEnum,
     version: NetDimmVersionEnum,
+    timeout: Optional[int],
     parent_pid: int,
     progress_queue: "multiprocessing.Queue[Tuple[str, Any]]",
 ) -> None:
@@ -80,7 +81,7 @@ def _send_file_to_host(
         progress_queue.put(("progress", (sent, total)))
 
     try:
-        netdimm = NetDimm(host, version=version)
+        netdimm = NetDimm(host, version=version, timeout=timeout)
 
         # Grab the image itself
         with open(filename, "rb") as fp:
@@ -113,13 +114,22 @@ class HostStatusEnum(Enum):
 class Host:
     DEBOUNCE_SECONDS = 3
 
-    def __init__(self, ip: str, target: Optional[TargetEnum] = None, version: Optional[NetDimmVersionEnum] = None, time_hack: bool = False, quiet: bool = False) -> None:
+    def __init__(
+        self,
+        ip: str,
+        target: Optional[TargetEnum] = None,
+        version: Optional[NetDimmVersionEnum] = None,
+        send_timeout: Optional[int] = None,
+        time_hack: bool = False,
+        quiet: bool = False,
+    ) -> None:
         self.target: TargetEnum = target or TargetEnum.TARGET_NAOMI
         self.version: NetDimmVersionEnum = version or NetDimmVersionEnum.VERSION_4_01
         self.ip: str = ip
         self.alive: bool = False
         self.quiet: bool = quiet
         self.time_hack: bool = time_hack
+        self.send_timeout: Optional[int] = send_timeout
         self.__queue: "multiprocessing.Queue[Tuple[str, Any]]" = multiprocessing.Queue()
         self.__lock: multiprocessing.synchronize.Lock = multiprocessing.Lock()
         self.__proc: Optional[multiprocessing.Process] = None
@@ -130,7 +140,7 @@ class Host:
         self.__thread.start()
 
     def __repr__(self) -> str:
-        return f"Host(ip={repr(self.ip)}, target={repr(self.target)}, version={repr(self.version)})"
+        return f"Host(ip={repr(self.ip)}, target={repr(self.target)}, version={repr(self.version)}, send_timeout={repr(self.send_timeout)}, time_hack={repr(self.time_hack)})"
 
     def __print(self, string: str, newline: bool = True) -> None:
         if not self.quiet:
@@ -172,7 +182,7 @@ class Host:
                         last_timehack = current
                         with self.__lock:
                             if self.time_hack:
-                                netdimm = NetDimm(self.ip, version=self.version)
+                                netdimm = NetDimm(self.ip, version=self.version, timeout=5)
                                 try:
                                     netdimm.set_time_limit(10)
                                     self.__print(f"Host {self.ip} reset time limit with time hack.")
@@ -198,7 +208,7 @@ class Host:
             if self.__proc is not None:
                 raise HostException("Cannot reboot host mid-transfer.")
 
-            netdimm = NetDimm(self.ip, version=self.version)
+            netdimm = NetDimm(self.ip, version=self.version, timeout=5)
             try:
                 netdimm.reboot()
                 return True
@@ -286,7 +296,10 @@ class Host:
             self.__print(f"Host {self.ip} started sending image.")
 
             # Start the send
-            self.__proc = multiprocessing.Process(target=_send_file_to_host, args=(self.ip, filename, patches, settings, self.target, self.version, os.getpid(), self.__queue))
+            self.__proc = multiprocessing.Process(
+                target=_send_file_to_host,
+                args=(self.ip, filename, patches, settings, self.target, self.version, self.send_timeout, os.getpid(), self.__queue),
+            )
             self.__proc.start()
 
             # Don't yield control back until we have got the first response from the process
@@ -311,7 +324,7 @@ class Host:
                 return None
 
             try:
-                netdimm = NetDimm(self.ip, version=self.version)
+                netdimm = NetDimm(self.ip, version=self.version, timeout=5)
                 return netdimm.info()
             except NetDimmException:
                 return None

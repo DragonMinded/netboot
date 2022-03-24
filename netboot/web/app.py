@@ -61,6 +61,7 @@ def cabinet_to_dict(cab: Cabinet, dirmanager: DirectoryManager) -> Dict[str, Any
         'progress': progress,
         'enabled': cab.enabled,
         'time_hack': cab.time_hack,
+        'send_timeout': cab.send_timeout,
     }
 
 
@@ -418,6 +419,7 @@ def createcabinet(ip: str) -> Dict[str, Any]:
         version=NetDimmVersionEnum(request.json['version']),
         enabled=True,
         time_hack=request.json['time_hack'],
+        send_timeout=request.json['send_timeout'] or None,
     )
     cabman.add_cabinet(new_cabinet)
     serialize_app(app)
@@ -439,6 +441,7 @@ def updatecabinet(ip: str) -> Dict[str, Any]:
         version=NetDimmVersionEnum(request.json['version']),
         enabled=request.json['enabled'],
         time_hack=request.json['time_hack'],
+        send_timeout=request.json['send_timeout'] or None,
     )
     serialize_app(app)
     return cabinet_to_dict(cabman.cabinet(ip), dirman)

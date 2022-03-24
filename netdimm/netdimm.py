@@ -101,14 +101,23 @@ class NetDimm:
         ip: str,
         version: Optional[NetDimmVersionEnum] = None,
         log: Optional[Callable[..., Any]] = None,
+        timeout: Optional[int] = None,
     ) -> None:
         self.ip: str = ip
         self.sock: Optional[socket.socket] = None
         self.log: Optional[Callable[..., Any]] = log
         self.version: NetDimmVersionEnum = version or NetDimmVersionEnum.VERSION_UNKNOWN
+        if timeout is None:
+            # A sane default for Naomi, at least in my testing, is 10 seconds. However, OSX
+            # users and some people have reported that this is too fast. So, 15 seconds it is.
+            try:
+                timeout = int(os.environ.get('NETDIMM_TIMEOUT_SECONDS') or 15)
+            except Exception:
+                timeout = 15
+        self.timeout: int = timeout
 
     def __repr__(self) -> str:
-        return f"NetDimm(ip={repr(self.ip)}, version={repr(self.version)})"
+        return f"NetDimm(ip={repr(self.ip)}, version={repr(self.version)}, timeout={repr(self.timeout)})"
 
     def info(self) -> NetDimmInfo:
         with self.connection():
@@ -299,13 +308,13 @@ class NetDimm:
             # on OSX and you set 'ALTERNATE_TIMEOUT_HANDLING' the alternate will be enabled
             # as well.
             if (sys.platform == 'darwin' or os.environ.get('ALTERNATE_TIMEOUT_HANDLING')) and (not os.environ.get('DEFAULT_TIMEOUT_HANDLING')):
-                self.sock.settimeout(15)
+                self.sock.settimeout(self.timeout)
                 self.sock.setblocking(True)
                 self.sock.connect((self.ip, 10703))
             else:
                 self.sock.settimeout(1)
                 self.sock.connect((self.ip, 10703))
-                self.sock.settimeout(15)
+                self.sock.settimeout(self.timeout)
 
         except Exception as e:
             raise NetDimmException("Could not connect to NetDimm") from e

@@ -46,6 +46,7 @@ class Cabinet:
         srams: Dict[str, Optional[str]],
         target: Optional[TargetEnum] = None,
         version: Optional[NetDimmVersionEnum] = None,
+        send_timeout: Optional[int] = None,
         time_hack: bool = False,
         enabled: bool = True,
         quiet: bool = False,
@@ -57,7 +58,7 @@ class Cabinet:
         self.srams: Dict[str, Optional[str]] = {rom: srams[rom] for rom in srams}
         self.quiet = quiet
         self.__enabled = enabled
-        self.__host: Host = Host(ip, target=target, version=version, time_hack=time_hack, quiet=self.quiet)
+        self.__host: Host = Host(ip, target=target, version=version, send_timeout=send_timeout, time_hack=time_hack, quiet=self.quiet)
         self.__lock: threading.Lock = threading.Lock()
         self.__current_filename: Optional[str] = filename
         self.__new_filename: Optional[str] = filename
@@ -65,7 +66,7 @@ class Cabinet:
 
     def __repr__(self) -> str:
         with self.__lock:
-            return f"Cabinet(ip={repr(self.ip)}, enabled={repr(self.__enabled)}, time_hack={repr(self.time_hack)}, description={repr(self.description)}, filename={repr(self.filename)}, patches={repr(self.patches)}, settings={repr(self.settings)}, srams={repr(self.srams)}, target={repr(self.target)}, version={repr(self.version)})"
+            return f"Cabinet(ip={repr(self.ip)}, enabled={repr(self.__enabled)}, time_hack={repr(self.time_hack)}, send_timeout={repr(self.send_timeout)}, description={repr(self.description)}, filename={repr(self.filename)}, patches={repr(self.patches)}, settings={repr(self.settings)}, srams={repr(self.srams)}, target={repr(self.target)}, version={repr(self.version)})"
 
     @property
     def ip(self) -> str:
@@ -114,6 +115,14 @@ class Cabinet:
     @time_hack.setter
     def time_hack(self, time_hack: bool) -> None:
         self.__host.time_hack = time_hack
+
+    @property
+    def send_timeout(self) -> Optional[int]:
+        return self.__host.send_timeout
+
+    @send_timeout.setter
+    def send_timeout(self, send_timeout: Optional[int]) -> None:
+        self.__host.send_timeout = send_timeout
 
     def __print(self, string: str, newline: bool = True) -> None:
         if not self.quiet:
@@ -344,6 +353,7 @@ class CabinetManager:
                 version=NetDimmVersionEnum(str(cab['version'])) if 'version' in cab else None,
                 enabled=(True if 'disabled' not in cab else (not cab['disabled'])),
                 time_hack=(False if 'time_hack' not in cab else bool(cab['time_hack'])),
+                send_timeout=(None if 'send_timeout' not in cab else int(cab['send_timeout'])),
             )
             if cabinet.target == TargetEnum.TARGET_NAOMI:
                 # Make sure that the settings are correct for the EEPROM size.
@@ -361,7 +371,7 @@ class CabinetManager:
         return CabinetManager(cabinets)
 
     def to_yaml(self, yaml_file: str) -> None:
-        data: Dict[str, Dict[str, Optional[Union[bool, str, Dict[str, List[str]], Dict[str, List[int]], Dict[str, Optional[str]]]]]] = {}
+        data: Dict[str, Dict[str, Optional[Union[bool, str, Optional[int], Dict[str, List[str]], Dict[str, List[int]], Dict[str, Optional[str]]]]]] = {}
 
         with self.__lock:
             cabinets: List[Cabinet] = sorted([cab for _, cab in self.__cabinets.items()], key=lambda cab: cab.ip)
@@ -382,6 +392,8 @@ class CabinetManager:
             }
             if not cab.enabled:
                 data[cab.ip]['disabled'] = True
+            if cab.send_timeout is not None:
+                data[cab.ip]['send_timeout'] = cab.send_timeout
 
         with open(yaml_file, "w") as fp:
             yaml.dump(data, fp)
@@ -431,6 +443,7 @@ class CabinetManager:
         srams: Optional[Dict[str, Optional[str]]] = None,
         target: Union[Optional[TargetEnum], EmptyObject] = empty,
         version: Union[Optional[NetDimmVersionEnum], EmptyObject] = empty,
+        send_timeout: Union[Optional[int], EmptyObject] = empty,
         time_hack: Optional[bool] = None,
         enabled: Optional[bool] = None,
     ) -> None:
@@ -459,6 +472,8 @@ class CabinetManager:
                 existing_cab.enabled = enabled
             if time_hack is not None:
                 existing_cab.time_hack = time_hack
+            if not isinstance(send_timeout, EmptyObject):
+                existing_cab.send_timeout = send_timeout
 
     def cabinet_exists(self, ip: str) -> bool:
         with self.__lock:
