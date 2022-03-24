@@ -1,6 +1,7 @@
 from netdimm.netdimm import (
     NetDimmException,
     NetDimmVersionEnum,
+    NetDimmTargetEnum,
     CRCStatusEnum,
     PeekPokeTypeEnum,
     NetDimmInfo,
@@ -27,6 +28,7 @@ from netdimm.message import (
 __all__ = [
     "NetDimmException",
     "NetDimmVersionEnum",
+    "NetDimmTargetEnum",
     "CRCStatusEnum",
     "PeekPokeTypeEnum",
     "NetDimmInfo",

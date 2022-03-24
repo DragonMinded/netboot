@@ -5,8 +5,8 @@ import argparse
 import sys
 import time
 import enum
-from netboot import Cabinet, CabinetStateEnum, CabinetRegionEnum, TargetEnum
-from netdimm import NetDimmVersionEnum
+from netboot import Cabinet, CabinetStateEnum, CabinetRegionEnum
+from netdimm import NetDimmVersionEnum, NetDimmTargetEnum
 from naomi import NaomiSettingsPatcher
 from typing import Any, Optional
 
@@ -55,9 +55,9 @@ def main() -> int:
     parser.add_argument(
         "--target",
         metavar="TARGET",
-        type=TargetEnum,
+        type=NetDimmTargetEnum,
         action=EnumAction,
-        default=TargetEnum.TARGET_NAOMI,
+        default=NetDimmTargetEnum.TARGET_NAOMI,
         help="Target platform this image is going to. Defaults to 'naomi'. Choose from 'naomi', 'chihiro' or 'triforce'.",
     )
     parser.add_argument(
@@ -115,7 +115,7 @@ def main() -> int:
 
     settings: Optional[bytes] = None
     sram: Optional[str] = None
-    if args.target == TargetEnum.TARGET_NAOMI:
+    if args.target == NetDimmTargetEnum.TARGET_NAOMI:
         for sfile in args.settings_file or []:
             with open(sfile, "rb") as fp:
                 data = fp.read()

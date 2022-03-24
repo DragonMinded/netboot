@@ -13,14 +13,8 @@ from typing import Any, Dict, Optional, Sequence, Tuple, Union, overload
 
 from arcadeutils import FileBytes, BinaryDiff
 from netboot.log import log
-from netdimm import NetDimm, NetDimmInfo, NetDimmException, NetDimmVersionEnum
+from netdimm import NetDimm, NetDimmInfo, NetDimmException, NetDimmVersionEnum, NetDimmTargetEnum
 from naomi import NaomiSettingsPatcher, get_default_trojan as get_default_naomi_trojan
-
-
-class TargetEnum(Enum):
-    TARGET_CHIHIRO = "chihiro"
-    TARGET_NAOMI = "naomi"
-    TARGET_TRIFORCE = "triforce"
 
 
 class SettingsEnum(Enum):
@@ -29,16 +23,16 @@ class SettingsEnum(Enum):
 
 
 @overload
-def _handle_patches(data: bytes, target: TargetEnum, patches: Sequence[str], settings: Dict[SettingsEnum, bytes]) -> bytes:
+def _handle_patches(data: bytes, target: NetDimmTargetEnum, patches: Sequence[str], settings: Dict[SettingsEnum, bytes]) -> bytes:
     ...
 
 
 @overload
-def _handle_patches(data: FileBytes, target: TargetEnum, patches: Sequence[str], settings: Dict[SettingsEnum, bytes]) -> FileBytes:
+def _handle_patches(data: FileBytes, target: NetDimmTargetEnum, patches: Sequence[str], settings: Dict[SettingsEnum, bytes]) -> FileBytes:
     ...
 
 
-def _handle_patches(data: Union[bytes, FileBytes], target: TargetEnum, patches: Sequence[str], settings: Dict[SettingsEnum, bytes]) -> Union[bytes, FileBytes]:
+def _handle_patches(data: Union[bytes, FileBytes], target: NetDimmTargetEnum, patches: Sequence[str], settings: Dict[SettingsEnum, bytes]) -> Union[bytes, FileBytes]:
     # Patch it
     for patch in patches:
         with open(patch, "r") as pp:
@@ -49,13 +43,13 @@ def _handle_patches(data: Union[bytes, FileBytes], target: TargetEnum, patches: 
     for typ, setting in settings.items():
         if typ == SettingsEnum.SETTINGS_EEPROM:
             # Attach any settings file requested.
-            if target == TargetEnum.TARGET_NAOMI:
+            if target == NetDimmTargetEnum.TARGET_NAOMI:
                 patcher = NaomiSettingsPatcher(data, get_default_naomi_trojan())
                 patcher.put_eeprom(setting)
                 data = patcher.data
         elif typ == SettingsEnum.SETTINGS_SRAM:
             # Attach any settings file requested.
-            if target == TargetEnum.TARGET_NAOMI:
+            if target == NetDimmTargetEnum.TARGET_NAOMI:
                 patcher = NaomiSettingsPatcher(data, get_default_naomi_trojan())
                 patcher.put_sram(setting)
                 data = patcher.data
@@ -68,7 +62,7 @@ def _send_file_to_host(
     filename: str,
     patches: Sequence[str],
     settings: Dict[SettingsEnum, bytes],
-    target: TargetEnum,
+    target: NetDimmTargetEnum,
     version: NetDimmVersionEnum,
     timeout: Optional[int],
     parent_pid: int,
@@ -117,13 +111,13 @@ class Host:
     def __init__(
         self,
         ip: str,
-        target: Optional[TargetEnum] = None,
+        target: Optional[NetDimmTargetEnum] = None,
         version: Optional[NetDimmVersionEnum] = None,
         send_timeout: Optional[int] = None,
         time_hack: bool = False,
         quiet: bool = False,
     ) -> None:
-        self.target: TargetEnum = target or TargetEnum.TARGET_NAOMI
+        self.target: NetDimmTargetEnum = target or NetDimmTargetEnum.TARGET_NAOMI
         self.version: NetDimmVersionEnum = version or NetDimmVersionEnum.VERSION_4_01
         self.ip: str = ip
         self.alive: bool = False

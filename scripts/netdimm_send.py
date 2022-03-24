@@ -6,8 +6,7 @@ import enum
 import sys
 import time
 from arcadeutils import FileBytes, BinaryDiff
-from netboot import TargetEnum
-from netdimm import NetDimm, NetDimmVersionEnum
+from netdimm import NetDimm, NetDimmVersionEnum, NetDimmTargetEnum
 from naomi import NaomiSettingsPatcher, get_default_trojan as get_default_naomi_trojan
 from typing import Any, Optional
 
@@ -62,9 +61,9 @@ def main() -> int:
     parser.add_argument(
         "--target",
         metavar="TARGET",
-        type=TargetEnum,
+        type=NetDimmTargetEnum,
         action=EnumAction,
-        default=TargetEnum.TARGET_NAOMI,
+        default=NetDimmTargetEnum.TARGET_NAOMI,
         help="Target platform this image is going to. Defaults to 'naomi'. Choose from 'naomi', 'chihiro' or 'triforce'.",
     )
     parser.add_argument(
@@ -138,7 +137,7 @@ def main() -> int:
         key = bytes([int(args.key[x:(x + 2)], 16) for x in range(0, len(args.key), 2)])
 
     print("sending...", file=sys.stderr)
-    netdimm = NetDimm(args.ip, version=args.version, timeout=args.send_timeout, log=print)
+    netdimm = NetDimm(args.ip, version=args.version, target=args.target, timeout=args.send_timeout, log=print)
 
     # Grab the binary, patch it with requested patches.
     with open(args.image, "rb") as fp:
@@ -154,7 +153,7 @@ def main() -> int:
                 return 1
 
         # Grab any settings file that should be included.
-        if args.target == TargetEnum.TARGET_NAOMI:
+        if args.target == NetDimmTargetEnum.TARGET_NAOMI:
             for sfile in args.settings_file or []:
                 with open(sfile, "rb") as fp:
                     settings = fp.read()

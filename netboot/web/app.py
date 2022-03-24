@@ -7,9 +7,9 @@ from typing import Callable, Dict, List, Any, cast
 
 from flask import Flask, Response, request, render_template, make_response, jsonify as flask_jsonify
 from werkzeug.routing import PathConverter
-from netdimm import NetDimmVersionEnum
+from netdimm import NetDimmVersionEnum, NetDimmTargetEnum
 from naomi import NaomiRomRegionEnum
-from netboot import Cabinet, CabinetRegionEnum, CabinetManager, DirectoryManager, PatchManager, SRAMManager, SettingsManager, TargetEnum
+from netboot import Cabinet, CabinetRegionEnum, CabinetManager, DirectoryManager, PatchManager, SRAMManager, SettingsManager
 
 
 current_directory: str = os.path.abspath(os.path.dirname(__file__))
@@ -160,7 +160,7 @@ def cabinetconfig(ip: str) -> Response:
             'gameconfig.html',
             cabinet=cabinet_to_dict(cabinet, dirman),
             regions=[cr.value for cr in CabinetRegionEnum if cr != CabinetRegionEnum.REGION_UNKNOWN],
-            targets=[t.value for t in TargetEnum],
+            targets=[t.value for t in NetDimmTargetEnum],
             versions=[tv.value for tv in NetDimmVersionEnum],
         ),
         200
@@ -173,7 +173,7 @@ def addcabinet() -> Response:
         render_template(
             'addcabinet.html',
             regions=[cr.value for cr in CabinetRegionEnum if cr != CabinetRegionEnum.REGION_UNKNOWN],
-            targets=[t.value for t in TargetEnum],
+            targets=[t.value for t in NetDimmTargetEnum],
             versions=[tv.value for tv in NetDimmVersionEnum],
         ),
         200
@@ -415,7 +415,7 @@ def createcabinet(ip: str) -> Dict[str, Any]:
         patches={rom: [] for rom in roms},
         settings={rom: None for rom in roms},
         srams={rom: None for rom in roms},
-        target=TargetEnum(request.json['target']),
+        target=NetDimmTargetEnum(request.json['target']),
         version=NetDimmVersionEnum(request.json['version']),
         enabled=True,
         time_hack=request.json['time_hack'],
@@ -437,7 +437,7 @@ def updatecabinet(ip: str) -> Dict[str, Any]:
         ip,
         region=CabinetRegionEnum(request.json['region']),
         description=request.json['description'],
-        target=TargetEnum(request.json['target']),
+        target=NetDimmTargetEnum(request.json['target']),
         version=NetDimmVersionEnum(request.json['version']),
         enabled=request.json['enabled'],
         time_hack=request.json['time_hack'],
@@ -504,7 +504,7 @@ def romsforcabinet(ip: str) -> Dict[str, Any]:
 
             # Calculate whether we are allowed to modify settings or not, and
             # if so, is there a setting enabled for this game.
-            if cabinet.target == TargetEnum.TARGET_NAOMI:
+            if cabinet.target == NetDimmTargetEnum.TARGET_NAOMI:
                 naomi_region = {
                     CabinetRegionEnum.REGION_JAPAN: NaomiRomRegionEnum.REGION_JAPAN,
                     CabinetRegionEnum.REGION_USA: NaomiRomRegionEnum.REGION_USA,
@@ -578,7 +578,7 @@ def updateromsforcabinet(ip: str) -> Response:
                 raise Exception("Logic error, expected zero or one SRAM file section!")
             sram = allsrams[0] if allsrams else None
 
-            if cabinet.target == TargetEnum.TARGET_NAOMI:
+            if cabinet.target == NetDimmTargetEnum.TARGET_NAOMI:
                 if settings is not None and settings['enabled']:
                     # Gotta convert this from JSON and set the settings.
                     cabinet.settings[game['file']] = settingsman.put_naomi_settings(settings['settings'])

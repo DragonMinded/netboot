@@ -4,8 +4,7 @@
 import argparse
 import enum
 import sys
-from netboot import TargetEnum
-from netdimm import NetDimm, NetDimmVersionEnum
+from netdimm import NetDimm, NetDimmVersionEnum, NetDimmTargetEnum
 from typing import Any
 
 
@@ -53,9 +52,9 @@ def main() -> int:
     parser.add_argument(
         "--target",
         metavar="TARGET",
-        type=TargetEnum,
+        type=NetDimmTargetEnum,
         action=EnumAction,
-        default=TargetEnum.TARGET_NAOMI,
+        default=NetDimmTargetEnum.TARGET_NAOMI,
         help="Target platform this image is coming from. Defaults to 'naomi'. Choose from 'naomi', 'chihiro' or 'triforce'.",
     )
     parser.add_argument(
@@ -67,10 +66,18 @@ def main() -> int:
         help="NetDimm firmware version this image is coming from. Defaults to '4.01'. Choose from '1.02', '2.06', '2.17', '3.03', '3.17', '4.01' or '4.02'.",
     )
 
+    # Give more time to slower netboot on some platforms.
+    parser.add_argument(
+        '--receive-timeout',
+        type=int,
+        default=None,
+        help="Specify a different receive timeout in seconds",
+    )
+
     args = parser.parse_args()
 
     print("receiving...", file=sys.stderr)
-    netdimm = NetDimm(args.ip, version=args.version)
+    netdimm = NetDimm(args.ip, version=args.version, target=args.target, timeout=args.receive_timeout)
 
     # Receive the binary.
     data = netdimm.receive()

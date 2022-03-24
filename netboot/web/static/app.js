@@ -415,7 +415,12 @@ Vue.component('cabinetconfig', {
                 </div>
                 <div class="information">
                     Target System and NetDimm Version are used to check availability for certain features.
-                    They are optional, but it's a good idea to set them correctly.
+                    They are optional, but it's a good idea to set them correctly. Keyless boot allows you
+                    to boot without a PIC by constantly connecting to the net dimm and resetting the reboot
+                    timeout. If you are running on a platform that takes awhile to boot, setting a custom
+                    send timeout to something longer like 30 seconds can allow stubborn systems to work fine.
+                    If you disable management of this cabinet then no games will be sent to it nor will it
+                    be checked to see if it is up.
                 </div>
             </div>
             <div class='cabinet'>
@@ -746,7 +751,10 @@ Vue.component('newcabinet', {
             <button v-on:click="save">Add Cabinet</button>
             <div class="information">
                 Target System and NetDimm Version are used to check availability for certain features.
-                They are optional, but it's a good idea to set them correctly.
+                They are optional, but it's a good idea to set them correctly. Keyless boot allows you
+                to boot without a PIC by constantly connecting to the net dimm and resetting the reboot
+                timeout. If you are running on a platform that takes awhile to boot, setting a custom
+                send timeout to something longer like 30 seconds can allow stubborn systems to work fine.
             </div>
         </div>
     `,

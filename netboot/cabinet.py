@@ -7,8 +7,8 @@ from enum import Enum
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from naomi import NaomiSettingsPatcher
-from netdimm import NetDimmInfo, NetDimmException, NetDimmVersionEnum, CRCStatusEnum
-from netboot.hostutils import Host, HostStatusEnum, TargetEnum, SettingsEnum
+from netdimm import NetDimmInfo, NetDimmException, NetDimmVersionEnum, NetDimmTargetEnum, CRCStatusEnum
+from netboot.hostutils import Host, HostStatusEnum, SettingsEnum
 from netboot.log import log
 
 
@@ -44,7 +44,7 @@ class Cabinet:
         patches: Dict[str, Sequence[str]],
         settings: Dict[str, Optional[bytes]],
         srams: Dict[str, Optional[str]],
-        target: Optional[TargetEnum] = None,
+        target: Optional[NetDimmTargetEnum] = None,
         version: Optional[NetDimmVersionEnum] = None,
         send_timeout: Optional[int] = None,
         time_hack: bool = False,
@@ -73,11 +73,11 @@ class Cabinet:
         return self.__host.ip
 
     @property
-    def target(self) -> TargetEnum:
+    def target(self) -> NetDimmTargetEnum:
         return self.__host.target
 
     @target.setter
-    def target(self, newval: TargetEnum) -> None:
+    def target(self, newval: NetDimmTargetEnum) -> None:
         self.__host.target = newval
 
     @property
@@ -349,13 +349,13 @@ class CabinetManager:
                 settings={str(rom): (bytes(data) if bool(data) else None) for (rom, data) in cab.get('settings', {}).items()},
                 # This is accessed differently since we have older YAML files that might need upgrading.
                 srams={str(rom): (str(data) if bool(data) else None) for (rom, data) in cab.get('srams', {}).items()},
-                target=TargetEnum(str(cab['target'])) if 'target' in cab else None,
+                target=NetDimmTargetEnum(str(cab['target'])) if 'target' in cab else None,
                 version=NetDimmVersionEnum(str(cab['version'])) if 'version' in cab else None,
                 enabled=(True if 'disabled' not in cab else (not cab['disabled'])),
                 time_hack=(False if 'time_hack' not in cab else bool(cab['time_hack'])),
                 send_timeout=(None if 'send_timeout' not in cab else int(cab['send_timeout'])),
             )
-            if cabinet.target == TargetEnum.TARGET_NAOMI:
+            if cabinet.target == NetDimmTargetEnum.TARGET_NAOMI:
                 # Make sure that the settings are correct for the EEPROM size.
                 cabinet.settings = {
                     name: None if (settings is not None and len(settings) != NaomiSettingsPatcher.EEPROM_SIZE) else settings
@@ -441,7 +441,7 @@ class CabinetManager:
         patches: Optional[Dict[str, Sequence[str]]] = None,
         settings: Optional[Dict[str, Optional[bytes]]] = None,
         srams: Optional[Dict[str, Optional[str]]] = None,
-        target: Union[Optional[TargetEnum], EmptyObject] = empty,
+        target: Union[Optional[NetDimmTargetEnum], EmptyObject] = empty,
         version: Union[Optional[NetDimmVersionEnum], EmptyObject] = empty,
         send_timeout: Union[Optional[int], EmptyObject] = empty,
         time_hack: Optional[bool] = None,
@@ -455,7 +455,7 @@ class CabinetManager:
             if description is not None:
                 existing_cab.description = description
             if not isinstance(target, EmptyObject):
-                existing_cab.target = target or TargetEnum.TARGET_NAOMI
+                existing_cab.target = target or NetDimmTargetEnum.TARGET_NAOMI
             if region is not None:
                 existing_cab.region = region
             if not isinstance(version, EmptyObject):

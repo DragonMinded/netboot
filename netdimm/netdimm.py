@@ -34,6 +34,13 @@ class NetDimmVersionEnum(Enum):
     VERSION_4_02 = "4.02"
 
 
+class NetDimmTargetEnum(Enum):
+    TARGET_UNKNOWN = "unknown"
+    TARGET_CHIHIRO = "chihiro"
+    TARGET_NAOMI = "naomi"
+    TARGET_TRIFORCE = "triforce"
+
+
 class CRCStatusEnum(Enum):
     STATUS_CHECKING = 1
     STATUS_VALID = 2
@@ -100,6 +107,7 @@ class NetDimm:
         self,
         ip: str,
         version: Optional[NetDimmVersionEnum] = None,
+        target: Optional[NetDimmTargetEnum] = None,
         log: Optional[Callable[..., Any]] = None,
         timeout: Optional[int] = None,
     ) -> None:
@@ -107,17 +115,28 @@ class NetDimm:
         self.sock: Optional[socket.socket] = None
         self.log: Optional[Callable[..., Any]] = log
         self.version: NetDimmVersionEnum = version or NetDimmVersionEnum.VERSION_UNKNOWN
+        self.target: NetDimmTargetEnum = target or NetDimmTargetEnum.TARGET_UNKNOWN
+
+        # A sane default for different targets, at least in my testing, is 10 seconds. However, OSX
+        # users and some people have reported that this is too fast. So, 15 seconds it is for everything.
+        # User reports for Chihiro are that it is super slow, so it needs a longer timeout. I have no
+        # idea on Triforce so I set it the same as Chihiro.
+        default_timeout = {
+            NetDimmTargetEnum.TARGET_UNKNOWN: 15,
+            NetDimmTargetEnum.TARGET_NAOMI: 15,
+            NetDimmTargetEnum.TARGET_CHIHIRO: 40,
+            NetDimmTargetEnum.TARGET_TRIFORCE: 40,
+        }[self.target]
+
         if timeout is None:
-            # A sane default for Naomi, at least in my testing, is 10 seconds. However, OSX
-            # users and some people have reported that this is too fast. So, 15 seconds it is.
             try:
-                timeout = int(os.environ.get('NETDIMM_TIMEOUT_SECONDS') or 15)
+                timeout = int(os.environ.get('NETDIMM_TIMEOUT_SECONDS') or default_timeout)
             except Exception:
-                timeout = 15
+                timeout = default_timeout
         self.timeout: int = timeout
 
     def __repr__(self) -> str:
-        return f"NetDimm(ip={repr(self.ip)}, version={repr(self.version)}, timeout={repr(self.timeout)})"
+        return f"NetDimm(ip={repr(self.ip)}, version={repr(self.version)}, target={repr(self.target)}, timeout={repr(self.timeout)})"
 
     def info(self) -> NetDimmInfo:
         with self.connection():
