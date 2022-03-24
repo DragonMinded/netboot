@@ -101,7 +101,12 @@ class NaomiRom:
 
     @property
     def valid(self) -> bool:
-        return self.data[0x000:0x010] in {b'NAOMI           ', b'Naomi2          '}
+        # TODO: Support encrypted ROM headers. For now, we don't support this so we check
+        # the encryption flag and state that the ROM isn't valid if it is set.
+        return (
+            self.data[0x000:0x010] in {b'NAOMI           ', b'Naomi2          '} and
+            self.data[0x4FF] == 0xFF
+        )
 
     def _raise_on_invalid(self) -> None:
         if not self.valid:
