@@ -20,10 +20,16 @@ disconnect. However, it can be faster to maintain that connection. For that, see
 `connection()` context manager below. Optionally, the second argument (or keyword
 argument) version can be given. This is a `NetDimmVersionEnum` which allows you to
 set the version of the net dimm you are talking to. This matters in a few rare cases.
-Optionally, the third argument (or keyword argument) log can be given. This can either
-be a function in the form of `log(msg: str, *, newline: bool = True) -> None` or it can
-be given the `print` function. In either case, if this is provided, various verbose
-information will be logged.
+Optionally, the third argument (or keyword argument) target can be given. This is a
+`NetDimmTargetEnum` which allows you to set the target the net dimm is talking to. This
+matters for default timeouts. Optionally, the forth argument (or keyword argument) log
+can be given. This can either be a function in the form of
+`log(msg: str, *, newline: bool = True) -> None` or it can be given the `print` function.
+In either case, if this is provided, various verbose information will be logged.
+Optionally, the firth argument (or keyword argument) timeout can be given. This should
+be an integer representing the number of seconds before a send or receive should time
+out when the net dimm does not talk. This is normally determined automatically given
+a correct target keyword but you can also specify it manually.
 
 ### crc() static method
 
