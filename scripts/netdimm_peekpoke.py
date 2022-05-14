@@ -2,6 +2,7 @@
 # Triforce Netfirm Toolbox, put into the public domain.
 # Please attribute properly, but only if you want.
 import argparse
+import struct
 import sys
 
 from netdimm import NetDimm, PeekPokeTypeEnum
@@ -67,6 +68,60 @@ def main() -> int:
         help="The hex value you wish to write into the address.",
     )
 
+    dump_parser = subparsers.add_parser(
+        'dump',
+        help='Dump data from a memory location.',
+        description='Dump data from a memory location.',
+    )
+    dump_parser.add_argument(
+        "ip",
+        metavar="IP",
+        type=str,
+        help="The IP address that the NetDimm is configured on.",
+    )
+    dump_parser.add_argument(
+        "file",
+        metavar="FILE",
+        type=str,
+        help="The file you want to dump data to.",
+    )
+    dump_parser.add_argument(
+        "address",
+        metavar="ADDR",
+        type=str,
+        help="The hex address of memory that you would like to dump from.",
+    )
+    dump_parser.add_argument(
+        "size",
+        metavar="SIZE",
+        type=int,
+        help="The size in bytes you want to read.",
+    )
+
+    load_parser = subparsers.add_parser(
+        'load',
+        help='Load data to a memory location.',
+        description='Load data to a memory location.',
+    )
+    load_parser.add_argument(
+        "ip",
+        metavar="IP",
+        type=str,
+        help="The IP address that the NetDimm is configured on.",
+    )
+    load_parser.add_argument(
+        "file",
+        metavar="FILE",
+        type=str,
+        help="The file you want to load data to.",
+    )
+    load_parser.add_argument(
+        "address",
+        metavar="ADDR",
+        type=str,
+        help="The hex address of memory that you would like to load to.",
+    )
+
     args = parser.parse_args()
     netdimm = NetDimm(args.ip)
 
@@ -94,6 +149,19 @@ def main() -> int:
             netdimm.poke(int(args.address, 16), PeekPokeTypeEnum.TYPE_LONG, int(args.data, 16) & 0xFFFFFFFF)
         else:
             raise Exception(f"Invalid size selection {args.size}!")
+
+    elif args.action == "dump":
+        with open(args.file, "wb") as bfp:
+            for i in range(args.size):
+                data = netdimm.peek(int(args.address, 16) + i, PeekPokeTypeEnum.TYPE_BYTE) & 0xFF
+                bfp.write(struct.pack("B", data))
+        print(f"Dumped {args.size} bytes to {args.file}")
+
+    elif args.action == "load":
+        with open(args.file, "rb") as bfp:
+            for amount, b in enumerate(bfp.read()):
+                netdimm.poke(int(args.address, 16) + amount, PeekPokeTypeEnum.TYPE_BYTE, b)
+        print(f"Loaded {amount} bytes from {args.file}")
 
     return 0
 
