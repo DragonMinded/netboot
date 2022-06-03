@@ -1,5 +1,6 @@
 BAC0 - Crazy Taxi
 BAU0 - Jambo Safari
 BBG0 - Marvel vs Capcom 2
+BDM0 - Doom for Naomi
 BBN1 - The Typing of the Dead
 BDF0 - Monkey Ball
