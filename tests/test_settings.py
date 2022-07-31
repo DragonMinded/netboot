@@ -1091,6 +1091,8 @@ class TestSettingsConfig(unittest.TestCase):
                 # This is a comment!
             """),
         )
+        self.assertEqual(empty.filename, "foo.settings")
+        self.assertEqual(empty.settings, [])
         self.assertEqual(empty.defaults, b"")
 
     def test_generating_defaults(self) -> None:
@@ -1157,3 +1159,243 @@ class TestSettingsConfig(unittest.TestCase):
             """),
         )
         self.assertEqual(config.defaults, b"\x12\x02")
+
+    def test_simple_setting_value_parse(self) -> None:
+        config = SettingsConfig.from_data(
+            filename="foo.settings",
+            data=dedent("""
+                Sample: byte, values are 1 to 3
+            """),
+        )
+        self.assertEqual(len(config.settings), 1)
+        self.assertEqual(config.settings[0].name, "Sample")
+        self.assertEqual(config.settings[0].size, SettingSizeEnum.BYTE)
+        self.assertEqual(config.settings[0].length, 1)
+        self.assertEqual(config.settings[0].default, None)
+        self.assertEqual(config.settings[0].read_only, False)
+        self.assertEqual(config.settings[0].values, {1: "1", 2: "2", 3: "3"})
+
+        config = SettingsConfig.from_data(
+            filename="foo.settings",
+            data=dedent("""
+                Sample: byte, 1 - On, 2 - Off
+            """),
+        )
+        self.assertEqual(len(config.settings), 1)
+        self.assertEqual(config.settings[0].name, "Sample")
+        self.assertEqual(config.settings[0].size, SettingSizeEnum.BYTE)
+        self.assertEqual(config.settings[0].length, 1)
+        self.assertEqual(config.settings[0].default, None)
+        self.assertEqual(config.settings[0].read_only, False)
+        self.assertEqual(config.settings[0].values, {1: "On", 2: "Off"})
+
+        config = SettingsConfig.from_data(
+            filename="foo.settings",
+            data=dedent("""
+                Sample: byte, 1 - On, 2 - Off, 3 to 5
+            """),
+        )
+        self.assertEqual(len(config.settings), 1)
+        self.assertEqual(config.settings[0].name, "Sample")
+        self.assertEqual(config.settings[0].size, SettingSizeEnum.BYTE)
+        self.assertEqual(config.settings[0].length, 1)
+        self.assertEqual(config.settings[0].default, None)
+        self.assertEqual(config.settings[0].read_only, False)
+        self.assertEqual(config.settings[0].values, {1: "On", 2: "Off", 3: "3", 4: "4", 5: "5"})
+
+        config = SettingsConfig.from_data(
+            filename="foo.settings",
+            data=dedent("""
+                Sample\\,Setting: byte, 1 - On\\:On
+            """),
+        )
+        self.assertEqual(len(config.settings), 1)
+        self.assertEqual(config.settings[0].name, "Sample,Setting")
+        self.assertEqual(config.settings[0].size, SettingSizeEnum.BYTE)
+        self.assertEqual(config.settings[0].length, 1)
+        self.assertEqual(config.settings[0].default, None)
+        self.assertEqual(config.settings[0].read_only, False)
+        self.assertEqual(config.settings[0].values, {1: "On:On"})
+
+        config = SettingsConfig.from_data(
+            filename="foo.settings",
+            data=dedent("""
+                Sample: byte, values are 1 to 3 in hex
+            """),
+        )
+        self.assertEqual(len(config.settings), 1)
+        self.assertEqual(config.settings[0].name, "Sample")
+        self.assertEqual(config.settings[0].size, SettingSizeEnum.BYTE)
+        self.assertEqual(config.settings[0].length, 1)
+        self.assertEqual(config.settings[0].default, None)
+        self.assertEqual(config.settings[0].read_only, False)
+        self.assertEqual(config.settings[0].values, {1: "01", 2: "02", 3: "03"})
+
+        config = SettingsConfig.from_data(
+            filename="foo.settings",
+            data=dedent("""
+                Sample 1: half-byte, values are 1 to 3 in hex
+                Sample 2: half-byte, values are 2 to 4 in hex
+            """),
+        )
+        self.assertEqual(len(config.settings), 2)
+        self.assertEqual(config.settings[0].name, "Sample 1")
+        self.assertEqual(config.settings[0].size, SettingSizeEnum.NIBBLE)
+        self.assertEqual(config.settings[0].length, 1)
+        self.assertEqual(config.settings[0].default, None)
+        self.assertEqual(config.settings[0].read_only, False)
+        self.assertEqual(config.settings[0].values, {1: "1", 2: "2", 3: "3"})
+        self.assertEqual(config.settings[1].name, "Sample 2")
+        self.assertEqual(config.settings[1].size, SettingSizeEnum.NIBBLE)
+        self.assertEqual(config.settings[1].length, 1)
+        self.assertEqual(config.settings[1].default, None)
+        self.assertEqual(config.settings[1].read_only, False)
+        self.assertEqual(config.settings[1].values, {2: "2", 3: "3", 4: "4"})
+
+        config = SettingsConfig.from_data(
+            filename="foo.settings",
+            data=dedent("""
+                Sample: 2 bytes, values are 1 to 3 in hex
+            """),
+        )
+        self.assertEqual(len(config.settings), 1)
+        self.assertEqual(config.settings[0].name, "Sample")
+        self.assertEqual(config.settings[0].size, SettingSizeEnum.BYTE)
+        self.assertEqual(config.settings[0].length, 2)
+        self.assertEqual(config.settings[0].default, None)
+        self.assertEqual(config.settings[0].read_only, False)
+        self.assertEqual(config.settings[0].values, {1: "0001", 2: "0002", 3: "0003"})
+
+        config = SettingsConfig.from_data(
+            filename="foo.settings",
+            data=dedent("""
+                Sample: 4 bytes, values are 1 to 3 in hex
+            """),
+        )
+        self.assertEqual(len(config.settings), 1)
+        self.assertEqual(config.settings[0].name, "Sample")
+        self.assertEqual(config.settings[0].size, SettingSizeEnum.BYTE)
+        self.assertEqual(config.settings[0].length, 4)
+        self.assertEqual(config.settings[0].default, None)
+        self.assertEqual(config.settings[0].read_only, False)
+        self.assertEqual(config.settings[0].values, {1: "00000001", 2: "00000002", 3: "00000003"})
+
+    def test_read_only_settings_parse(self) -> None:
+        # Test an always read-only setting.
+        config = SettingsConfig.from_data(
+            filename="foo.settings",
+            data=dedent("""
+                Sample: byte, read-only
+            """),
+        )
+        self.assertEqual(len(config.settings), 1)
+        self.assertEqual(config.settings[0].name, "Sample")
+        self.assertEqual(config.settings[0].size, SettingSizeEnum.BYTE)
+        self.assertEqual(config.settings[0].length, 1)
+        self.assertEqual(config.settings[0].default, None)
+        self.assertEqual(config.settings[0].read_only, True)
+        self.assertEqual(config.settings[0].values, {})
+
+        # Test a simple read-only condition.
+        config = SettingsConfig.from_data(
+            filename="foo.settings",
+            data=dedent("""
+                Sample: byte
+                  read-only if Other is 1
+                  values are 0 to 2
+            """),
+        )
+        self.assertEqual(len(config.settings), 1)
+        self.assertEqual(config.settings[0].name, "Sample")
+        self.assertEqual(config.settings[0].size, SettingSizeEnum.BYTE)
+        self.assertEqual(config.settings[0].length, 1)
+        self.assertEqual(config.settings[0].default, None)
+        self.assertEqual(
+            config.settings[0].read_only,
+            ReadOnlyCondition(
+                filename="foo.settings",
+                setting="Sample",
+                name="Other",
+                values=[1],
+                negate=True,
+            )
+        )
+        self.assertEqual(config.settings[0].values, {0: "0", 1: "1", 2: "2"})
+
+        # Test a read-only condition that has been flipped.
+        config = SettingsConfig.from_data(
+            filename="foo.settings",
+            data=dedent("""
+                Sample: byte
+                  read-only unless Other is 1
+                  values are 0 to 2
+            """),
+        )
+        self.assertEqual(len(config.settings), 1)
+        self.assertEqual(config.settings[0].name, "Sample")
+        self.assertEqual(config.settings[0].size, SettingSizeEnum.BYTE)
+        self.assertEqual(config.settings[0].length, 1)
+        self.assertEqual(config.settings[0].default, None)
+        self.assertEqual(
+            config.settings[0].read_only,
+            ReadOnlyCondition(
+                filename="foo.settings",
+                setting="Sample",
+                name="Other",
+                values=[1],
+                negate=False,
+            )
+        )
+        self.assertEqual(config.settings[0].values, {0: "0", 1: "1", 2: "2"})
+
+        # Test a multi-value read-only condition
+        config = SettingsConfig.from_data(
+            filename="foo.settings",
+            data=dedent("""
+                Sample: byte
+                  read-only if Other is 1 or 2 or 3
+                  values are 0 to 2
+            """),
+        )
+        self.assertEqual(len(config.settings), 1)
+        self.assertEqual(config.settings[0].name, "Sample")
+        self.assertEqual(config.settings[0].size, SettingSizeEnum.BYTE)
+        self.assertEqual(config.settings[0].length, 1)
+        self.assertEqual(config.settings[0].default, None)
+        self.assertEqual(
+            config.settings[0].read_only,
+            ReadOnlyCondition(
+                filename="foo.settings",
+                setting="Sample",
+                name="Other",
+                values=[1, 2, 3],
+                negate=True,
+            )
+        )
+        self.assertEqual(config.settings[0].values, {0: "0", 1: "1", 2: "2"})
+
+        # Test a multi-value negated read-only condition
+        config = SettingsConfig.from_data(
+            filename="foo.settings",
+            data=dedent("""
+                Sample: byte
+                  read-only unless Other is 5 or 6
+                  values are 0 to 2
+            """),
+        )
+        self.assertEqual(len(config.settings), 1)
+        self.assertEqual(config.settings[0].name, "Sample")
+        self.assertEqual(config.settings[0].size, SettingSizeEnum.BYTE)
+        self.assertEqual(config.settings[0].length, 1)
+        self.assertEqual(config.settings[0].default, None)
+        self.assertEqual(
+            config.settings[0].read_only,
+            ReadOnlyCondition(
+                filename="foo.settings",
+                setting="Sample",
+                name="Other",
+                values=[5, 6],
+                negate=False,
+            )
+        )
+        self.assertEqual(config.settings[0].values, {0: "0", 1: "1", 2: "2"})
