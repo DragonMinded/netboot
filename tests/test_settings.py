@@ -2,7 +2,7 @@ import unittest
 
 # We are importing directly from the implementation because we want to test some
 # implementation-specific details here that aren't normally exposed.
-from settings.settings import ReadOnlyCondition, DefaultCondition, DefaultConditionGroup, Setting, SettingSizeEnum, SettingsSaveException
+from settings.settings import ReadOnlyCondition, DefaultCondition, DefaultConditionGroup, Setting, Settings, SettingSizeEnum, SettingsSaveException
 
 
 class TestReadOnlyCondition(unittest.TestCase):
@@ -385,3 +385,181 @@ class TestSetting(unittest.TestCase):
         self.assertEqual(before.values, after.values)
         self.assertEqual(before.current, after.current)
         self.assertEqual(before.default, after.default)
+
+
+class TestSettings(unittest.TestCase):
+    def test_length(self) -> None:
+        self.assertEqual(
+            Settings(
+                filename="foo.settings",
+                settings=[
+                ],
+            ).length,
+            0
+        )
+
+        self.assertEqual(
+            Settings(
+                filename="foo.settings",
+                settings=[
+                    Setting(
+                        name="foo",
+                        order=0,
+                        size=SettingSizeEnum.BYTE,
+                        length=1,
+                        read_only=False,
+                    ),
+                ],
+            ).length,
+            1
+        )
+
+        self.assertEqual(
+            Settings(
+                filename="foo.settings",
+                settings=[
+                    Setting(
+                        name="foo",
+                        order=0,
+                        size=SettingSizeEnum.BYTE,
+                        length=2,
+                        read_only=False,
+                    ),
+                ],
+            ).length,
+            2
+        )
+
+        self.assertEqual(
+            Settings(
+                filename="foo.settings",
+                settings=[
+                    Setting(
+                        name="foo",
+                        order=0,
+                        size=SettingSizeEnum.BYTE,
+                        length=4,
+                        read_only=False,
+                    ),
+                ],
+            ).length,
+            4
+        )
+
+        self.assertEqual(
+            Settings(
+                filename="foo.settings",
+                settings=[
+                    Setting(
+                        name="foo",
+                        order=0,
+                        size=SettingSizeEnum.NIBBLE,
+                        length=1,
+                        read_only=False,
+                    ),
+                    Setting(
+                        name="bar",
+                        order=1,
+                        size=SettingSizeEnum.NIBBLE,
+                        length=1,
+                        read_only=False,
+                    ),
+                ],
+            ).length,
+            1
+        )
+
+        self.assertEqual(
+            Settings(
+                filename="foo.settings",
+                settings=[
+                    Setting(
+                        name="foo",
+                        order=0,
+                        size=SettingSizeEnum.BYTE,
+                        length=2,
+                        read_only=False,
+                    ),
+                    Setting(
+                        name="foo",
+                        order=1,
+                        size=SettingSizeEnum.NIBBLE,
+                        length=1,
+                        read_only=False,
+                    ),
+                    Setting(
+                        name="bar",
+                        order=2,
+                        size=SettingSizeEnum.NIBBLE,
+                        length=1,
+                        read_only=False,
+                    ),
+                    Setting(
+                        name="foo",
+                        order=0,
+                        size=SettingSizeEnum.BYTE,
+                        length=1,
+                        read_only=False,
+                    ),
+                ],
+            ).length,
+            4
+        )
+
+        with self.assertRaises(SettingsSaveException) as exc:
+            _ = Settings(
+                filename="foo.settings",
+                settings=[
+                    Setting(
+                        name="foo",
+                        order=0,
+                        size=SettingSizeEnum.NIBBLE,
+                        length=1,
+                        read_only=False,
+                    ),
+                ],
+            ).length,
+
+        self.assertEqual(exc.exception.filename, "foo.settings")
+        self.assertEqual(str(exc.exception), "The setting \"foo\" is a lonesome half-byte setting. Half-byte settings must always be in pairs!")
+
+        with self.assertRaises(SettingsSaveException) as exc:
+            _ = Settings(
+                filename="foo.settings",
+                settings=[
+                    Setting(
+                        name="foo",
+                        order=0,
+                        size=SettingSizeEnum.NIBBLE,
+                        length=1,
+                        read_only=False,
+                    ),
+                    Setting(
+                        name="bar",
+                        order=1,
+                        size=SettingSizeEnum.BYTE,
+                        length=1,
+                        read_only=False,
+                    ),
+                ],
+            ).length,
+
+        self.assertEqual(exc.exception.filename, "foo.settings")
+        self.assertEqual(str(exc.exception), "The setting \"bar\" follows a lonesome half-byte setting \"foo\". Half-byte settings must always be in pairs!")
+
+        with self.assertRaises(SettingsSaveException) as exc:
+            _ = Settings(
+                filename="foo.settings",
+                settings=[
+                    Setting(
+                        name="bar",
+                        order=0,
+                        size=SettingSizeEnum.BYTE,
+                        length=3,
+                        read_only=False,
+                    ),
+                ],
+            ).length,
+
+        self.assertEqual(exc.exception.filename, "foo.settings")
+        self.assertEqual(str(exc.exception), "Cannot save setting \"bar\" with unrecognized size 3!")

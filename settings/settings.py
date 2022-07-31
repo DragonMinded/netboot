@@ -393,6 +393,7 @@ class Settings:
         # Keep track of how many bytes into the EEPROM we are.
         location = 0
         halves = 0
+        halfname: Optional[str] = None
 
         # We need to make sure this is in load order, so that we can parse out the
         # correct settings in order of them showing up in the file.
@@ -405,13 +406,18 @@ class Settings:
                         setting.current = data[location] & 0xF
 
                 if halves == 0:
+                    halfname = setting.name
                     halves = 1
                 else:
+                    halfname = None
                     halves = 0
                     location += 1
             elif setting.size == SettingSizeEnum.BYTE:
                 if halves != 0:
-                    raise SettingsParseException(f"The setting \"{setting.name}\" follows a lonesome half-byte. Half-byte settings must always be in pairs!", config.filename)
+                    raise SettingsParseException(
+                        f"The setting \"{setting.name}\" follows a lonesome half-byte setting \"{halfname}\". Half-byte settings must always be in pairs!",
+                        config.filename
+                    )
 
                 if setting.length == 1:
                     if location < len(data):
@@ -427,6 +433,12 @@ class Settings:
 
                 location += setting.length
 
+        if halves != 0:
+            raise SettingsSaveException(
+                f"The setting \"{halfname}\" is a lonesome half-byte setting. Half-byte settings must always be in pairs!",
+                config.filename
+            )
+
         # Return this in the original order presented to us.
         final_settings = Settings(config.filename, config.settings, type=type)
         if final_settings.length != len(data):
@@ -438,27 +450,43 @@ class Settings:
 
     @property
     def length(self) -> int:
+        # Note that this is different than just len(self.settings), because some settings can take up
+        # more or less than a single byte. This calculates the length of the data in bytes that will
+        # be returned by to_bytes()
         halves = 0
         length = 0
+        halfname: Optional[str] = None
+
         for setting in sorted(self.settings, key=lambda setting: setting.order):
             if setting.size == SettingSizeEnum.NIBBLE:
                 # Update our length.
                 if halves == 0:
+                    halfname = setting.name
                     halves = 1
                 else:
+                    halfname = None
                     halves = 0
                     length += 1
 
             elif setting.size == SettingSizeEnum.BYTE:
                 # First, make sure we aren't in a pending nibble state.
                 if halves != 0:
-                    raise SettingsSaveException(f"The setting \"{setting.name}\" follows a lonesome half-byte. Half-byte settings must always be in pairs!", self.filename)
+                    raise SettingsSaveException(
+                        f"The setting \"{setting.name}\" follows a lonesome half-byte setting \"{halfname}\". Half-byte settings must always be in pairs!",
+                        self.filename
+                    )
 
                 if setting.length not in {1, 2, 4}:
                     raise SettingsSaveException(f"Cannot save setting \"{setting.name}\" with unrecognized size {setting.length}!", self.filename)
 
                 # Update our length.
                 length += setting.length
+
+        if halves != 0:
+            raise SettingsSaveException(
+                f"The setting \"{halfname}\" is a lonesome half-byte setting. Half-byte settings must always be in pairs!",
+                self.filename
+            )
 
         return length
 
@@ -505,6 +533,7 @@ class Settings:
     def to_bytes(self) -> bytes:
         pending: int = 0
         halves: int = 0
+        halfname: Optional[str] = None
         location: int = 0
         section: bytes = b''
 
@@ -552,15 +581,20 @@ class Settings:
 
                 # Now, update our position.
                 if halves == 0:
+                    halfname = setting.name
                     halves = 1
                 else:
+                    halfname = None
                     halves = 0
                     location += 1
 
             elif setting.size == SettingSizeEnum.BYTE:
                 # First, make sure we aren't in a pending nibble state.
                 if halves != 0:
-                    raise SettingsSaveException(f"The setting \"{setting.name}\" follows a lonesome half-byte. Half-byte settings must always be in pairs!", self.filename)
+                    raise SettingsSaveException(
+                        f"The setting \"{setting.name}\" follows a lonesome half-byte setting \"{halfname}\". Half-byte settings must always be in pairs!",
+                        self.filename
+                    )
 
                 if setting.length not in {1, 2, 4}:
                     raise SettingsSaveException(f"Cannot save setting \"{setting.name}\" with unrecognized size {setting.length}!", self.filename)
@@ -579,6 +613,12 @@ class Settings:
 
                 # Now, update our position.
                 location += setting.length
+
+        if halves != 0:
+            raise SettingsSaveException(
+                f"The setting \"{halfname}\" is a lonesome half-byte setting. Half-byte settings must always be in pairs!",
+                self.filename
+            )
 
         return section
 
@@ -985,12 +1025,22 @@ class SettingsConfig:
 
         # Verify that nibbles come in pairs.
         halves = 0
+        halfname: Optional[str] = None
         for setting in settings:
             if setting.size == SettingSizeEnum.NIBBLE:
                 halves = 1 - halves
+                halfname = None if halves == 0 else setting.name
             elif setting.size == SettingSizeEnum.BYTE:
                 if halves != 0:
-                    raise SettingsParseException(f"The setting \"{setting.name}\" follows a lonesome half-byte. Half-byte settings must always be in pairs!", filename)
+                    raise SettingsParseException(
+                        f"The setting \"{setting.name}\" follows a lonesome half-byte setting {halfname}. Half-byte settings must always be in pairs!",
+                        filename
+                    )
+        if halves != 0:
+            raise SettingsSaveException(
+                f"The setting \"{halfname}\" is a lonesome half-byte setting. Half-byte settings must always be in pairs!",
+                filename
+            )
 
         # Now, insert pending settings where they belong.
         while pending_insertions:
@@ -1029,6 +1079,7 @@ class SettingsConfig:
     def defaults(self) -> bytes:
         pending = 0
         halves = 0
+        halfname: Optional[str] = None
         defaults: List[bytes] = []
 
         for setting in sorted(self.settings, key=lambda setting: setting.order):
@@ -1047,12 +1098,17 @@ class SettingsConfig:
                     defaults.append(bytes([(default & 0xF) | pending]))
 
                 if halves == 0:
+                    halfname = setting.name
                     halves = 1
                 else:
+                    halfname = None
                     halves = 0
             elif setting.size == SettingSizeEnum.BYTE:
                 if halves != 0:
-                    raise SettingsSaveException(f"The setting \"{setting.name}\" follows a lonesome half-byte. Half-byte settings must always be in pairs!", self.filename)
+                    raise SettingsSaveException(
+                        f"The setting \"{setting.name}\" follows a lonesome half-byte setting \"{halfname}\". Half-byte settings must always be in pairs!",
+                        self.filename
+                    )
                 if setting.length == 1:
                     defaults.append(struct.pack("<B", default))
                 elif setting.length == 2:
@@ -1061,5 +1117,11 @@ class SettingsConfig:
                     defaults.append(struct.pack("<I", default))
                 else:
                     raise SettingsSaveException(f"Cannot save setting \"{setting.name}\" with unrecognized size {setting.length}!", self.filename)
+
+        if halves != 0:
+            raise SettingsSaveException(
+                f"The setting \"{halfname}\" is a lonesome half-byte setting. Half-byte settings must always be in pairs!",
+                self.filename
+            )
 
         return b"".join(defaults)
