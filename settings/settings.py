@@ -46,7 +46,7 @@ class ReadOnlyCondition:
     def evaluate(self, settings: List["Setting"]) -> bool:
         for setting in settings:
             if setting.name.lower() == self.name.lower():
-                if setting.current in self.values:
+                if (setting.current if setting.current is not None else setting.default) in self.values:
                     return self.negate
                 else:
                     return not self.negate
