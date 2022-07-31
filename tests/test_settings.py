@@ -999,3 +999,73 @@ class TestSettings(unittest.TestCase):
             [x for x in parsed_settings.settings if x.name == "qux"][0].current,
             0x78,
         )
+
+    def test_json_roundtrip(self) -> None:
+        original_settings = [
+            Setting(
+                name="foo",
+                order=0,
+                size=SettingSizeEnum.BYTE,
+                length=2,
+                read_only=False,
+            ),
+            Setting(
+                name="bar",
+                order=1,
+                size=SettingSizeEnum.NIBBLE,
+                length=1,
+                read_only=False,
+            ),
+            Setting(
+                name="baz",
+                order=2,
+                size=SettingSizeEnum.NIBBLE,
+                length=1,
+                read_only=False,
+            ),
+            Setting(
+                name="qux",
+                order=3,
+                size=SettingSizeEnum.BYTE,
+                length=1,
+                read_only=False,
+            ),
+        ]
+
+        parsed_settings = Settings.from_config(
+            config=SettingsConfig(
+                filename="foo.settings",
+                settings=copy.deepcopy(original_settings),
+            ),
+            data=b"\x87\x65\x43\x21",
+            big_endian=True,
+        )
+        new_settings = Settings.from_json(
+            config=SettingsConfig(
+                filename="foo.settings",
+                settings=copy.deepcopy(original_settings),
+            ),
+            jsondict=parsed_settings.to_json(),
+            context=[],
+            big_endian=True,
+        )
+        self.assertEqual(
+            new_settings.to_bytes(),
+            b"\x87\x65\x43\x21",
+        )
+        self.assertEqual(
+            [x for x in new_settings.settings if x.name == "foo"][0].current,
+            0x8765
+        )
+        self.assertEqual(
+            [x for x in new_settings.settings if x.name == "bar"][0].current,
+            0x4,
+        )
+        self.assertEqual(
+            [x for x in new_settings.settings if x.name == "baz"][0].current,
+            0x3,
+        )
+        self.assertEqual(
+            [x for x in new_settings.settings if x.name == "qux"][0].current,
+            0x21,
+        )
