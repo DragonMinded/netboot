@@ -563,3 +563,368 @@ class TestSettings(unittest.TestCase):
 
         self.assertEqual(exc.exception.filename, "foo.settings")
         self.assertEqual(str(exc.exception), "Cannot save setting \"bar\" with unrecognized size 3!")
+
+    def test_to_bytes(self) -> None:
+        # Make sure we can convert an empty settings.
+        self.assertEqual(
+            Settings(
+                filename="foo.settings",
+                settings=[
+                ],
+            ).to_bytes(),
+            b''
+        )
+
+        # Make sure that we respect defaults for read-only setups, but that otherwise we
+        # take the current value as the thing to serialize.
+        self.assertEqual(
+            Settings(
+                filename="foo.settings",
+                settings=[
+                    Setting(
+                        name="foo",
+                        order=0,
+                        size=SettingSizeEnum.BYTE,
+                        length=1,
+                        read_only=False,
+                        default=5,
+                    ),
+                ],
+            ).to_bytes(),
+            b"\x05"
+        )
+        self.assertEqual(
+            Settings(
+                filename="foo.settings",
+                settings=[
+                    Setting(
+                        name="foo",
+                        order=0,
+                        size=SettingSizeEnum.BYTE,
+                        length=1,
+                        read_only=False,
+                        current=3,
+                        default=5,
+                    ),
+                ],
+            ).to_bytes(),
+            b"\x03"
+        )
+        self.assertEqual(
+            Settings(
+                filename="foo.settings",
+                settings=[
+                    Setting(
+                        name="foo",
+                        order=0,
+                        size=SettingSizeEnum.BYTE,
+                        length=1,
+                        read_only=True,
+                        current=3,
+                        default=5,
+                    ),
+                ],
+            ).to_bytes(),
+            b"\x05"
+        )
+
+        # Make sure we can serialize nibbles.
+        self.assertEqual(
+            Settings(
+                filename="foo.settings",
+                settings=[
+                    Setting(
+                        name="foo",
+                        order=0,
+                        size=SettingSizeEnum.NIBBLE,
+                        length=1,
+                        read_only=False,
+                        current=1,
+                    ),
+                    Setting(
+                        name="bar",
+                        order=1,
+                        size=SettingSizeEnum.NIBBLE,
+                        length=1,
+                        read_only=False,
+                        current=2
+                    ),
+                ],
+            ).to_bytes(),
+            b"\x12"
+        )
+
+        # Make sure that we respect calculated read-only values and take the correct default
+        # or current accordingly.
+        self.assertEqual(
+            Settings(
+                filename="foo.settings",
+                settings=[
+                    Setting(
+                        name="foo",
+                        order=0,
+                        size=SettingSizeEnum.BYTE,
+                        length=1,
+                        read_only=False,
+                        default=1,
+                        current=2,
+                    ),
+                    Setting(
+                        name="bar",
+                        order=0,
+                        size=SettingSizeEnum.BYTE,
+                        length=1,
+                        read_only=ReadOnlyCondition(
+                            filename="foo.settings",
+                            setting="bar",
+                            name="foo",
+                            values=[2],
+                            negate=True,
+                        ),
+                        default=3,
+                        current=4,
+                    ),
+                ],
+            ).to_bytes(),
+            b"\x02\x03"
+        )
+        self.assertEqual(
+            Settings(
+                filename="foo.settings",
+                settings=[
+                    Setting(
+                        name="foo",
+                        order=0,
+                        size=SettingSizeEnum.BYTE,
+                        length=1,
+                        read_only=False,
+                        default=1,
+                        current=2,
+                    ),
+                    Setting(
+                        name="bar",
+                        order=0,
+                        size=SettingSizeEnum.BYTE,
+                        length=1,
+                        read_only=ReadOnlyCondition(
+                            filename="foo.settings",
+                            setting="bar",
+                            name="foo",
+                            values=[1],
+                            negate=True,
+                        ),
+                        default=3,
+                        current=4,
+                    ),
+                ],
+            ).to_bytes(),
+            b"\x02\x04"
+        )
+
+        # Make sure that we respect calculated default values and take the correct default when needed.
+        self.assertEqual(
+            Settings(
+                filename="foo.settings",
+                settings=[
+                    Setting(
+                        name="foo",
+                        order=0,
+                        size=SettingSizeEnum.BYTE,
+                        length=1,
+                        read_only=False,
+                        default=1,
+                        current=1,
+                    ),
+                    Setting(
+                        name="bar",
+                        order=0,
+                        size=SettingSizeEnum.BYTE,
+                        length=1,
+                        read_only=True,
+                        default=DefaultConditionGroup(
+                            filename="foo.settings",
+                            setting="bar",
+                            conditions=[
+                                DefaultCondition(
+                                    name="foo",
+                                    values=[1],
+                                    negate=False,
+                                    default=0x10,
+                                ),
+                                DefaultCondition(
+                                    name="foo",
+                                    values=[2],
+                                    negate=False,
+                                    default=0x20,
+                                ),
+                                DefaultCondition(
+                                    name="foo",
+                                    values=[1, 2],
+                                    negate=True,
+                                    default=0x30,
+                                ),
+                            ],
+                        ),
+                    ),
+                ],
+            ).to_bytes(),
+            b"\x01\x10"
+        )
+        self.assertEqual(
+            Settings(
+                filename="foo.settings",
+                settings=[
+                    Setting(
+                        name="foo",
+                        order=0,
+                        size=SettingSizeEnum.BYTE,
+                        length=1,
+                        read_only=False,
+                        default=1,
+                        current=2,
+                    ),
+                    Setting(
+                        name="bar",
+                        order=0,
+                        size=SettingSizeEnum.BYTE,
+                        length=1,
+                        read_only=True,
+                        default=DefaultConditionGroup(
+                            filename="foo.settings",
+                            setting="bar",
+                            conditions=[
+                                DefaultCondition(
+                                    name="foo",
+                                    values=[1],
+                                    negate=False,
+                                    default=0x10,
+                                ),
+                                DefaultCondition(
+                                    name="foo",
+                                    values=[2],
+                                    negate=False,
+                                    default=0x20,
+                                ),
+                                DefaultCondition(
+                                    name="foo",
+                                    values=[1, 2],
+                                    negate=True,
+                                    default=0x30,
+                                ),
+                            ],
+                        ),
+                    ),
+                ],
+            ).to_bytes(),
+            b"\x02\x20"
+        )
+        self.assertEqual(
+            Settings(
+                filename="foo.settings",
+                settings=[
+                    Setting(
+                        name="foo",
+                        order=0,
+                        size=SettingSizeEnum.BYTE,
+                        length=1,
+                        read_only=False,
+                        default=3,
+                    ),
+                    Setting(
+                        name="bar",
+                        order=0,
+                        size=SettingSizeEnum.BYTE,
+                        length=1,
+                        read_only=True,
+                        default=DefaultConditionGroup(
+                            filename="foo.settings",
+                            setting="bar",
+                            conditions=[
+                                DefaultCondition(
+                                    name="foo",
+                                    values=[1],
+                                    negate=False,
+                                    default=0x10,
+                                ),
+                                DefaultCondition(
+                                    name="foo",
+                                    values=[2],
+                                    negate=False,
+                                    default=0x20,
+                                ),
+                                DefaultCondition(
+                                    name="foo",
+                                    values=[1, 2],
+                                    negate=True,
+                                    default=0x30,
+                                ),
+                            ],
+                        ),
+                    ),
+                ],
+            ).to_bytes(),
+            b"\x03\x30"
+        )
+
+        # Make sure we get exceptions if we provide bad input.
+        with self.assertRaises(SettingsSaveException) as exc:
+            _ = Settings(
+                filename="foo.settings",
+                settings=[
+                    Setting(
+                        name="foo",
+                        order=0,
+                        size=SettingSizeEnum.NIBBLE,
+                        length=1,
+                        read_only=False,
+                        current=1,
+                    ),
+                ],
+            ).to_bytes(),
+
+        self.assertEqual(exc.exception.filename, "foo.settings")
+        self.assertEqual(str(exc.exception), "The setting \"foo\" is a lonesome half-byte setting. Half-byte settings must always be in pairs!")
+
+        with self.assertRaises(SettingsSaveException) as exc:
+            _ = Settings(
+                filename="foo.settings",
+                settings=[
+                    Setting(
+                        name="foo",
+                        order=0,
+                        size=SettingSizeEnum.NIBBLE,
+                        length=1,
+                        read_only=False,
+                        current=1,
+                    ),
+                    Setting(
+                        name="bar",
+                        order=1,
+                        size=SettingSizeEnum.BYTE,
+                        length=1,
+                        read_only=False,
+                        current=1,
+                    ),
+                ],
+            ).to_bytes(),
+
+        self.assertEqual(exc.exception.filename, "foo.settings")
+        self.assertEqual(str(exc.exception), "The setting \"bar\" follows a lonesome half-byte setting \"foo\". Half-byte settings must always be in pairs!")
+
+        with self.assertRaises(SettingsSaveException) as exc:
+            _ = Settings(
+                filename="foo.settings",
+                settings=[
+                    Setting(
+                        name="bar",
+                        order=0,
+                        size=SettingSizeEnum.BYTE,
+                        length=3,
+                        read_only=False,
+                        current=1,
+                    ),
+                ],
+            ).to_bytes(),
+
+        self.assertEqual(exc.exception.filename, "foo.settings")
+        self.assertEqual(str(exc.exception), "Cannot save setting \"bar\" with unrecognized size 3!")
