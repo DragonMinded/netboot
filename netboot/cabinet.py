@@ -175,7 +175,7 @@ class Cabinet:
                             crc = self.__host.crc(self.__new_filename, self.patches.get(self.__new_filename, []), settings)
                             if crc == info.current_game_crc:
                                 if info.game_crc_status == CRCStatusEnum.STATUS_VALID:
-                                    self.__print(f"Cabinet {self.ip} already running game {self.__new_filename}.")
+                                    self.__print(f"Cabinet {self.ip} is already running game {self.__new_filename}.")
                                     self.__current_filename = self.__new_filename
                                     self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_OFF, 0)
                                     return
