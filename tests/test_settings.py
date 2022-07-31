@@ -2,7 +2,7 @@ import unittest
 
 # We are importing directly from the implementation because we want to test some
 # implementation-specific details here that aren't normally exposed.
-from settings.settings import ReadOnlyCondition, Setting, SettingSizeEnum, SettingsSaveException
+from settings.settings import ReadOnlyCondition, DefaultCondition, DefaultConditionGroup, Setting, SettingSizeEnum, SettingsSaveException
 
 
 class TestReadOnlyCondition(unittest.TestCase):
@@ -113,3 +113,186 @@ class TestReadOnlyCondition(unittest.TestCase):
         # Verify that the thrown exception gives out the filename and expected setting name.
         self.assertEqual(exc.exception.filename, "foo.settings")
         self.assertEqual(str(exc.exception), "The setting \"self\" depends on the value for \"other\" but that setting does not seem to exist! Perhaps you misspelled \"other\"?")
+
+
+class TestDefaultConditionGroup(unittest.TestCase):
+    def test_evaluate_normal(self) -> None:
+        dcg = DefaultConditionGroup(
+            filename="foo.settings",
+            setting="self",
+            conditions=[
+                # Set this setting to "10" when the other setting is "1".
+                DefaultCondition(
+                    name="other",
+                    values=[1],
+                    negate=False,
+                    default=10,
+                ),
+                # Set this setting to "20" when the other setting is "2".
+                DefaultCondition(
+                    name="other",
+                    values=[2],
+                    negate=False,
+                    default=20,
+                ),
+            ]
+        )
+
+        # Verify that we calculate the right setting when the other setting value is presented.
+        self.assertEqual(
+            dcg.evaluate([
+                Setting(
+                    name="other",
+                    order=0,
+                    size=SettingSizeEnum.BYTE,
+                    length=1,
+                    read_only=False,
+                    values={1: "On", 2: "Off"},
+                    current=1,
+                )
+            ]),
+            10
+        )
+        self.assertEqual(
+            dcg.evaluate([
+                Setting(
+                    name="other",
+                    order=0,
+                    size=SettingSizeEnum.BYTE,
+                    length=1,
+                    read_only=False,
+                    values={1: "On", 2: "Off"},
+                    current=2,
+                )
+            ]),
+            20
+        )
+
+    def test_evaluate_negate(self) -> None:
+        dcg = DefaultConditionGroup(
+            filename="foo.settings",
+            setting="self",
+            conditions=[
+                # Set this setting to "10" when the other setting is "1".
+                DefaultCondition(
+                    name="other",
+                    values=[1],
+                    negate=False,
+                    default=10,
+                ),
+                # Set this setting to "20" when the other setting is "2".
+                DefaultCondition(
+                    name="other",
+                    values=[2],
+                    negate=False,
+                    default=20,
+                ),
+                # Set this setting to "30" when the other setting is not "1" or "2".
+                DefaultCondition(
+                    name="other",
+                    values=[1, 2],
+                    negate=True,
+                    default=30,
+                ),
+            ]
+        )
+
+        # Verify that we calculate the right setting when we negate the other setting value
+        # (basically "default is x when y is not z" instead of "default is x when y is z".
+        self.assertEqual(
+            dcg.evaluate([
+                Setting(
+                    name="other",
+                    order=0,
+                    size=SettingSizeEnum.BYTE,
+                    length=1,
+                    read_only=False,
+                    values={1: "On", 2: "Off", 3: "Disabled"},
+                    current=1,
+                )
+            ]),
+            10
+        )
+        self.assertEqual(
+            dcg.evaluate([
+                Setting(
+                    name="other",
+                    order=0,
+                    size=SettingSizeEnum.BYTE,
+                    length=1,
+                    read_only=False,
+                    values={1: "On", 2: "Off", 3: "Disabled"},
+                    current=2,
+                )
+            ]),
+            20
+        )
+        self.assertEqual(
+            dcg.evaluate([
+                Setting(
+                    name="other",
+                    order=0,
+                    size=SettingSizeEnum.BYTE,
+                    length=1,
+                    read_only=False,
+                    values={1: "On", 2: "Off", 3: "Disabled"},
+                    current=3,
+                )
+            ]),
+            30
+        )
+
+    def test_evaluate_not_found(self) -> None:
+        dcg = DefaultConditionGroup(
+            filename="foo.settings",
+            setting="self",
+            conditions=[
+                # Set this setting to "10" when the other setting is "1".
+                DefaultCondition(
+                    name="other",
+                    values=[1],
+                    negate=False,
+                    default=10,
+                ),
+                # Set this setting to "20" when the other setting is "2".
+                DefaultCondition(
+                    name="other",
+                    values=[2],
+                    negate=False,
+                    default=20,
+                ),
+            ]
+        )
+
+        # Verify that the thrown exception gives out the filename and expected setting name.
+        with self.assertRaises(SettingsSaveException) as exc:
+            dcg.evaluate([
+                Setting(
+                    name="other",
+                    order=0,
+                    size=SettingSizeEnum.BYTE,
+                    length=1,
+                    read_only=False,
+                    values={1: "On", 2: "Off", 3: "Default"},
+                    current=3,
+                )
+            ])
+
+        self.assertEqual(exc.exception.filename, "foo.settings")
+        self.assertEqual(str(exc.exception), "The default for setting \"self\" could not be determined! Perhaps you misspelled one of \"other\", or you forgot a value?")
+
+        with self.assertRaises(SettingsSaveException) as exc:
+            dcg.evaluate([
+                Setting(
+                    name="different",
+                    order=0,
+                    size=SettingSizeEnum.BYTE,
+                    length=1,
+                    read_only=False,
+                    values={1: "On", 2: "Off"},
+                    current=1,
+                )
+            ])
+
+        self.assertEqual(exc.exception.filename, "foo.settings")
+        self.assertEqual(str(exc.exception), "The default for setting \"self\" could not be determined! Perhaps you misspelled one of \"other\", or you forgot a value?")

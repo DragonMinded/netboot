@@ -75,7 +75,7 @@ class DefaultConditionGroup:
         self.setting = setting
         self.conditions = conditions
 
-    def evaluate(self, filename: str, name: str, settings: List["Setting"]) -> int:
+    def evaluate(self, settings: List["Setting"]) -> int:
         for cond in self.conditions:
             for setting in settings:
                 if setting.name.lower() == cond.name.lower():
@@ -465,7 +465,7 @@ class Settings:
                 default = setting.default
             elif isinstance(setting.default, DefaultConditionGroup):
                 # Must evaluate settings to figure out the default for this.
-                default = setting.default.evaluate(self.filename, setting.name, self.settings)
+                default = setting.default.evaluate(self.settings)
 
             # Now, figure out if we should defer to the default over the current value
             # (if it is read-only) or if we should use the current value.
@@ -987,7 +987,7 @@ class SettingsConfig:
                 default = setting.default
             elif isinstance(setting.default, DefaultConditionGroup):
                 # Must evaluate settings to figure out the default for this.
-                default = setting.default.evaluate(self.filename, setting.name, self.settings)
+                default = setting.default.evaluate(self.settings)
 
             if setting.size == SettingSizeEnum.NIBBLE:
                 if halves == 0:
