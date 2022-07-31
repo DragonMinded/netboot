@@ -382,6 +382,8 @@ class Setting:
 class Settings:
     # A collection of settings as well as the type of settings this is. This is also responsible
     # for parsing and creating sections in an actual EEPROM file based on the settings themselves.
+    # If your settings doesn't have a type (for instance if it is the only collection of settings
+    # for a given file format), you can leave this unset.
 
     def __init__(self, filename: str, settings: List[Setting], type: Optional[str] = None) -> None:
         self.filename = filename
@@ -389,7 +391,7 @@ class Settings:
         self.type = type
 
     @staticmethod
-    def from_config(type: str, config: "SettingsConfig", data: bytes) -> "Settings":
+    def from_config(config: "SettingsConfig", data: bytes, type: Optional[str] = None) -> "Settings":
         # Keep track of how many bytes into the EEPROM we are.
         location = 0
         halves = 0
@@ -443,7 +445,7 @@ class Settings:
         final_settings = Settings(config.filename, config.settings, type=type)
         if final_settings.length != len(data):
             raise SettingsParseException(
-                f"Unexpected final size of {type} section, expected {len(data)} bytes but definition file covers {final_settings.length} bytes!",
+                f"Unexpected final size of {type if type is not None else 'unnamed'} section, expected {len(data)} bytes but definition file covers {final_settings.length} bytes!",
                 config.filename,
             )
         return final_settings
@@ -491,11 +493,12 @@ class Settings:
         return length
 
     @staticmethod
-    def from_json(type: str, config: "SettingsConfig", jsondict: Dict[str, Any], context: List[str]) -> "Settings":
+    def from_json(config: "SettingsConfig", jsondict: Dict[str, Any], context: List[str], type: Optional[str] = None) -> "Settings":
         # First, parse out the keys that we know we need.
-        typestr = jsondict.get('type')
-        if not isinstance(typestr, str) or typestr != type:
-            raise JSONParseException(f"\"type\" key in JSON has invalid data \"{typestr}\"!", context)
+        if type is not None:
+            typestr = jsondict.get('type')
+            if not isinstance(typestr, str) or typestr != type:
+                raise JSONParseException(f"\"type\" key in JSON has invalid data \"{typestr}\"!", context)
         settings = jsondict.get('settings')
         if not isinstance(settings, list):
             raise JSONParseException(f"\"settings\" key in JSON has invalid data \"{settings}\"!", context)
@@ -522,13 +525,15 @@ class Settings:
         return Settings(config.filename, config.settings, type=type)
 
     def to_json(self) -> Dict[str, Any]:
-        return {
-            'type': self.type,
+        jsondata = {
             'filename': self.filename if self.filename != NO_FILE else None,
             'settings': [
                 setting.to_json() for setting in self.settings
             ],
         }
+        if self.type is not None:
+            jsondata['type'] = self.type
+        return jsondata
 
     def to_bytes(self) -> bytes:
         pending: int = 0

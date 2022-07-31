@@ -53,8 +53,8 @@ class NaomiSettingsWrapper:
         gameconfig = NaomiSettingsManager._serial_to_config(settings_files, serialbytes) or SettingsConfig.blank()
 
         # Finally parse the EEPRom based on the config.
-        system = Settings.from_json(NaomiSettingTypeEnum.SYSTEM.value, systemconfig, systemjson, [*context, "system"])
-        game = Settings.from_json(NaomiSettingTypeEnum.GAME.value, gameconfig, gamejson, [*context, "game"])
+        system = Settings.from_json(systemconfig, systemjson, [*context, "system"], type=NaomiSettingTypeEnum.SYSTEM.value)
+        game = Settings.from_json(gameconfig, gamejson, [*context, "game"], type=NaomiSettingTypeEnum.GAME.value)
         return NaomiSettingsWrapper(serialbytes, system, game)
 
     def to_json(self) -> Dict[str, Any]:
@@ -153,8 +153,8 @@ class NaomiSettingsManager:
         gameconfig = self._serial_to_config(self.files, eeprom.serial) or SettingsConfig.blank()
 
         # Finally parse the EEPRom based on the config.
-        system = Settings.from_config(NaomiSettingTypeEnum.SYSTEM.value, systemconfig, eeprom.system.data)
-        game = Settings.from_config(NaomiSettingTypeEnum.GAME.value, gameconfig, eeprom.game.data)
+        system = Settings.from_config(systemconfig, eeprom.system.data, type=NaomiSettingTypeEnum.SYSTEM.value)
+        game = Settings.from_config(gameconfig, eeprom.game.data, type=NaomiSettingTypeEnum.GAME.value)
         return NaomiSettingsWrapper(eeprom.serial, system, game)
 
     def from_json(self, jsondict: Dict[str, Any], context: Optional[List[str]] = None) -> NaomiSettingsWrapper:
