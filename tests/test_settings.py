@@ -296,3 +296,92 @@ class TestDefaultConditionGroup(unittest.TestCase):
 
         self.assertEqual(exc.exception.filename, "foo.settings")
         self.assertEqual(str(exc.exception), "The default for setting \"self\" could not be determined! Perhaps you misspelled one of \"other\", or you forgot a value?")
+
+
+class TestSetting(unittest.TestCase):
+    def test_roundtrip(self) -> None:
+        before = Setting(
+            name="foo",
+            order=5,
+            size=SettingSizeEnum.BYTE,
+            length=2,
+            read_only=False,
+            values={1: "1", 2: "2"},
+            current=1,
+            default=2,
+        )
+        after = Setting.from_json("file.settings", before.to_json(), [])
+
+        self.assertEqual(before.name, after.name)
+        self.assertEqual(before.order, after.order)
+        self.assertEqual(before.size, after.size)
+        self.assertEqual(before.length, after.length)
+        self.assertEqual(before.read_only, after.read_only)
+        self.assertEqual(before.values, after.values)
+        self.assertEqual(before.current, after.current)
+        self.assertEqual(before.default, after.default)
+
+        before = Setting(
+            name="foo",
+            order=5,
+            size=SettingSizeEnum.BYTE,
+            length=2,
+            read_only=ReadOnlyCondition(filename="file.settings", setting="foo", name="bar", values=[1], negate=False),
+            values={1: "1", 2: "2"},
+            current=1,
+            default=2,
+        )
+        after = Setting.from_json("file.settings", before.to_json(), [])
+
+        self.assertEqual(before.name, after.name)
+        self.assertEqual(before.order, after.order)
+        self.assertEqual(before.size, after.size)
+        self.assertEqual(before.length, after.length)
+        self.assertEqual(before.read_only, after.read_only)
+        self.assertEqual(before.values, after.values)
+        self.assertEqual(before.current, after.current)
+        self.assertEqual(before.default, after.default)
+
+        before = Setting(
+            name="foo",
+            order=5,
+            size=SettingSizeEnum.BYTE,
+            length=2,
+            read_only=True,
+            values={1: "1", 2: "2"},
+            current=1,
+            default=DefaultConditionGroup(
+                filename="file.settings",
+                setting="foo",
+                conditions=[
+                    DefaultCondition(
+                        name="bar",
+                        values=[1],
+                        negate=False,
+                        default=10,
+                    ),
+                    DefaultCondition(
+                        name="bar",
+                        values=[2],
+                        negate=False,
+                        default=20,
+                    ),
+                    DefaultCondition(
+                        name="bar",
+                        values=[1, 2],
+                        negate=True,
+                        default=30,
+                    )
+                ],
+            ),
+        )
+        after = Setting.from_json("file.settings", before.to_json(), [])
+
+        self.assertEqual(before.name, after.name)
+        self.assertEqual(before.order, after.order)
+        self.assertEqual(before.size, after.size)
+        self.assertEqual(before.length, after.length)
+        self.assertEqual(before.read_only, after.read_only)
+        self.assertEqual(before.values, after.values)
+        self.assertEqual(before.current, after.current)
+        self.assertEqual(before.default, after.default)

@@ -56,6 +56,24 @@ class ReadOnlyCondition:
             self.filename,
         )
 
+    def __eq__(self, other: object) -> bool:
+        if other is self:
+            return True
+        if not isinstance(other, ReadOnlyCondition):
+            return False
+
+        return (
+            self.filename == other.filename and
+            self.setting == other.setting and
+            self.name == other.name and
+            self.values == other.values and
+            self.negate == other.negate
+        )
+
+    def __ne__(self, other: object) -> bool:
+        # Python documentation recommends doing this instead of explicitly calling __eq__.
+        return not self == other
+
 
 class DefaultCondition:
     # A wrapper class to encapsulate one rule for a setting default.
@@ -66,6 +84,23 @@ class DefaultCondition:
         self.negate = negate
         self.default = default
 
+    def __eq__(self, other: object) -> bool:
+        if other is self:
+            return True
+        if not isinstance(other, DefaultCondition):
+            return False
+
+        return (
+            self.name == other.name and
+            self.values == other.values and
+            self.negate == other.negate and
+            self.default == other.default
+        )
+
+    def __ne__(self, other: object) -> bool:
+        # Python documentation recommends doing this instead of explicitly calling __eq__.
+        return not self == other
+
 
 class DefaultConditionGroup:
     # A wrapper class to encapsulate a set of rules for defaulting a setting.
@@ -74,6 +109,22 @@ class DefaultConditionGroup:
         self.filename = filename
         self.setting = setting
         self.conditions = conditions
+
+    def __eq__(self, other: object) -> bool:
+        if other is self:
+            return True
+        if not isinstance(other, DefaultConditionGroup):
+            return False
+
+        return (
+            self.filename == other.filename and
+            self.setting == other.setting and
+            self.conditions == other.conditions
+        )
+
+    def __ne__(self, other: object) -> bool:
+        # Python documentation recommends doing this instead of explicitly calling __eq__.
+        return not self == other
 
     def evaluate(self, settings: List["Setting"]) -> int:
         for cond in self.conditions:
