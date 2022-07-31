@@ -383,19 +383,22 @@ class Settings:
     # A collection of settings as well as the type of settings this is. This is also responsible
     # for parsing and creating sections in an actual EEPROM file based on the settings themselves.
     # If your settings doesn't have a type (for instance if it is the only collection of settings
-    # for a given file format), you can leave this unset.
+    # for a given file format), you can leave this unset. Default endianness is LE, but if you want
+    # big endian, you can specify that as well.
 
-    def __init__(self, filename: str, settings: List[Setting], type: Optional[str] = None) -> None:
+    def __init__(self, filename: str, settings: List[Setting], type: Optional[str] = None, big_endian: bool = False) -> None:
         self.filename = filename
         self.settings = settings
         self.type = type
+        self.endian = ">" if big_endian else "<"
 
     @staticmethod
-    def from_config(config: "SettingsConfig", data: bytes, type: Optional[str] = None) -> "Settings":
+    def from_config(config: "SettingsConfig", data: bytes, type: Optional[str] = None, big_endian: bool = False) -> "Settings":
         # Keep track of how many bytes into the EEPROM we are.
         location = 0
         halves = 0
         halfname: Optional[str] = None
+        endian = ">" if big_endian else "<"
 
         # We need to make sure this is in load order, so that we can parse out the
         # correct settings in order of them showing up in the file.
@@ -423,13 +426,13 @@ class Settings:
 
                 if setting.length == 1:
                     if location < len(data):
-                        setting.current = struct.unpack("<B", data[location:(location + 1)])[0]
+                        setting.current = struct.unpack(endian + "B", data[location:(location + 1)])[0]
                 elif setting.length == 2:
                     if location < (len(data) - 1):
-                        setting.current = struct.unpack("<H", data[location:(location + 2)])[0]
+                        setting.current = struct.unpack(endian + "H", data[location:(location + 2)])[0]
                 elif setting.length == 4:
                     if location < (len(data) - 3):
-                        setting.current = struct.unpack("<I", data[location:(location + 4)])[0]
+                        setting.current = struct.unpack(endian + "I", data[location:(location + 4)])[0]
                 else:
                     raise SettingsParseException(f"Cannot parse setting \"{setting.name}\" with unrecognized size \"{setting.length}\"!", config.filename)
 
@@ -442,7 +445,7 @@ class Settings:
             )
 
         # Return this in the original order presented to us.
-        final_settings = Settings(config.filename, config.settings, type=type)
+        final_settings = Settings(config.filename, config.settings, type=type, big_endian=big_endian)
         if final_settings.length != len(data):
             raise SettingsParseException(
                 f"Unexpected final size of {type if type is not None else 'unnamed'} section, expected {len(data)} bytes but definition file covers {final_settings.length} bytes!",
@@ -493,7 +496,13 @@ class Settings:
         return length
 
     @staticmethod
-    def from_json(config: "SettingsConfig", jsondict: Dict[str, Any], context: List[str], type: Optional[str] = None) -> "Settings":
+    def from_json(
+        config: "SettingsConfig",
+        jsondict: Dict[str, Any],
+        context: List[str],
+        type: Optional[str] = None,
+        big_endian: bool = False,
+    ) -> "Settings":
         # First, parse out the keys that we know we need.
         if type is not None:
             typestr = jsondict.get('type')
@@ -506,7 +515,7 @@ class Settings:
         if not isinstance(filename, str) or filename != config.filename:
             if filename is None and config.filename == NO_FILE:
                 # This is an empty settings file, just return an empty config.
-                return Settings(config.filename, config.settings, type=type)
+                return Settings(config.filename, config.settings, type=type, big_endian=big_endian)
             raise JSONParseException(f"\"filename\" key in JSON has invalid data \"{filename}\"!", context)
 
         # Now, parse out the settings in the dict.
@@ -522,7 +531,7 @@ class Settings:
             else:
                 raise JSONParseException(f"Setting \"{setting.name}\" could not be found in JSON!", context)
 
-        return Settings(config.filename, config.settings, type=type)
+        return Settings(config.filename, config.settings, type=type, big_endian=big_endian)
 
     def to_json(self) -> Dict[str, Any]:
         jsondata = {
@@ -580,7 +589,7 @@ class Settings:
                     else:
                         if len(section) != location:
                             raise Exception("Logic error!")
-                        section += struct.pack("<B", (value & 0xF) | pending)
+                        section += struct.pack(self.endian + "B", (value & 0xF) | pending)
                 else:
                     raise SettingsSaveException(f"Cannot save setting \"{setting.name}\" with a null value!", self.filename)
 
@@ -608,11 +617,11 @@ class Settings:
                     if len(section) != location:
                         raise Exception("Logic error!")
                     if setting.length == 1:
-                        section += struct.pack("<B", value)
+                        section += struct.pack(self.endian + "B", value)
                     elif setting.length == 2:
-                        section += struct.pack("<H", value)
+                        section += struct.pack(self.endian + "H", value)
                     elif setting.length == 4:
-                        section += struct.pack("<I", value)
+                        section += struct.pack(self.endian + "I", value)
                 else:
                     raise SettingsSaveException(f"Cannot save setting \"{setting.name}\" with a null value!", self.filename)
 

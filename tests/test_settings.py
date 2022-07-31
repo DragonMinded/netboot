@@ -1,8 +1,18 @@
+import copy
 import unittest
 
 # We are importing directly from the implementation because we want to test some
 # implementation-specific details here that aren't normally exposed.
-from settings.settings import ReadOnlyCondition, DefaultCondition, DefaultConditionGroup, Setting, Settings, SettingSizeEnum, SettingsSaveException
+from settings.settings import (
+    ReadOnlyCondition,
+    DefaultCondition,
+    DefaultConditionGroup,
+    Setting,
+    Settings,
+    SettingsConfig,
+    SettingSizeEnum,
+    SettingsSaveException,
+)
 
 
 class TestReadOnlyCondition(unittest.TestCase):
@@ -928,3 +938,64 @@ class TestSettings(unittest.TestCase):
 
         self.assertEqual(exc.exception.filename, "foo.settings")
         self.assertEqual(str(exc.exception), "Cannot save setting \"bar\" with unrecognized size 3!")
+
+    def test_bytes_roundtrip(self) -> None:
+        original_settings = [
+            Setting(
+                name="foo",
+                order=0,
+                size=SettingSizeEnum.BYTE,
+                length=2,
+                read_only=False,
+            ),
+            Setting(
+                name="bar",
+                order=1,
+                size=SettingSizeEnum.NIBBLE,
+                length=1,
+                read_only=False,
+            ),
+            Setting(
+                name="baz",
+                order=2,
+                size=SettingSizeEnum.NIBBLE,
+                length=1,
+                read_only=False,
+            ),
+            Setting(
+                name="qux",
+                order=3,
+                size=SettingSizeEnum.BYTE,
+                length=1,
+                read_only=False,
+            ),
+        ]
+
+        parsed_settings = Settings.from_config(
+            config=SettingsConfig(
+                filename="foo.settings",
+                settings=copy.deepcopy(original_settings),
+            ),
+            data=b"\x12\x34\x56\x78",
+            big_endian=True,
+        )
+        self.assertEqual(
+            parsed_settings.to_bytes(),
+            b"\x12\x34\x56\x78",
+        )
+        self.assertEqual(
+            [x for x in parsed_settings.settings if x.name == "foo"][0].current,
+            0x1234
+        )
+        self.assertEqual(
+            [x for x in parsed_settings.settings if x.name == "bar"][0].current,
+            0x5,
+        )
+        self.assertEqual(
+            [x for x in parsed_settings.settings if x.name == "baz"][0].current,
+            0x6,
+        )
+        self.assertEqual(
+            [x for x in parsed_settings.settings if x.name == "qux"][0].current,
+            0x78,
+        )
