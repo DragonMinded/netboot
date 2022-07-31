@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 # We import internal stuff here since we don't want to test the public
 # interfaces.
 from netboot.cabinet import Cabinet, CabinetStateEnum, CabinetRegionEnum
+from netboot.hostutils import HostStatusEnum
 from netdimm import NetDimmInfo, CRCStatusEnum, NetDimmVersionEnum
 
 
@@ -185,3 +186,44 @@ class TestCabinet(unittest.TestCase):
             self.assertEqual(cabinet.state[0], CabinetStateEnum.STATE_SEND_CURRENT_GAME)
             self.assertEqual(["Cabinet 1.2.3.4 sending game abc.bin."], logs)
             host.send.assert_called_with("abc.bin", [], {})
+
+    def test_state_host_sending_no_transition(self) -> None:
+        logs: List[str] = []
+        with patch('netboot.cabinet.log', new_callable=lambda: lambda log, newline: logs.append(log)):
+            cabinet, host = self.spawn_cabinet(
+                state=CabinetStateEnum.STATE_SEND_CURRENT_GAME,
+                filename="abc.bin",
+            )
+            host.status = HostStatusEnum.STATUS_TRANSFERRING
+            host.progress = (1, 2)
+
+            cabinet.tick()
+            self.assertEqual(cabinet.state[0], CabinetStateEnum.STATE_SEND_CURRENT_GAME)
+            self.assertEqual(cabinet.state[1], 50)
+            self.assertEqual([], logs)
+
+    def test_state_host_sending_failed_transition(self) -> None:
+        logs: List[str] = []
+        with patch('netboot.cabinet.log', new_callable=lambda: lambda log, newline: logs.append(log)):
+            cabinet, host = self.spawn_cabinet(
+                state=CabinetStateEnum.STATE_SEND_CURRENT_GAME,
+                filename="abc.bin",
+            )
+            host.status = HostStatusEnum.STATUS_FAILED
+
+            cabinet.tick()
+            self.assertEqual(cabinet.state[0], CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON)
+            self.assertEqual(["Cabinet 1.2.3.4 failed to send game, waiting for power on."], logs)
+
+    def test_state_host_sending_succeeded_transition(self) -> None:
+        logs: List[str] = []
+        with patch('netboot.cabinet.log', new_callable=lambda: lambda log, newline: logs.append(log)):
+            cabinet, host = self.spawn_cabinet(
+                state=CabinetStateEnum.STATE_SEND_CURRENT_GAME,
+                filename="abc.bin",
+            )
+            host.status = HostStatusEnum.STATUS_COMPLETED
+
+            cabinet.tick()
+            self.assertEqual(cabinet.state[0], CabinetStateEnum.STATE_CHECK_CURRENT_GAME)
+            self.assertEqual(["Cabinet 1.2.3.4 succeeded sending game, rebooting and verifying game CRC."], logs)
