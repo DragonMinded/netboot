@@ -1017,7 +1017,7 @@ class SettingsConfig:
             if size == SettingSizeEnum.UNKNOWN:
                 raise SettingsParseException(f"Setting \"{name}\" is missing a size specifier!", filename)
             if read_only is not True and not values:
-                raise SettingsParseException(f"Setting \"{name}\" is missing any valid values!", filename)
+                raise SettingsParseException(f"Setting \"{name}\" is missing any valid values and isn't read-only!", filename)
 
             # Add it to either the current list of settings, or the queue of settings to insert when we're done.
             new_setting = Setting(

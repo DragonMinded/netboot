@@ -13,6 +13,7 @@ from settings.settings import (
     SettingsConfig,
     SettingSizeEnum,
     SettingsSaveException,
+    SettingsParseException,
 )
 
 
@@ -1446,3 +1447,69 @@ class TestSettingsConfig(unittest.TestCase):
         self.assertEqual(config.settings[1].default, None)
         self.assertEqual(config.settings[1].read_only, False)
         self.assertEqual(config.settings[1].values, {1: "1", 2: "2", 3: "3"})
+
+    def test_parse_errors(self) -> None:
+        with self.assertRaises(SettingsParseException) as exc:
+            SettingsConfig.from_data(
+                filename="foo.settings",
+                data=dedent("""
+                    Sample 1
+                """),
+            )
+        self.assertEqual(exc.exception.filename, "foo.settings")
+        self.assertEqual(
+            str(exc.exception),
+            "Missing setting name before size, read-only specifier, defaults or value in \"Sample 1\". Perhaps you forgot a colon?"
+        )
+
+        with self.assertRaises(SettingsParseException) as exc:
+            SettingsConfig.from_data(
+                filename="foo.settings",
+                data=dedent("""
+                    Sample 1: word
+                """),
+            )
+        self.assertEqual(exc.exception.filename, "foo.settings")
+        self.assertEqual(
+            str(exc.exception),
+            "Failed to parse setting \"Sample 1\", could not understand value \"word\"."
+        )
+
+        with self.assertRaises(SettingsParseException) as exc:
+            SettingsConfig.from_data(
+                filename="foo.settings",
+                data=dedent("""
+                    Sample 1: 2 nibbles
+                """),
+            )
+        self.assertEqual(exc.exception.filename, "foo.settings")
+        self.assertEqual(
+            str(exc.exception),
+            "Invalid length \"2\" for setting \"Sample 1\". You should only specify a length for bytes.",
+        )
+
+        with self.assertRaises(SettingsParseException) as exc:
+            SettingsConfig.from_data(
+                filename="foo.settings",
+                data=dedent("""
+                    Sample 1: 2 bytes
+                """),
+            )
+        self.assertEqual(exc.exception.filename, "foo.settings")
+        self.assertEqual(
+            str(exc.exception),
+            "Setting \"Sample 1\" is missing any valid values and isn't read-only!",
+        )
+
+        with self.assertRaises(SettingsParseException) as exc:
+            SettingsConfig.from_data(
+                filename="foo.settings",
+                data=dedent("""
+                    Sample 1: values are 1 to 3
+                """),
+            )
+        self.assertEqual(exc.exception.filename, "foo.settings")
+        self.assertEqual(
+            str(exc.exception),
+            "Setting \"Sample 1\" is missing a size specifier!",
+        )
