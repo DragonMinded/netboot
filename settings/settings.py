@@ -1090,6 +1090,7 @@ class SettingsConfig:
 
         return SettingsConfig(filename, settings)
 
+    @property
     def defaults(self) -> bytes:
         pending = 0
         halves = 0

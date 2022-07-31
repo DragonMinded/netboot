@@ -1,5 +1,6 @@
-import copy
 import unittest
+from copy import deepcopy
+from textwrap import dedent
 
 # We are importing directly from the implementation because we want to test some
 # implementation-specific details here that aren't normally exposed.
@@ -974,7 +975,7 @@ class TestSettings(unittest.TestCase):
         parsed_settings = Settings.from_config(
             config=SettingsConfig(
                 filename="foo.settings",
-                settings=copy.deepcopy(original_settings),
+                settings=deepcopy(original_settings),
             ),
             data=b"\x12\x34\x56\x78",
             big_endian=True,
@@ -1035,7 +1036,7 @@ class TestSettings(unittest.TestCase):
         parsed_settings = Settings.from_config(
             config=SettingsConfig(
                 filename="foo.settings",
-                settings=copy.deepcopy(original_settings),
+                settings=deepcopy(original_settings),
             ),
             data=b"\x87\x65\x43\x21",
             big_endian=True,
@@ -1043,7 +1044,7 @@ class TestSettings(unittest.TestCase):
         new_settings = Settings.from_json(
             config=SettingsConfig(
                 filename="foo.settings",
-                settings=copy.deepcopy(original_settings),
+                settings=deepcopy(original_settings),
             ),
             jsondict=parsed_settings.to_json(),
             context=[],
@@ -1069,3 +1070,90 @@ class TestSettings(unittest.TestCase):
             [x for x in new_settings.settings if x.name == "qux"][0].current,
             0x21,
         )
+
+
+class TestSettingsConfig(unittest.TestCase):
+    def test_blank(self) -> None:
+        blank = SettingsConfig.blank()
+        self.assertEqual(blank.defaults, b"")
+
+    def test_empty_file(self) -> None:
+        empty = SettingsConfig.from_data(
+            filename="foo.settings",
+            data=dedent("""
+            """),
+        )
+        self.assertEqual(empty.defaults, b"")
+
+        empty = SettingsConfig.from_data(
+            filename="foo.settings",
+            data=dedent("""
+                # This is a comment!
+            """),
+        )
+        self.assertEqual(empty.defaults, b"")
+
+    def test_generating_defaults(self) -> None:
+        # A setting with no explicit default gets the implicit value "0".
+        config = SettingsConfig.from_data(
+            filename="foo.settings",
+            data=dedent("""
+                Sample Setting: byte, values are 1 to 10
+            """),
+        )
+        self.assertEqual(config.defaults, b"\x00")
+
+        # A setting with an explicit default gets that default value.
+        config = SettingsConfig.from_data(
+            filename="foo.settings",
+            data=dedent("""
+                Sample Setting: byte, values are 1 to 10, default is 2
+            """),
+        )
+        self.assertEqual(config.defaults, b"\x02")
+
+        # A setting with a dependent value on another setting.
+        config = SettingsConfig.from_data(
+            filename="foo.settings",
+            data=dedent("""
+                Sample: byte
+                  values are 1 to 10
+                  default is 10 if Dependent is 1
+                  default is 20 if Dependent is 2
+                Dependent: byte, values are 1 to 10, default is 1
+            """),
+        )
+        self.assertEqual(config.defaults, b"\x10\x01")
+        config = SettingsConfig.from_data(
+            filename="foo.settings",
+            data=dedent("""
+                Sample: byte
+                  values are 1 to 10
+                  default is 10 if Dependent is 1
+                  default is 20 if Dependent is 2
+                Dependent: byte, values are 1 to 10, default is 2
+            """),
+        )
+        self.assertEqual(config.defaults, b"\x20\x02")
+
+        # A setting with a computed value on another setting.
+        config = SettingsConfig.from_data(
+            filename="foo.settings",
+            data=dedent("""
+                Sample: byte
+                  values are 1 to 10
+                  default is value of Dependent + 10
+                Dependent: byte, values are 1 to 10, default is 1
+            """),
+        )
+        self.assertEqual(config.defaults, b"\x11\x01")
+        config = SettingsConfig.from_data(
+            filename="foo.settings",
+            data=dedent("""
+                Sample: byte
+                  values are 1 to 10
+                  default is value of Dependent + 10
+                Dependent: byte, values are 1 to 10, default is 2
+            """),
+        )
+        self.assertEqual(config.defaults, b"\x12\x02")

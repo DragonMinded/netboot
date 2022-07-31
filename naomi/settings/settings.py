@@ -121,7 +121,7 @@ class NaomiSettingsManager:
         config = self._serial_to_config(self.files, serial)
         defaults = None
         if config is not None:
-            defaults = config.defaults()
+            defaults = config.defaults
 
         return self.from_eeprom(NaomiEEPRom.default(serial, game_defaults=defaults).data)
 
@@ -134,7 +134,7 @@ class NaomiSettingsManager:
         config = self._serial_to_config(self.files, serial)
         game_defaults = None
         if config is not None:
-            game_defaults = config.defaults()
+            game_defaults = config.defaults
 
         # Create a default EEPROM based on both of the above.
         return self.from_eeprom(NaomiEEPRom.default(serial, system_defaults=system_defaults, game_defaults=game_defaults).data)
