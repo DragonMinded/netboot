@@ -4,6 +4,7 @@ import unittest
 # implementation-specific details here that aren't normally exposed.
 from settings.settings import ReadOnlyCondition, Setting, SettingSizeEnum, SettingsSaveException
 
+
 class TestReadOnlyCondition(unittest.TestCase):
     def test_evaluate_normal(self) -> None:
         roc = ReadOnlyCondition(
@@ -24,7 +25,7 @@ class TestReadOnlyCondition(unittest.TestCase):
                     size=SettingSizeEnum.BYTE,
                     length=1,
                     read_only=False,
-                    values={3, "3"},
+                    values={3: "3"},
                     current=3,
                 )
             ])
@@ -40,7 +41,7 @@ class TestReadOnlyCondition(unittest.TestCase):
                     size=SettingSizeEnum.BYTE,
                     length=1,
                     read_only=False,
-                    values={4, "4"},
+                    values={4: "4"},
                     current=4,
                 )
             ])
@@ -65,7 +66,7 @@ class TestReadOnlyCondition(unittest.TestCase):
                     size=SettingSizeEnum.BYTE,
                     length=1,
                     read_only=False,
-                    values={3, "3"},
+                    values={3: "3"},
                     current=3,
                 )
             ])
@@ -81,7 +82,7 @@ class TestReadOnlyCondition(unittest.TestCase):
                     size=SettingSizeEnum.BYTE,
                     length=1,
                     read_only=False,
-                    values={4, "4"},
+                    values={4: "4"},
                     current=4,
                 )
             ])
