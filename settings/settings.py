@@ -1037,25 +1037,6 @@ class SettingsConfig:
             # Keep track of order
             order += 1
 
-        # Verify that nibbles come in pairs.
-        halves = 0
-        halfname: Optional[str] = None
-        for setting in settings:
-            if setting.size == SettingSizeEnum.NIBBLE:
-                halves = 1 - halves
-                halfname = None if halves == 0 else setting.name
-            elif setting.size == SettingSizeEnum.BYTE:
-                if halves != 0:
-                    raise SettingsParseException(
-                        f"The setting \"{setting.name}\" follows a lonesome half-byte setting {halfname}. Half-byte settings must always be in pairs!",
-                        filename
-                    )
-        if halves != 0:
-            raise SettingsSaveException(
-                f"The setting \"{halfname}\" is a lonesome half-byte setting. Half-byte settings must always be in pairs!",
-                filename
-            )
-
         # Now, insert pending settings where they belong.
         while pending_insertions:
             # Search all pending insertions to see if we can add one of them.
@@ -1087,6 +1068,26 @@ class SettingsConfig:
                     f"We couldn't figure out where to place the following settings: {allsettings}. Did you accidentially create a display order loop?",
                     filename,
                 )
+
+        # Finally, verify that nibbles come in pairs, which was dependent on the original
+        # file-ordering, not in the dependent ordering we calculated here.
+        halves = 0
+        halfname: Optional[str] = None
+        for setting in sorted(settings, key=lambda setting: setting.order):
+            if setting.size == SettingSizeEnum.NIBBLE:
+                halves = 1 - halves
+                halfname = None if halves == 0 else setting.name
+            elif setting.size == SettingSizeEnum.BYTE:
+                if halves != 0:
+                    raise SettingsParseException(
+                        f"The setting \"{setting.name}\" follows a lonesome half-byte setting {halfname}. Half-byte settings must always be in pairs!",
+                        filename
+                    )
+        if halves != 0:
+            raise SettingsSaveException(
+                f"The setting \"{halfname}\" is a lonesome half-byte setting. Half-byte settings must always be in pairs!",
+                filename
+            )
 
         return SettingsConfig(filename, settings)
 

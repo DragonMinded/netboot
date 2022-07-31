@@ -1399,3 +1399,50 @@ class TestSettingsConfig(unittest.TestCase):
             )
         )
         self.assertEqual(config.settings[0].values, {0: "0", 1: "1", 2: "2"})
+
+    def test_ordering(self) -> None:
+        config = SettingsConfig.from_data(
+            filename="foo.settings",
+            data=dedent("""
+                Sample 1: half-byte
+                  values are 1 to 3 in hex
+                  display after Sample 2
+                Sample 2: half-byte, values are 2 to 4 in hex
+            """),
+        )
+        self.assertEqual(len(config.settings), 2)
+        self.assertEqual(config.settings[0].name, "Sample 2")
+        self.assertEqual(config.settings[0].size, SettingSizeEnum.NIBBLE)
+        self.assertEqual(config.settings[0].length, 1)
+        self.assertEqual(config.settings[0].default, None)
+        self.assertEqual(config.settings[0].read_only, False)
+        self.assertEqual(config.settings[0].values, {2: "2", 3: "3", 4: "4"})
+        self.assertEqual(config.settings[1].name, "Sample 1")
+        self.assertEqual(config.settings[1].size, SettingSizeEnum.NIBBLE)
+        self.assertEqual(config.settings[1].length, 1)
+        self.assertEqual(config.settings[1].default, None)
+        self.assertEqual(config.settings[1].read_only, False)
+        self.assertEqual(config.settings[1].values, {1: "1", 2: "2", 3: "3"})
+
+        config = SettingsConfig.from_data(
+            filename="foo.settings",
+            data=dedent("""
+                Sample 1: half-byte, values are 1 to 3 in hex
+                Sample 2: half-byte
+                  values are 2 to 4 in hex
+                  display before Sample 1
+            """),
+        )
+        self.assertEqual(len(config.settings), 2)
+        self.assertEqual(config.settings[0].name, "Sample 2")
+        self.assertEqual(config.settings[0].size, SettingSizeEnum.NIBBLE)
+        self.assertEqual(config.settings[0].length, 1)
+        self.assertEqual(config.settings[0].default, None)
+        self.assertEqual(config.settings[0].read_only, False)
+        self.assertEqual(config.settings[0].values, {2: "2", 3: "3", 4: "4"})
+        self.assertEqual(config.settings[1].name, "Sample 1")
+        self.assertEqual(config.settings[1].size, SettingSizeEnum.NIBBLE)
+        self.assertEqual(config.settings[1].length, 1)
+        self.assertEqual(config.settings[1].default, None)
+        self.assertEqual(config.settings[1].read_only, False)
+        self.assertEqual(config.settings[1].values, {1: "1", 2: "2", 3: "3"})
