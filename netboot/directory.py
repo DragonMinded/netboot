@@ -56,7 +56,7 @@ class DirectoryManager:
             # Now, see if we can figure out from the header
             rom = NaomiRom(data)
             if rom.valid:
-                # Arbitrarily choose USA region as default
+                # Arbitrarily choose Japan as default region
                 naomi_region = {
                     CabinetRegionEnum.REGION_JAPAN: NaomiRomRegionEnum.REGION_JAPAN,
                     CabinetRegionEnum.REGION_USA: NaomiRomRegionEnum.REGION_USA,
