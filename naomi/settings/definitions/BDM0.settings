@@ -1,0 +1,81 @@
+# Fingerprint to identify this as a DOOM eeprom.
+# Just the ascii for "DOOM".
+Setting00: byte, read-only, default is 44
+Setting01: byte, read-only, default is 4f
+Setting02: byte, read-only, default is 4f
+Setting03: byte, read-only, default is 4d
+
+# EEPROM version, game is forwards compatible so its
+# fine to leave this as-is.
+Setting04: byte, read-only, default is 03
+
+# Whether top-of-screen messages are shown in-game.
+Show Messages: byte, default is 1
+  0 - Off
+  1 - On
+
+# Music volume in-game.
+Music Volume: byte, default is 8, display after SFX Volume
+  0 - 0
+  1 - 1
+  2 - 2
+  3 - 3
+  4 - 4
+  5 - 5
+  6 - 6
+  7 - 7
+  8 - 8
+  9 - 9
+  a - 10
+  b - 11
+  c - 12
+  d - 13
+  e - 14
+  f - 15
+
+# SFX volume in-game.
+SFX Volume: byte, default is 8
+  0 - 0
+  1 - 1
+  2 - 2
+  3 - 3
+  4 - 4
+  5 - 5
+  6 - 6
+  7 - 7
+  8 - 8
+  9 - 9
+  a - 10
+  b - 11
+  c - 12
+  d - 13
+  e - 14
+  f - 15
+
+# Show options menu on main screen.
+Show Options Menu In-Game: byte, default is 1
+  0 - Off
+  1 - On
+
+# Allow sprinting by holding "Use" button.
+Hold Use Button to Sprint: byte, default is 0, display after Double-Tap to Sprint
+  0 - Off
+  1 - On
+
+# Double-tap a direction to sprint.
+Double-Tap to Sprint: byte, default is 0
+  1 - Off
+  0 - On
+
+2P Buttons Fast Weapon Switch: byte, default is 0
+  0 - Off
+  1 - On
+
+# Control remapping, we don't support setting these
+# options since we have no way of enforcing uniqueness.
+Setting0c: byte, read-only, default is 01
+Setting0d: byte, read-only, default is 02
+Setting0e: byte, read-only, default is 03
+Setting0f: byte, read-only, default is 04
+Setting10: byte, read-only, default is 05
+Setting11: byte, read-only, default is 06
