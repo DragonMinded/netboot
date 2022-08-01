@@ -226,7 +226,7 @@ class Cabinet:
                     self.__print(f"Cabinet {self.ip} turned off, waiting for power on.")
                     self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
                 elif self.__current_filename != self.__new_filename:
-                    self.__print(f"Cabinet {self.ip} changed games to {self.__new_filename}, waiting for power on.")
+                    self.__print(f"Cabinet {self.ip} changed game to {self.__new_filename}, waiting for power on.")
                     self.__current_filename = self.__new_filename
                     self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
                 else:
@@ -240,7 +240,11 @@ class Cabinet:
                             self.__print(f"Cabinet {self.ip} passed CRC verification for {self.__current_filename}, waiting for power off.")
                             self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_OFF, 0)
                         elif info.game_crc_status == CRCStatusEnum.STATUS_DISABLED:
-                            # Game failed onboard CRC, try sending again!
+                            # Game onboard CRC screen was disabled, can't tell if the game is good or not! We could
+                            # ignore this and just pretend the game was good, but it means that if the server was restarted
+                            # while the cabinet was already running, it would have no way to synchronize with the state of
+                            # the world. If that's what you really want, you should probably just be using "netdimm_send"
+                            # instead of managing the cabinet through this class. So, resend the game if we hit this.
                             self.__print(f"Cabinet {self.ip} had CRC verification disabled for {self.__current_filename}, waiting for power on.")
                             self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
                         elif info.game_crc_status in {CRCStatusEnum.STATUS_INVALID, CRCStatusEnum.STATUS_BAD_MEMORY}:
@@ -261,7 +265,7 @@ class Cabinet:
                     self.__print(f"Cabinet {self.ip} turned off, waiting for power on.")
                     self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
                 elif self.__current_filename != self.__new_filename:
-                    self.__print(f"Cabinet {self.ip} changed games to {self.__new_filename}, waiting for power on.")
+                    self.__print(f"Cabinet {self.ip} changed game to {self.__new_filename}, waiting for power on.")
                     self.__current_filename = self.__new_filename
                     self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
                 return

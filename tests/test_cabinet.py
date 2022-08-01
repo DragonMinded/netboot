@@ -227,3 +227,139 @@ class TestCabinet(unittest.TestCase):
             cabinet.tick()
             self.assertEqual(cabinet.state[0], CabinetStateEnum.STATE_CHECK_CURRENT_GAME)
             self.assertEqual(["Cabinet 1.2.3.4 succeeded sending game, rebooting and verifying game CRC."], logs)
+
+    def test_state_host_checking_died_transition(self) -> None:
+        logs: List[str] = []
+        with patch('netboot.cabinet.log', new_callable=lambda: lambda log, newline: logs.append(log)):
+            cabinet, host = self.spawn_cabinet(
+                state=CabinetStateEnum.STATE_CHECK_CURRENT_GAME,
+                filename="abc.bin",
+            )
+            host.alive = False
+
+            cabinet.tick()
+            self.assertEqual(cabinet.state[0], CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON)
+            self.assertEqual(["Cabinet 1.2.3.4 turned off, waiting for power on."], logs)
+
+    def test_state_host_checking_new_game_transition(self) -> None:
+        logs: List[str] = []
+        with patch('netboot.cabinet.log', new_callable=lambda: lambda log, newline: logs.append(log)):
+            cabinet, host = self.spawn_cabinet(
+                state=CabinetStateEnum.STATE_CHECK_CURRENT_GAME,
+                filename="abc.bin",
+            )
+            host.alive = True
+            cabinet.filename = "xyz.bin"
+
+            cabinet.tick()
+            self.assertEqual(cabinet.state[0], CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON)
+            self.assertEqual(["Cabinet 1.2.3.4 changed game to xyz.bin, waiting for power on."], logs)
+
+    def test_state_host_checking_no_info_no_transition(self) -> None:
+        logs: List[str] = []
+        with patch('netboot.cabinet.log', new_callable=lambda: lambda log, newline: logs.append(log)):
+            cabinet, host = self.spawn_cabinet(
+                state=CabinetStateEnum.STATE_CHECK_CURRENT_GAME,
+                filename="abc.bin",
+            )
+            host.alive = True
+
+            cabinet.tick()
+            self.assertEqual(cabinet.state[0], CabinetStateEnum.STATE_CHECK_CURRENT_GAME)
+            self.assertEqual([], logs)
+
+    def test_state_host_checking_crc_valid_transition(self) -> None:
+        logs: List[str] = []
+        with patch('netboot.cabinet.log', new_callable=lambda: lambda log, newline: logs.append(log)):
+            cabinet, host = self.spawn_cabinet(
+                state=CabinetStateEnum.STATE_CHECK_CURRENT_GAME,
+                filename="abc.bin",
+            )
+            host.alive = True
+            host.info = MagicMock(
+                return_value=NetDimmInfo(
+                    current_game_crc=12345678,
+                    current_game_size=5555,
+                    game_crc_status=CRCStatusEnum.STATUS_VALID,
+                    memory_size=5555,
+                    firmware_version=NetDimmVersionEnum.VERSION_UNKNOWN,
+                    available_game_memory=5555,
+                    control_address=5555,
+                ),
+            )
+
+            cabinet.tick()
+            self.assertEqual(cabinet.state[0], CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_OFF)
+            self.assertEqual(["Cabinet 1.2.3.4 passed CRC verification for abc.bin, waiting for power off."], logs)
+
+    def test_state_host_checking_crc_invalid_transition(self) -> None:
+        logs: List[str] = []
+        with patch('netboot.cabinet.log', new_callable=lambda: lambda log, newline: logs.append(log)):
+            cabinet, host = self.spawn_cabinet(
+                state=CabinetStateEnum.STATE_CHECK_CURRENT_GAME,
+                filename="abc.bin",
+            )
+            host.alive = True
+            host.info = MagicMock(
+                return_value=NetDimmInfo(
+                    current_game_crc=12345678,
+                    current_game_size=5555,
+                    game_crc_status=CRCStatusEnum.STATUS_INVALID,
+                    memory_size=5555,
+                    firmware_version=NetDimmVersionEnum.VERSION_UNKNOWN,
+                    available_game_memory=5555,
+                    control_address=5555,
+                ),
+            )
+
+            cabinet.tick()
+            self.assertEqual(cabinet.state[0], CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON)
+            self.assertEqual(["Cabinet 1.2.3.4 failed CRC verification for abc.bin, waiting for power on."], logs)
+
+    def test_state_host_checking_crc_running_no_transition(self) -> None:
+        logs: List[str] = []
+        with patch('netboot.cabinet.log', new_callable=lambda: lambda log, newline: logs.append(log)):
+            cabinet, host = self.spawn_cabinet(
+                state=CabinetStateEnum.STATE_CHECK_CURRENT_GAME,
+                filename="abc.bin",
+            )
+            host.alive = True
+            host.info = MagicMock(
+                return_value=NetDimmInfo(
+                    current_game_crc=12345678,
+                    current_game_size=5555,
+                    game_crc_status=CRCStatusEnum.STATUS_CHECKING,
+                    memory_size=5555,
+                    firmware_version=NetDimmVersionEnum.VERSION_UNKNOWN,
+                    available_game_memory=5555,
+                    control_address=5555,
+                ),
+            )
+
+            cabinet.tick()
+            self.assertEqual(cabinet.state[0], CabinetStateEnum.STATE_CHECK_CURRENT_GAME)
+            self.assertEqual([], logs)
+
+    def test_state_host_checking_crc_disabled_transition(self) -> None:
+        logs: List[str] = []
+        with patch('netboot.cabinet.log', new_callable=lambda: lambda log, newline: logs.append(log)):
+            cabinet, host = self.spawn_cabinet(
+                state=CabinetStateEnum.STATE_CHECK_CURRENT_GAME,
+                filename="abc.bin",
+            )
+            host.alive = True
+            host.info = MagicMock(
+                return_value=NetDimmInfo(
+                    current_game_crc=12345678,
+                    current_game_size=5555,
+                    game_crc_status=CRCStatusEnum.STATUS_DISABLED,
+                    memory_size=5555,
+                    firmware_version=NetDimmVersionEnum.VERSION_UNKNOWN,
+                    available_game_memory=5555,
+                    control_address=5555,
+                ),
+            )
+
+            cabinet.tick()
+            self.assertEqual(cabinet.state[0], CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON)
+            self.assertEqual(["Cabinet 1.2.3.4 had CRC verification disabled for abc.bin, waiting for power on."], logs)
