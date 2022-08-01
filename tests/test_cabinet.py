@@ -363,3 +363,43 @@ class TestCabinet(unittest.TestCase):
             cabinet.tick()
             self.assertEqual(cabinet.state[0], CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON)
             self.assertEqual(["Cabinet 1.2.3.4 had CRC verification disabled for abc.bin, waiting for power on."], logs)
+
+    def test_state_host_running_no_transition(self) -> None:
+        logs: List[str] = []
+        with patch('netboot.cabinet.log', new_callable=lambda: lambda log, newline: logs.append(log)):
+            cabinet, host = self.spawn_cabinet(
+                state=CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_OFF,
+                filename="abc.bin",
+            )
+            host.alive = True
+
+            cabinet.tick()
+            self.assertEqual(cabinet.state[0], CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_OFF)
+            self.assertEqual([], logs)
+
+    def test_state_host_stopped_running_transition(self) -> None:
+        logs: List[str] = []
+        with patch('netboot.cabinet.log', new_callable=lambda: lambda log, newline: logs.append(log)):
+            cabinet, host = self.spawn_cabinet(
+                state=CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_OFF,
+                filename="abc.bin",
+            )
+            host.alive = False
+
+            cabinet.tick()
+            self.assertEqual(cabinet.state[0], CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON)
+            self.assertEqual(["Cabinet 1.2.3.4 turned off, waiting for power on."], logs)
+
+    def test_state_host_running_changed_game_transition(self) -> None:
+        logs: List[str] = []
+        with patch('netboot.cabinet.log', new_callable=lambda: lambda log, newline: logs.append(log)):
+            cabinet, host = self.spawn_cabinet(
+                state=CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_OFF,
+                filename="abc.bin",
+            )
+            host.alive = True
+            cabinet.filename = "xyz.bin"
+
+            cabinet.tick()
+            self.assertEqual(cabinet.state[0], CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON)
+            self.assertEqual(["Cabinet 1.2.3.4 changed game to xyz.bin, waiting for power on."], logs)
