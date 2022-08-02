@@ -8,3 +8,4 @@ pillow
 PyYAML
 arcadeutils
 dragoncurses
+pysnmplib
