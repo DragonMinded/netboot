@@ -2,7 +2,6 @@
 import argparse
 import os
 import sys
-from typing import cast, BinaryIO
 
 from arcadeutils import FileBytes, BinaryDiff
 from naomi import NaomiEEPRom, NaomiRom
@@ -66,7 +65,7 @@ def main() -> int:
         defaulteeprom = NaomiEEPRom(manager.to_eeprom(defaults))
 
     with open(args.rom, "rb" if args.output_file else "rb+") as fp:
-        data = FileBytes(cast(BinaryIO, fp))
+        data = FileBytes(fp)
         original = data.clone()
         rom = NaomiRom(data)
 

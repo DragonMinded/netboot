@@ -141,7 +141,7 @@ def main() -> int:
     if args.action == "attach":
         # Grab the rom, parse it.
         with open(args.rom, "rb" if args.output_file else "rb+") as fp:
-            data = FileBytes(fp)  # type: ignore
+            data = FileBytes(fp)
 
             # Grab the attachment. This should be the specific settingstrojan binary blob as compiled
             # out of the homebrew/settingstrojan directory.
@@ -261,7 +261,7 @@ def main() -> int:
     elif args.action == "edit":
         # Grab the rom, parse it.
         with open(args.rom, "rb" if args.output_file else "rb+") as fp:
-            data = FileBytes(fp)  # type: ignore
+            data = FileBytes(fp)
 
             # Grab the attachment. This should be the specific settingstrojan binary blob as compiled
             # out of the homebrew/settingstrojan directory.

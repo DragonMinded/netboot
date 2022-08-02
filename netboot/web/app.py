@@ -6,7 +6,7 @@ from functools import wraps
 from typing import Callable, Dict, List, Any, cast
 
 from flask import Flask, Response, request, render_template, make_response, jsonify as flask_jsonify
-from werkzeug.routing import PathConverter
+from werkzeug.routing import PathConverter  # type: ignore
 from netdimm import NetDimm, NetDimmVersionEnum, NetDimmTargetEnum
 from naomi import NaomiRomRegionEnum
 from netboot import Cabinet, CabinetRegionEnum, CabinetManager, DirectoryManager, PatchManager, SRAMManager, SettingsManager
@@ -21,7 +21,7 @@ app = Flask(
 )
 
 
-class EverythingConverter(PathConverter):
+class EverythingConverter(PathConverter):  # type: ignore
     regex = '.*?'
 
 

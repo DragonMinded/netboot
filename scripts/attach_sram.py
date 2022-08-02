@@ -65,7 +65,7 @@ def main() -> int:
     if args.action == "attach":
         # Grab the rom, parse it
         with open(args.bin, "rb" if args.output_file else "rb+") as fp:
-            data = FileBytes(fp)  # type: ignore
+            data = FileBytes(fp)
 
             with open(args.sram, "rb") as fp:
                 sram = fp.read()
