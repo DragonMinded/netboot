@@ -2,26 +2,26 @@ body {
     font-family: Arial;
 }
 
-div.cabinet, div.config, div.romlist, div.patchlist, div.sramlist, div.gamelist, div.romconfig, div.game {
+div.cabinet, div.config, div.romlist, div.patchlist, div.sramlist, div.gamelist, div.romconfig, div.game, div.outlet {
     margin: 20px;
     border: 1px solid #bbbbbb;
     padding: 20px;
 }
 
-div.cabinet dl, div.romconfig dl {
+div.cabinet dl, div.romconfig dl, div.outlet dl {
     margin: 0px;
     display: grid;
     grid-template-columns: max-content auto;
 }
 
-div.cabinet dt, div.romconfig dt {
+div.cabinet dt, div.romconfig dt, div.outlet dt {
     grid-column-start: 1;
     font-weight: bold;
     padding-top: 5px;
     padding-bottom: 5px;
 }
 
-div.cabinet dd, div.romconfig dd {
+div.cabinet dd, div.romconfig dd, div.outlet dd {
     grid-column-start: 2;
     padding-top: 5px;
     padding-bottom: 5px;
@@ -39,7 +39,7 @@ div.cabinet div.query {
     padding-top: 5px;
 }
 
-div.cabinet h3, div.romlist h3, div.patchlist h3, div.sramlist h3, div.gamelist h3, div.romconfig h3, div.game h3 {
+div.cabinet h3, div.romlist h3, div.patchlist h3, div.sramlist h3, div.gamelist h3, div.romconfig h3, div.game h3, div.outlet h3 {
     margin: 0px 0px 5px 0px;
 }
 

@@ -23,6 +23,7 @@ class TestCabinet(unittest.TestCase):
             patches={},
             settings={},
             srams={},
+            outlet=None,
         )
         host = MagicMock()
         host.ip = "1.2.3.4"

@@ -38,6 +38,7 @@ Vue.component('state', {
     props: ['status', 'progress'],
     template: `
         <span>
+            <span v-if="status == 'turned_off'">turned off</span>
             <span v-if="status == 'startup' || status == 'wait_power_on'">waiting for cabinet</span>
             <span v-if="status == 'disabled'">disabled</span>
             <span v-if="status == 'wait_power_off'">running game</span>
@@ -375,6 +376,16 @@ Vue.component('cabinetconfig', {
     template: `
         <div>
             <div class='cabinet'>
+                <h3>Cabinet Configuration</h3>
+                <div class="information top">
+                    Target System and NetDimm Version are used to check availability for certain features.
+                    They are optional, but it's a good idea to set them correctly. Keyless boot allows you
+                    to boot without a PIC by constantly connecting to the net dimm and resetting the reboot
+                    timeout. If you are running on a platform that takes awhile to boot, setting a custom
+                    send timeout to something longer like 30 seconds can allow stubborn systems to work fine.
+                    If you disable management of this cabinet then no games will be sent to it nor will it
+                    be checked to see if it is up.
+                </div>
                 <dl>
                     <dt>IP Address</dt><dd>{{ cabinet.ip }}</dd>
                     <dt>Description</dt><dd>
@@ -409,7 +420,7 @@ Vue.component('cabinetconfig', {
                         <span>seconds</span>
                         <span class="errorindicator" v-if="invalid_timeout">invalid timeout</span>
                     </dd>
-                    <dt>Enabled</dt><dd>
+                    <dt>Management Enabled</dt><dd>
                         <input id="enabled" type="checkbox" v-model="cabinet.enabled" />
                         <label for="enabled">allow management of this cabinet</label>
                     </dd>
@@ -420,18 +431,14 @@ Vue.component('cabinetconfig', {
                     <span class="savingindicator" v-if="saving"><img src="/static/loading-16.gif" width=16 height=16 /> saving...</span>
                     <span class="successindicator" v-if="saved">&check; saved</span>
                 </div>
-                <div class="information">
-                    Target System and NetDimm Version are used to check availability for certain features.
-                    They are optional, but it's a good idea to set them correctly. Keyless boot allows you
-                    to boot without a PIC by constantly connecting to the net dimm and resetting the reboot
-                    timeout. If you are running on a platform that takes awhile to boot, setting a custom
-                    send timeout to something longer like 30 seconds can allow stubborn systems to work fine.
-                    If you disable management of this cabinet then no games will be sent to it nor will it
-                    be checked to see if it is up.
-                </div>
             </div>
             <div class='cabinet'>
-                <h3>Information about Cabinet</h3>
+                <h3>Cabinet Information</h3>
+                <div class="information top">
+                    Querying the NetDimm will attempt to load some firmware properties. If the version
+                    can be identified, it will be selected for you in the NetDimm Version in the above
+                    section.
+                </div>
                 <dl>
                     <dt>Game</dt>
                     <dd>{{ info.game }}</dd>
@@ -442,14 +449,10 @@ Vue.component('cabinetconfig', {
                     <dd v-if="info.available">{{ info.memavail }} MB</dd>
                 </dl>
                 <div class="query">
-                    <button v-on:click="query" :disabled="info.status == 'send_game' || info.status == 'startup' || info.status == 'disabled' || info.status == 'wait_power_on'">Query Firmware Information</button>
+                    <button v-on:click="query" :disabled="info.status == 'turned_off' || info.status == 'send_game' || info.status == 'startup' || info.status == 'wait_power_on'">Query Firmware Information</button>
                     <span class="queryindicator" v-if="querying"><img src="/static/loading-16.gif" width=16 height=16 /> querying...</span>
                 </div>
-                <div class="information">
-                    Querying the NetDimm will attempt to load some firmware properties. If the version
-                    can be identified, it will be selected for you in the NetDimm Version in the above
-                    section.
-                </div>
+                <!-- TODO: Outlet information here, including turning on/off outlet -->
             </div>
         </div>
     `,
@@ -496,6 +499,70 @@ Vue.component('romconfig', {
                 Game names are pulled out of the ROM header if possible, and if not they are taken
                 from the ROM filename. If you want to change them so they look better on the main
                 page drop-downs you can do so here.
+            </div>
+        </div>
+    `,
+});
+
+Vue.component('outletconfig', {
+    data: function() {
+        return {
+            cabinet: window.cabinet,
+            saving: false,
+            saved: false,
+            invalid_ip: false,
+            invalid_outlet: false,
+        };
+    },
+    methods: {
+        changed: function() {
+            this.saved = false;
+        },
+        save: function() {
+            // TODO: validate inputs
+            if (true) {
+                this.saving = true;
+                this.saved = false;
+                axios.post('/cabinets/' + this.cabinet.ip + '/outlet', this.cabinet.outlet).then(result => {
+                    if (!result.data.error) {
+                        this.cabinet.outlet = result.data.outlet;
+                        this.saved = true;
+                        this.saving = false;
+                    }
+                });
+            }
+        },
+    },
+    template: `
+        <div>
+            <div class='outlet'>
+                <h3>Smart Outlet Configuration</h3>
+                <div class="information top">
+                    Configuring a smart outlet that this cabinet is plugged into will allow you to control the power
+                    state of the cabinet from the game select screen as well as request a cabinet power cycle in order
+                    to switch games. This can help when loading a game over another stubborn game which will not
+                    reboot.
+                </div>
+                <dl>
+                    <dt>Attached Smart Outlet</dt><dd>
+                        <select v-model="cabinet.outlet.type">
+                            <option v-for="outlet in outlets" v-bind:value="outlet">{{ outlet }}</option>
+                        </select>
+                    </dd>
+                    <dt v-if="cabinet.outlet.type != 'none'">IP Address</dt><dd v-if="cabinet.outlet.type != 'none'">
+                        <input v-model="cabinet.outlet.host" />
+                        <span class="errorindicator" v-if="invalid_ip">invalid IP address</span>
+                    </dd>
+                    <dt v-if="cabinet.outlet.type == 'ap7900'">Outlet Number</dt><dd v-if="cabinet.outlet.type == 'ap7900'">
+                        <input v-model="cabinet.outlet.outlet" />
+                        <span class="errorindicator" v-if="invalid_outlet">invalid outlet</span>
+                    </dd>
+                </dl>
+                <div class="update">
+                    <button v-on:click="save">Update Outlet Configuration</button>
+                    <span class="savingindicator" v-if="saving"><img src="/static/loading-16.gif" width=16 height=16 /> saving...</span>
+                    <span class="successindicator" v-if="saved">&check; saved</span>
+                </div>
             </div>
         </div>
     `,

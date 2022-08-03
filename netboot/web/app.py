@@ -3,13 +3,14 @@ import os.path
 import yaml
 import traceback
 from functools import wraps
-from typing import Callable, Dict, List, Any, cast
+from typing import Callable, Dict, List, Any, Optional, cast
 
 from flask import Flask, Response, request, render_template, make_response, jsonify as flask_jsonify
 from werkzeug.routing import PathConverter  # type: ignore
 from netdimm import NetDimm, NetDimmVersionEnum, NetDimmTargetEnum
 from naomi import NaomiRomRegionEnum
 from netboot import Cabinet, CabinetRegionEnum, CabinetManager, DirectoryManager, PatchManager, SRAMManager, SettingsManager
+from outlet import ALL_OUTLET_CLASSES
 
 
 current_directory: str = os.path.abspath(os.path.dirname(__file__))
@@ -60,6 +61,9 @@ def cabinet_to_dict(cab: Cabinet, dirmanager: DirectoryManager) -> Dict[str, Any
         'status': status.value,
         'progress': progress,
         'enabled': cab.enabled,
+        'controllable': cab.controllable,
+        'power_state': cab.power_state.value,
+        'outlet': cab.outlet if cab.outlet is not None else {'type': 'none'},
         'time_hack': cab.time_hack,
         'send_timeout': cab.send_timeout,
     }
@@ -162,6 +166,7 @@ def cabinetconfig(ip: str) -> Response:
             regions=[cr.value for cr in CabinetRegionEnum if cr != CabinetRegionEnum.REGION_UNKNOWN],
             targets=[t.value for t in NetDimmTargetEnum],
             versions=[tv.value for tv in NetDimmVersionEnum],
+            outlets=['none', *[impl.type for impl in ALL_OUTLET_CLASSES]],
             timeouts={k.value: v for k, v in NetDimm.DEFAULT_TIMEOUTS.items()},
         ),
         200
@@ -417,6 +422,7 @@ def createcabinet(ip: str) -> Dict[str, Any]:
         patches={rom: [] for rom in roms},
         settings={rom: None for rom in roms},
         srams={rom: None for rom in roms},
+        outlet=None,
         target=NetDimmTargetEnum(request.json['target']),
         version=NetDimmVersionEnum(request.json['version']),
         enabled=True,
@@ -444,6 +450,50 @@ def updatecabinet(ip: str) -> Dict[str, Any]:
         enabled=request.json['enabled'],
         time_hack=request.json['time_hack'],
         send_timeout=request.json['send_timeout'] or None,
+    )
+    serialize_app(app)
+    return cabinet_to_dict(cabman.cabinet(ip), dirman)
+
+
+@app.route('/cabinets/<ip>/outlet', methods=['POST'])
+@jsonify
+def updateoutlet(ip: str) -> Dict[str, Any]:
+    if request.json is None:
+        raise Exception("Expected JSON data in request!")
+
+    # Unfortunately we must do a decent amount of validation here, in order
+    # to ensure the config for a given outlet is valid. We could, in theory,
+    # attempt to manifest an instance of that outlet and use a function built
+    # into it, but that couples the outlet implementations to the frontend.
+    # Sigh, all software sucks, lmao.
+    config: Optional[Dict[str, object]] = None
+    if request.json.get('type', 'none') == 'none':
+        # This is a disabled outlet.
+        config = None
+    elif request.json.get('type') == 'snmp':
+        # TODO: SNMP configuration
+        config = None
+    elif request.json.get('type') == 'ap7900':
+        # AP7900 configuration.
+        try:
+            host = str(request.json['host']) if 'host' in request.json else None
+            outlet = int(request.json['outlet']) if 'outlet' in request.json else None
+        except (TypeError, ValueError):
+            host = None
+            outlet = None
+
+        if host is not None and outlet is not None:
+            config = {
+                'type': 'ap7900',
+                'host': host,
+                'outlet': outlet,
+            }
+
+    cabman = app.config['CabinetManager']
+    dirman = app.config['DirectoryManager']
+    cabman.update_cabinet(
+        ip,
+        outlet=config,
     )
     serialize_app(app)
     return cabinet_to_dict(cabman.cabinet(ip), dirman)

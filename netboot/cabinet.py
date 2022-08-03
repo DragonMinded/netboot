@@ -3,13 +3,15 @@ import os.path
 import threading
 import time
 import yaml
+from cachetools import TTLCache
 from enum import Enum
-from typing import Dict, List, Optional, Sequence, Tuple, Union
+from typing import Dict, List, Optional, Sequence, Tuple, Union, cast
 
 from naomi import NaomiSettingsPatcher
 from netdimm import NetDimmInfo, NetDimmException, NetDimmVersionEnum, NetDimmTargetEnum, CRCStatusEnum
 from netboot.hostutils import Host, HostStatusEnum, SettingsEnum
 from netboot.log import log
+from outlet import OutletInterface, ALL_OUTLET_CLASSES
 
 
 class CabinetException(Exception):
@@ -17,6 +19,7 @@ class CabinetException(Exception):
 
 
 class CabinetStateEnum(Enum):
+    STATE_TURNED_OFF = "turned_off"
     STATE_STARTUP = "startup"
     STATE_WAIT_FOR_CABINET_POWER_ON = "wait_power_on"
     STATE_SEND_CURRENT_GAME = "send_game"
@@ -34,6 +37,13 @@ class CabinetRegionEnum(Enum):
     REGION_AUSTRALIA = "australia"
 
 
+class CabinetPowerState(Enum):
+    POWER_OFF = "off"
+    POWER_ON = "on"
+    POWER_DISABLED = "disabled"
+    POWER_UNKNOWN = "unknown"
+
+
 class Cabinet:
     def __init__(
         self,
@@ -44,6 +54,7 @@ class Cabinet:
         patches: Dict[str, Sequence[str]],
         settings: Dict[str, Optional[bytes]],
         srams: Dict[str, Optional[str]],
+        outlet: Optional[Dict[str, object]],
         target: Optional[NetDimmTargetEnum] = None,
         version: Optional[NetDimmVersionEnum] = None,
         send_timeout: Optional[int] = None,
@@ -63,6 +74,22 @@ class Cabinet:
         self.__current_filename: Optional[str] = filename
         self.__new_filename: Optional[str] = filename
         self.__state: Tuple[CabinetStateEnum, int] = (CabinetStateEnum.STATE_STARTUP, 0)
+        self.__outlet: Optional[OutletInterface] = self.__spawn_outlet_interface(outlet)
+        self.__cache: TTLCache[str, object] = TTLCache(maxsize=10, ttl=2)
+
+    def __spawn_outlet_interface(self, outlet: Optional[Dict[str, object]]) -> Optional[OutletInterface]:
+        if outlet is None:
+            return None
+        if 'type' not in outlet:
+            return None
+        for impl in ALL_OUTLET_CLASSES:
+            if impl.type == outlet['type']:
+                data = {x: y for x, y in outlet.items() if x != 'type'}
+                try:
+                    return impl(**data)
+                except TypeError:
+                    return None
+        return None
 
     def __repr__(self) -> str:
         with self.__lock:
@@ -124,6 +151,64 @@ class Cabinet:
     def send_timeout(self, send_timeout: Optional[int]) -> None:
         self.__host.send_timeout = send_timeout
 
+    @property
+    def outlet(self) -> Optional[Dict[str, object]]:
+        if self.__outlet is None:
+            return None
+        return {
+            'type': self.__outlet.type,
+            **self.__outlet.serialize(),
+        }
+
+    @outlet.setter
+    def outlet(self, outlet: Optional[Dict[str, object]]) -> None:
+        self.__outlet = self.__spawn_outlet_interface(outlet)
+        try:
+            del self.__cache["power_state"]
+        except KeyError:
+            pass
+
+    @property
+    def power_state(self) -> CabinetPowerState:
+        try:
+            return cast(CabinetPowerState, self.__cache["power_state"])
+        except KeyError:
+            pass
+
+        retval: CabinetPowerState
+        if self.__outlet is None:
+            retval = CabinetPowerState.POWER_DISABLED
+        else:
+            state = self.__outlet.getState()
+            if state is None:
+                retval = CabinetPowerState.POWER_UNKNOWN
+            else:
+                retval = CabinetPowerState.POWER_ON if state else CabinetPowerState.POWER_OFF
+        self.__cache["power_state"] = retval
+        return retval
+
+    @power_state.setter
+    def power_state(self, state: CabinetPowerState) -> None:
+        try:
+            del self.__cache["power_state"]
+        except KeyError:
+            pass
+
+        if self.__outlet is None:
+            return
+        if state == CabinetPowerState.POWER_ON:
+            self.__outlet.setState(True)
+        elif state == CabinetPowerState.POWER_OFF:
+            self.__outlet.setState(False)
+
+    @property
+    def controllable(self) -> bool:
+        # TODO: Right now this is just whether there's an outlet configured or not. We also need
+        # to check whether the admin of the server has enabled user control of the cabinet. If not,
+        # we still want to be able to cycle power to kick stuck games, but not allow turning the
+        # cabinet on/off from the panel.
+        return self.__outlet is not None
+
     def __print(self, string: str, newline: bool = True) -> None:
         if not self.quiet:
             log(string, newline=newline)
@@ -144,13 +229,20 @@ class Cabinet:
                     self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
                 return
 
+            if not self.__enabled:
+                self.__print(f"Cabinet {self.ip} has been disabled.")
+                self.__state = (CabinetStateEnum.STATE_STARTUP, 0)
+                return
+
+            if self.power_state == CabinetPowerState.POWER_OFF:
+                self.__print(f"Cabinet {self.ip} has been turned off.")
+                self.__state = (CabinetStateEnum.STATE_STARTUP, 0)
+                return
+
             # Wait for cabinet to power on state, transition to sending game
             # if the cabinet is active, transition to self if cabinet is not.
             if current_state == CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON:
-                if not self.__enabled:
-                    self.__print(f"Cabinet {self.ip} has been disabled.")
-                    self.__state = (CabinetStateEnum.STATE_STARTUP, 0)
-                elif self.__host.alive:
+                if self.__host.alive:
                     if self.__new_filename is None:
                         # Skip sending game, there's nothing to send
                         self.__print(f"Cabinet {self.ip} has no associated game, waiting for power off.")
@@ -198,9 +290,6 @@ class Cabinet:
             if current_state == CabinetStateEnum.STATE_SEND_CURRENT_GAME:
                 if self.__host.status == HostStatusEnum.STATUS_INACTIVE:
                     raise Exception("State error, shouldn't be possible!")
-                elif not self.__enabled:
-                    self.__print(f"Cabinet {self.ip} has been disabled.")
-                    self.__state = (CabinetStateEnum.STATE_STARTUP, 0)
                 elif self.__host.status == HostStatusEnum.STATUS_TRANSFERRING:
                     current, total = self.__host.progress
                     self.__state = (CabinetStateEnum.STATE_SEND_CURRENT_GAME, int(float(current * 100) / float(total)))
@@ -219,10 +308,7 @@ class Cabinet:
             # is turned off or the game is changed, also move back to waiting for
             # power on to send a new game.
             if current_state == CabinetStateEnum.STATE_CHECK_CURRENT_GAME:
-                if not self.__enabled:
-                    self.__print(f"Cabinet {self.ip} has been disabled.")
-                    self.__state = (CabinetStateEnum.STATE_STARTUP, 0)
-                elif not self.__host.alive:
+                if not self.__host.alive:
                     self.__print(f"Cabinet {self.ip} turned off, waiting for power on.")
                     self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
                 elif self.__current_filename != self.__new_filename:
@@ -258,10 +344,7 @@ class Cabinet:
             # waiting for power to come on if game changes. Stay in state
             # if cabinet stays on.
             if current_state == CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_OFF:
-                if not self.__enabled:
-                    self.__print(f"Cabinet {self.ip} has been disabled.")
-                    self.__state = (CabinetStateEnum.STATE_STARTUP, 0)
-                elif not self.__host.alive:
+                if not self.__host.alive:
                     self.__print(f"Cabinet {self.ip} turned off, waiting for power on.")
                     self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
                 elif self.__current_filename != self.__new_filename:
@@ -279,7 +362,9 @@ class Cabinet:
         as an integer, bounded between 0-100.
         """
         with self.__lock:
-            if self.__enabled:
+            if self.power_state == CabinetPowerState.POWER_OFF:
+                return (CabinetStateEnum.STATE_TURNED_OFF, 0)
+            elif self.__enabled:
                 return self.__state
             else:
                 return (CabinetStateEnum.STATE_DISABLED, 0)
@@ -353,6 +438,7 @@ class CabinetManager:
                 settings={str(rom): (bytes(data) if bool(data) else None) for (rom, data) in cab.get('settings', {}).items()},
                 # This is accessed differently since we have older YAML files that might need upgrading.
                 srams={str(rom): (str(data) if bool(data) else None) for (rom, data) in cab.get('srams', {}).items()},
+                outlet=cab.get('outlet'),
                 target=NetDimmTargetEnum(str(cab['target'])) if 'target' in cab else None,
                 version=NetDimmVersionEnum(str(cab['version'])) if 'version' in cab else None,
                 enabled=(True if 'disabled' not in cab else (not cab['disabled'])),
@@ -375,7 +461,7 @@ class CabinetManager:
         return CabinetManager(cabinets)
 
     def to_yaml(self, yaml_file: str) -> None:
-        data: Dict[str, Dict[str, Optional[Union[bool, str, Optional[int], Dict[str, List[str]], Dict[str, List[int]], Dict[str, Optional[str]]]]]] = {}
+        data: Dict[str, Dict[str, Optional[Union[bool, str, Optional[int], Dict[str, List[str]], Dict[str, List[int]], Dict[str, Optional[str]], Dict[str, object]]]]] = {}
 
         with self.__lock:
             cabinets: List[Cabinet] = sorted([cab for _, cab in self.__cabinets.items()], key=lambda cab: cab.ip)
@@ -398,6 +484,8 @@ class CabinetManager:
                 data[cab.ip]['disabled'] = True
             if cab.send_timeout is not None:
                 data[cab.ip]['send_timeout'] = cab.send_timeout
+            if cab.outlet is not None:
+                data[cab.ip]['outlet'] = cab.outlet
 
         with open(yaml_file, "w") as fp:
             yaml.dump(data, fp)
@@ -445,6 +533,7 @@ class CabinetManager:
         patches: Optional[Dict[str, Sequence[str]]] = None,
         settings: Optional[Dict[str, Optional[bytes]]] = None,
         srams: Optional[Dict[str, Optional[str]]] = None,
+        outlet: Union[Optional[Dict[str, object]], EmptyObject] = empty,
         target: Union[Optional[NetDimmTargetEnum], EmptyObject] = empty,
         version: Union[Optional[NetDimmVersionEnum], EmptyObject] = empty,
         send_timeout: Union[Optional[int], EmptyObject] = empty,
@@ -470,6 +559,8 @@ class CabinetManager:
                 existing_cab.settings = {rom: settings[rom] for rom in settings}
             if srams is not None:
                 existing_cab.srams = {rom: srams[rom] for rom in srams}
+            if not isinstance(outlet, EmptyObject):
+                existing_cab.outlet = outlet
             if not isinstance(filename, EmptyObject):
                 existing_cab.filename = filename
             if enabled is not None:

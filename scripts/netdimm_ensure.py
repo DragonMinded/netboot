@@ -141,6 +141,7 @@ def main() -> int:
         {args.image: args.patch_file or []},
         {args.image: settings},
         {args.image: sram},
+        None,
         target=args.target,
         version=args.version,
         time_hack=args.keyless_boot,

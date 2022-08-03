@@ -1,11 +1,13 @@
 import pysnmp.hlapi as snmplib  # type: ignore
 import pysnmp.proto.rfc1902 as rfc1902  # type: ignore
-from typing import Optional
+from typing import ClassVar, Dict, Optional
 
 from .interface import OutletInterface
 
 
 class SNMPOutlet(OutletInterface):
+    type: ClassVar[str] = "snmp"
+
     def __init__(
         self,
         *,
@@ -34,6 +36,19 @@ class SNMPOutlet(OutletInterface):
         if type(update_on_value) != type(update_off_value):
             raise Exception("Unexpected differing types for update on and off values!")
 
+    def serialize(self) -> Dict[str, object]:
+        return {
+            'host': self.host,
+            'query_oid': self.query_oid,
+            'query_on_value': self.query_on_value,
+            'query_off_value': self.query_off_value,
+            'update_oid': self.update_oid,
+            'update_on_value': self.update_on_value,
+            'update_off_value': self.update_off_value,
+            'read_community': self.read_community,
+            'write_community': self.write_community,
+        }
+
     def query(self, value: object) -> Optional[object]:
         if isinstance(self.query_on_value, int):
             try:
@@ -51,7 +66,7 @@ class SNMPOutlet(OutletInterface):
         iterator = snmplib.getCmd(
             snmplib.SnmpEngine(),
             snmplib.CommunityData(self.read_community),
-            snmplib.UdpTransportTarget((self.host, 161)),
+            snmplib.UdpTransportTarget((self.host, 161), timeout=1.0, retries=0),
             snmplib.ContextData(),
             snmplib.ObjectType(snmplib.ObjectIdentity(self.query_oid)),
         )

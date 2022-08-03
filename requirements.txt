@@ -9,3 +9,5 @@ PyYAML
 arcadeutils
 dragoncurses
 pysnmplib
+cachetools
+types-cachetools

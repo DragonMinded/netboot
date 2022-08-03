@@ -11,6 +11,7 @@
             window.targets = {{ targets|tojson|safe }};
             window.versions = {{ versions|tojson|safe }};
             window.timeouts = {{ timeouts|tojson|safe }};
+            window.outlets = {{ outlets|tojson|safe }};
             window.addEventListener("load", function(event) {
                 new Vue({el: '#app'});
             });
@@ -19,6 +20,7 @@
     <body>
         <div id="app">
             <cabinetconfig></cabinetconfig>
+            <outletconfig></outletconfig>
             <availablegames></availablegames>
             <div class="config">
                 <div>
