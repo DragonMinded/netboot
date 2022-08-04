@@ -46,6 +46,13 @@ def jsonify(func: Callable[..., Dict[str, Any]]) -> Callable[..., Response]:
 def cabinet_to_dict(cab: Cabinet, dirmanager: DirectoryManager) -> Dict[str, Any]:
     status, progress = cab.state
 
+    # Adding some defaults here is a nasty hack, but it works, so meh.
+    outlet = cab.outlet if cab.outlet is not None else {'type': 'none'}
+    if 'read_community' not in outlet:
+        outlet['read_community'] = "public"
+    if 'write_community' not in outlet:
+        outlet['write_community'] = "private"
+
     return {
         'ip': cab.ip,
         'description': cab.description,
@@ -63,7 +70,7 @@ def cabinet_to_dict(cab: Cabinet, dirmanager: DirectoryManager) -> Dict[str, Any
         'enabled': cab.enabled,
         'controllable': cab.controllable,
         'power_state': cab.power_state.value,
-        'outlet': cab.outlet if cab.outlet is not None else {'type': 'none'},
+        'outlet': outlet,
         'time_hack': cab.time_hack,
         'send_timeout': cab.send_timeout,
     }
@@ -472,8 +479,51 @@ def updateoutlet(ip: str) -> Dict[str, Any]:
         # This is a disabled outlet.
         config = None
     elif outlet.get('type') == 'snmp':
-        # TODO: SNMP configuration
-        config = None
+        # SNMP configuration
+        try:
+            host = str(outlet['host']) if 'host' in outlet else None
+            query_oid = str(outlet['query_oid']) if 'query_oid' in outlet else None
+            query_on_value = int(outlet['query_on_value']) if 'query_on_value' in outlet else None
+            query_off_value = int(outlet['query_off_value']) if 'query_off_value' in outlet else None
+            update_oid = str(outlet['update_oid']) if 'update_oid' in outlet else None
+            update_on_value = int(outlet['update_on_value']) if 'update_on_value' in outlet else None
+            update_off_value = int(outlet['update_off_value']) if 'update_off_value' in outlet else None
+            read_community = str(outlet['read_community']) if 'read_community' in outlet else None
+            write_community = str(outlet['write_community']) if 'write_community' in outlet else None
+        except (TypeError, ValueError):
+            host = None
+            query_oid = None
+            query_on_value = None
+            query_off_value = None
+            update_oid = None
+            update_on_value = None
+            update_off_value = None
+            read_community = None
+            write_community = None
+
+        if (
+            host is not None and
+            query_oid is not None and
+            query_on_value is not None and
+            query_off_value is not None and
+            update_oid is not None and
+            update_on_value is not None and
+            update_off_value is not None and
+            read_community is not None and
+            write_community is not None
+        ):
+            config = {
+                'type': 'snmp',
+                'host': host,
+                'query_oid': query_oid,
+                'query_on_value': query_on_value,
+                'query_off_value': query_off_value,
+                'update_oid': update_oid,
+                'update_on_value': update_on_value,
+                'update_off_value': update_off_value,
+                'read_community': read_community,
+                'write_community': write_community,
+            }
     elif outlet.get('type') == 'ap7900':
         # AP7900 configuration.
         try:

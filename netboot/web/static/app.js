@@ -528,6 +528,12 @@ Vue.component('outletconfig', {
             saved: false,
             invalid_ip: false,
             invalid_outlet: false,
+            invalid_query_oid: false,
+            invalid_query_on_value: false,
+            invalid_query_off_value: false,
+            invalid_update_oid: false,
+            invalid_update_on_value: false,
+            invalid_update_off_value: false,
         };
     },
     methods: {
@@ -535,8 +541,69 @@ Vue.component('outletconfig', {
             this.saved = false;
         },
         save: function() {
-            // TODO: validate inputs
-            if (true) {
+            this.invalid_ip = false;
+            this.invalid_outlet = false;
+            this.invalid_query_oid = false;
+            this.invalid_update_oid = false;
+            this.invalid_query_on_value = false;
+            this.invalid_query_off_value = false;
+            this.invalid_update_on_value = false;
+            this.invalid_update_off_value = false;
+
+            if (cabinet.outlet.type != 'none') {
+                if (/^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(this.cabinet.outlet.host)) {
+                    this.invalid_ip = false;
+                } else {
+                    this.invalid_ip = true;
+                }
+
+                if (cabinet.outlet.type == 'ap7900') {
+                    if (/^[1-8]$/.test(this.cabinet.outlet.outlet)) {
+                        this.invalid_outlet = false;
+                    } else {
+                        this.invalid_outlet = true;
+                    }
+                }
+
+                if (cabinet.outlet.type == 'snmp') {
+                    if (!this.cabinet.outlet.query_oid || this.cabinet.outlet.query_oid.length == 0) {
+                        this.invalid_query_oid = true;
+                    } else {
+                        this.invalid_query_oid = false;
+                    }
+                    if (!this.cabinet.outlet.update_oid || this.cabinet.outlet.update_oid.length == 0) {
+                        this.invalid_update_oid = true;
+                    } else {
+                        this.invalid_update_oid = false;
+                    }
+                    if (/^\d+$/.test(this.cabinet.outlet.query_on_value)) {
+                        this.invalid_query_on_value = false;
+                    } else {
+                        this.invalid_query_on_value = true;
+                    }
+                    if (/^\d+$/.test(this.cabinet.outlet.query_off_value)) {
+                        this.invalid_query_off_value = false;
+                    } else {
+                        this.invalid_query_off_value = true;
+                    }
+                    if (/^\d+$/.test(this.cabinet.outlet.update_on_value)) {
+                        this.invalid_update_on_value = false;
+                    } else {
+                        this.invalid_update_on_value = true;
+                    }
+                    if (/^\d+$/.test(this.cabinet.outlet.update_off_value)) {
+                        this.invalid_update_off_value = false;
+                    } else {
+                        this.invalid_update_off_value = true;
+                    }
+                }
+            }
+
+            if (
+                !this.invalid_ip && !this.invalid_outlet && !this.invalid_query_oid && !this.invalid_update_oid &&
+                !this.invalid_query_on_value && !this.invalid_query_off_value && !this.invalid_update_on_value &&
+                !this.invalid_update_off_value
+            ) {
                 this.saving = true;
                 this.saved = false;
                 axios.post('/cabinets/' + this.cabinet.ip + '/outlet', {outlet: this.cabinet.outlet, controllable: this.cabinet.controllable}).then(result => {
@@ -574,7 +641,37 @@ Vue.component('outletconfig', {
                         <input v-model="cabinet.outlet.outlet" />
                         <span class="errorindicator" v-if="invalid_outlet">invalid outlet</span>
                     </dd>
-                    <dt v-if="cabinet.outlet.type != 'none'">User-Controllable</dt><dd v-if="cabinet.outlet.type != 'none'">
+                    <dt v-if="cabinet.outlet.type == 'snmp'">Query OID</dt><dd v-if="cabinet.outlet.type == 'snmp'">
+                        <input v-model="cabinet.outlet.query_oid" />
+                        <span class="errorindicator" v-if="invalid_query_oid">invalid query OID</span>
+                    </dd>
+                    <dt v-if="cabinet.outlet.type == 'snmp'">Query On Value</dt><dd v-if="cabinet.outlet.type == 'snmp'">
+                        <input v-model="cabinet.outlet.query_on_value" />
+                        <span class="errorindicator" v-if="invalid_query_on_value">invalid query on value</span>
+                    </dd>
+                    <dt v-if="cabinet.outlet.type == 'snmp'">Query Off Value</dt><dd v-if="cabinet.outlet.type == 'snmp'">
+                        <input v-model="cabinet.outlet.query_off_value" />
+                        <span class="errorindicator" v-if="invalid_query_off_value">invalid query off value</span>
+                    </dd>
+                    <dt v-if="cabinet.outlet.type == 'snmp'">Update OID</dt><dd v-if="cabinet.outlet.type == 'snmp'">
+                        <input v-model="cabinet.outlet.update_oid" />
+                        <span class="errorindicator" v-if="invalid_update_oid">invalid update OID</span>
+                    </dd>
+                    <dt v-if="cabinet.outlet.type == 'snmp'">Update On Value</dt><dd v-if="cabinet.outlet.type == 'snmp'">
+                        <input v-model="cabinet.outlet.update_on_value" />
+                        <span class="errorindicator" v-if="invalid_update_on_value">invalid update on value</span>
+                    </dd>
+                    <dt v-if="cabinet.outlet.type == 'snmp'">Update Off Value</dt><dd v-if="cabinet.outlet.type == 'snmp'">
+                        <input v-model="cabinet.outlet.update_off_value" />
+                        <span class="errorindicator" v-if="invalid_update_off_value">invalid update off value</span>
+                    </dd>
+                    <dt v-if="cabinet.outlet.type == 'snmp'">Read Community</dt><dd v-if="cabinet.outlet.type == 'snmp'">
+                        <input v-model="cabinet.outlet.read_community" />
+                    </dd>
+                    <dt v-if="cabinet.outlet.type == 'snmp'">Write Community</dt><dd v-if="cabinet.outlet.type == 'snmp'">
+                        <input v-model="cabinet.outlet.write_community" />
+                    </dd>
+                    <dt v-if="cabinet.outlet.type != 'none'">User Controllable</dt><dd v-if="cabinet.outlet.type != 'none'">
                         <input id="controllable" type="checkbox" v-model="cabinet.controllable" />
                         <label for="controllable">allow users to turn cabinet on or off</label>
                     </dd>
