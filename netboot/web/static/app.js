@@ -259,7 +259,7 @@ Vue.component('game', {
                 <input type="checkbox" v-bind:id="game.file" v-model="game.enabled" />
                 <label v-bind:for="game.file">{{ game.name }}</label>
             </h4>
-            <div class="patches">
+            <div class="patches" v-if="game.enabled">
                 <patch v-for="patch in game.patches" v-bind:game="game" v-bind:patch="patch" v-bind:enabled="game.enabled" v-bind:key="patch"></patch>
                 <span v-if="game.patches.length == 0" class="italics">no patches available for game</span>
             </div>
