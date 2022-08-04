@@ -37,7 +37,7 @@ class CabinetRegionEnum(Enum):
     REGION_AUSTRALIA = "australia"
 
 
-class CabinetPowerState(Enum):
+class CabinetPowerStateEnum(Enum):
     POWER_OFF = "off"
     POWER_ON = "on"
     POWER_DISABLED = "disabled"
@@ -60,6 +60,7 @@ class Cabinet:
         send_timeout: Optional[int] = None,
         time_hack: bool = False,
         enabled: bool = True,
+        controllable: bool = True,
         quiet: bool = False,
     ) -> None:
         self.description: str = description
@@ -76,6 +77,7 @@ class Cabinet:
         self.__state: Tuple[CabinetStateEnum, int] = (CabinetStateEnum.STATE_STARTUP, 0)
         self.__outlet: Optional[OutletInterface] = self.__spawn_outlet_interface(outlet)
         self.__cache: TTLCache[str, object] = TTLCache(maxsize=10, ttl=2)
+        self.__controllable: bool = controllable
 
     def __spawn_outlet_interface(self, outlet: Optional[Dict[str, object]]) -> Optional[OutletInterface]:
         if outlet is None:
@@ -169,26 +171,26 @@ class Cabinet:
             pass
 
     @property
-    def power_state(self) -> CabinetPowerState:
+    def power_state(self) -> CabinetPowerStateEnum:
         try:
-            return cast(CabinetPowerState, self.__cache["power_state"])
+            return cast(CabinetPowerStateEnum, self.__cache["power_state"])
         except KeyError:
             pass
 
-        retval: CabinetPowerState
+        retval: CabinetPowerStateEnum
         if self.__outlet is None:
-            retval = CabinetPowerState.POWER_DISABLED
+            retval = CabinetPowerStateEnum.POWER_DISABLED
         else:
             state = self.__outlet.getState()
             if state is None:
-                retval = CabinetPowerState.POWER_UNKNOWN
+                retval = CabinetPowerStateEnum.POWER_UNKNOWN
             else:
-                retval = CabinetPowerState.POWER_ON if state else CabinetPowerState.POWER_OFF
+                retval = CabinetPowerStateEnum.POWER_ON if state else CabinetPowerStateEnum.POWER_OFF
         self.__cache["power_state"] = retval
         return retval
 
     @power_state.setter
-    def power_state(self, state: CabinetPowerState) -> None:
+    def power_state(self, state: CabinetPowerStateEnum) -> None:
         try:
             del self.__cache["power_state"]
         except KeyError:
@@ -196,18 +198,18 @@ class Cabinet:
 
         if self.__outlet is None:
             return
-        if state == CabinetPowerState.POWER_ON:
+        if state == CabinetPowerStateEnum.POWER_ON:
             self.__outlet.setState(True)
-        elif state == CabinetPowerState.POWER_OFF:
+        elif state == CabinetPowerStateEnum.POWER_OFF:
             self.__outlet.setState(False)
 
     @property
     def controllable(self) -> bool:
-        # TODO: Right now this is just whether there's an outlet configured or not. We also need
-        # to check whether the admin of the server has enabled user control of the cabinet. If not,
-        # we still want to be able to cycle power to kick stuck games, but not allow turning the
-        # cabinet on/off from the panel.
-        return self.__outlet is not None
+        return self.__outlet is not None and self.__controllable
+
+    @controllable.setter
+    def controllable(self, newvalue: bool) -> None:
+        self.__controllable = newvalue
 
     def __print(self, string: str, newline: bool = True) -> None:
         if not self.quiet:
@@ -234,9 +236,10 @@ class Cabinet:
                 self.__state = (CabinetStateEnum.STATE_STARTUP, 0)
                 return
 
-            if self.power_state == CabinetPowerState.POWER_OFF:
-                self.__print(f"Cabinet {self.ip} has been turned off.")
-                self.__state = (CabinetStateEnum.STATE_STARTUP, 0)
+            if self.power_state == CabinetPowerStateEnum.POWER_OFF:
+                if current_state != CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON:
+                    self.__print(f"Cabinet {self.ip} has been turned off.")
+                    self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
                 return
 
             # Wait for cabinet to power on state, transition to sending game
@@ -362,7 +365,7 @@ class Cabinet:
         as an integer, bounded between 0-100.
         """
         with self.__lock:
-            if self.power_state == CabinetPowerState.POWER_OFF:
+            if self.power_state == CabinetPowerStateEnum.POWER_OFF:
                 return (CabinetStateEnum.STATE_TURNED_OFF, 0)
             elif self.__enabled:
                 return self.__state
@@ -442,6 +445,7 @@ class CabinetManager:
                 target=NetDimmTargetEnum(str(cab['target'])) if 'target' in cab else None,
                 version=NetDimmVersionEnum(str(cab['version'])) if 'version' in cab else None,
                 enabled=(True if 'disabled' not in cab else (not cab['disabled'])),
+                controllable=(True if 'controllable' not in cab else bool(cab['controllable'])),
                 time_hack=(False if 'time_hack' not in cab else bool(cab['time_hack'])),
                 send_timeout=(None if 'send_timeout' not in cab else int(cab['send_timeout'])),
             )
@@ -479,6 +483,7 @@ class CabinetManager:
                 # None for a ROM, serialize it as an empty list.
                 'settings': {rom: [x for x in (settings or [])] for (rom, settings) in cab.settings.items()},
                 'srams': cab.srams,
+                'controllable': cab.controllable,
             }
             if not cab.enabled:
                 data[cab.ip]['disabled'] = True
@@ -538,6 +543,7 @@ class CabinetManager:
         version: Union[Optional[NetDimmVersionEnum], EmptyObject] = empty,
         send_timeout: Union[Optional[int], EmptyObject] = empty,
         time_hack: Optional[bool] = None,
+        controllable: Optional[bool] = None,
         enabled: Optional[bool] = None,
     ) -> None:
         with self.__lock:
@@ -567,6 +573,8 @@ class CabinetManager:
                 existing_cab.enabled = enabled
             if time_hack is not None:
                 existing_cab.time_hack = time_hack
+            if controllable is not None:
+                existing_cab.controllable = controllable
             if not isinstance(send_timeout, EmptyObject):
                 existing_cab.send_timeout = send_timeout
 

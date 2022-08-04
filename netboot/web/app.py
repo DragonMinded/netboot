@@ -9,7 +9,7 @@ from flask import Flask, Response, request, render_template, make_response, json
 from werkzeug.routing import PathConverter  # type: ignore
 from netdimm import NetDimm, NetDimmVersionEnum, NetDimmTargetEnum
 from naomi import NaomiRomRegionEnum
-from netboot import Cabinet, CabinetRegionEnum, CabinetManager, DirectoryManager, PatchManager, SRAMManager, SettingsManager
+from netboot import Cabinet, CabinetRegionEnum, CabinetPowerStateEnum, CabinetManager, DirectoryManager, PatchManager, SRAMManager, SettingsManager
 from outlet import ALL_OUTLET_CLASSES
 
 
@@ -467,17 +467,18 @@ def updateoutlet(ip: str) -> Dict[str, Any]:
     # into it, but that couples the outlet implementations to the frontend.
     # Sigh, all software sucks, lmao.
     config: Optional[Dict[str, object]] = None
-    if request.json.get('type', 'none') == 'none':
+    outlet = request.json.get('outlet', {})
+    if outlet.get('type', 'none') == 'none':
         # This is a disabled outlet.
         config = None
-    elif request.json.get('type') == 'snmp':
+    elif outlet.get('type') == 'snmp':
         # TODO: SNMP configuration
         config = None
-    elif request.json.get('type') == 'ap7900':
+    elif outlet.get('type') == 'ap7900':
         # AP7900 configuration.
         try:
-            host = str(request.json['host']) if 'host' in request.json else None
-            outlet = int(request.json['outlet']) if 'outlet' in request.json else None
+            host = str(outlet['host']) if 'host' in outlet else None
+            outlet = int(outlet['outlet']) if 'outlet' in outlet else None
         except (TypeError, ValueError):
             host = None
             outlet = None
@@ -494,8 +495,27 @@ def updateoutlet(ip: str) -> Dict[str, Any]:
     cabman.update_cabinet(
         ip,
         outlet=config,
+        controllable=request.json['controllable'],
     )
     serialize_app(app)
+    return cabinet_to_dict(cabman.cabinet(ip), dirman)
+
+
+@app.route('/cabinets/<ip>/power/<state>', methods=['POST'])
+@jsonify
+def updatepower(ip: str, state: str) -> Dict[str, Any]:
+    if request.json is None:
+        raise Exception("Expected JSON data in request!")
+    if state not in {"on", "off"}:
+        raise Exception("Expected valid state in request!")
+
+    cabman = app.config['CabinetManager']
+    dirman = app.config['DirectoryManager']
+    cabinet = cabman.cabinet(ip)
+    if not cabinet.controllable:
+        raise Exception("Cabinet control has been disabled!")
+
+    cabinet.power_state = CabinetPowerStateEnum.POWER_ON if state == "on" else CabinetPowerStateEnum.POWER_OFF
     return cabinet_to_dict(cabman.cabinet(ip), dirman)
 
 

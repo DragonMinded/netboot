@@ -73,6 +73,20 @@ Vue.component('cabinet', {
                 }
             });
         },
+        poweron: function() {
+            axios.post('/cabinets/' + this.cabinet.ip + '/power/on', {}).then(result => {
+                if (!result.data.error) {
+                    this.cabinet = result.data;
+                }
+            });
+        },
+        poweroff: function() {
+            axios.post('/cabinets/' + this.cabinet.ip + '/power/off', {}).then(result => {
+                if (!result.data.error) {
+                    this.cabinet = result.data;
+                }
+            });
+        },
         cancel: function() {
             this.selecting = false;
             eventBus.$emit('selectedNewGame', true);
@@ -105,6 +119,8 @@ Vue.component('cabinet', {
                 <dt>Status</dt><dd><state v-bind:status="cabinet.status" v-bind:progress="cabinet.progress"></state></dd>
             </dl>
             <div class="configure">
+                <button v-if="cabinet.controllable && cabinet.power_state == 'off'" v-on:click="poweron">Turn Cabinet On</button>
+                <button v-if="cabinet.controllable && cabinet.power_state == 'on'" v-on:click="poweroff">Turn Cabinet Off</button>
                 <a class="button" v-if="admin" v-bind:href="'config/cabinet/' + cabinet.ip">Configure Cabinet</a>
             </div>
         </div>
@@ -523,9 +539,10 @@ Vue.component('outletconfig', {
             if (true) {
                 this.saving = true;
                 this.saved = false;
-                axios.post('/cabinets/' + this.cabinet.ip + '/outlet', this.cabinet.outlet).then(result => {
+                axios.post('/cabinets/' + this.cabinet.ip + '/outlet', {outlet: this.cabinet.outlet, controllable: this.cabinet.controllable}).then(result => {
                     if (!result.data.error) {
                         this.cabinet.outlet = result.data.outlet;
+                        this.cabinet.controllable = result.data.controllable;
                         this.saved = true;
                         this.saving = false;
                     }
@@ -556,6 +573,10 @@ Vue.component('outletconfig', {
                     <dt v-if="cabinet.outlet.type == 'ap7900'">Outlet Number</dt><dd v-if="cabinet.outlet.type == 'ap7900'">
                         <input v-model="cabinet.outlet.outlet" />
                         <span class="errorindicator" v-if="invalid_outlet">invalid outlet</span>
+                    </dd>
+                    <dt v-if="cabinet.outlet.type != 'none'">User-Controllable</dt><dd v-if="cabinet.outlet.type != 'none'">
+                        <input id="controllable" type="checkbox" v-model="cabinet.controllable" />
+                        <label for="controllable">allow users to turn cabinet on or off</label>
                     </dd>
                 </dl>
                 <div class="update">
