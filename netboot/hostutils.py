@@ -120,7 +120,8 @@ class Host:
         self.target: NetDimmTargetEnum = target or NetDimmTargetEnum.TARGET_NAOMI
         self.version: NetDimmVersionEnum = version or NetDimmVersionEnum.VERSION_4_01
         self.ip: str = ip
-        self.alive: bool = False
+        self.__alive: bool = False
+        self.__poll_reset: bool = False
         self.quiet: bool = quiet
         self.time_hack: bool = time_hack
         self.send_timeout: Optional[int] = send_timeout
@@ -149,6 +150,12 @@ class Host:
         while True:
             # Dont bother if we're actively sending
             if self.status != HostStatusEnum.STATUS_TRANSFERRING:
+                # Reset polling counts after explicit power down.
+                if self.__poll_reset:
+                    self.__poll_reset = False
+                    success_count = 0
+                    failure_count = 0
+
                 with open(os.devnull, 'w') as DEVNULL:
                     try:
                         if on_windows:
@@ -166,9 +173,9 @@ class Host:
                     failure_count = 0
                     if success_count >= self.DEBOUNCE_SECONDS:
                         with self.__lock:
-                            if self.alive != alive:
+                            if self.__alive != alive:
                                 self.__print(f"Host {self.ip} started responding to ping, marking up.")
-                            self.alive = True
+                            self.__alive = True
 
                     # Perform the time hack if so requested.
                     current = time.time()
@@ -187,9 +194,9 @@ class Host:
                     failure_count += 1
                     if failure_count >= self.DEBOUNCE_SECONDS:
                         with self.__lock:
-                            if self.alive != alive:
+                            if self.__alive != alive:
                                 self.__print(f"Host {self.ip} stopped responding to ping, marking down.")
-                            self.alive = False
+                            self.__alive = False
 
             time.sleep(2 if success_count >= self.DEBOUNCE_SECONDS else 1)
 
@@ -216,6 +223,21 @@ class Host:
         """
         with self.__lock:
             self.__update_progress()
+
+    @property
+    def alive(self) -> bool:
+        return self.__alive
+
+    @alive.setter
+    def alive(self, val: bool) -> None:
+        if not val:
+            # Kill any active transfers, ensure that poll thread is reset.
+            self.__poll_reset = True
+            self.__alive = False
+            if self.__proc is not None:
+                self.__proc.terminate()
+                self.__proc.join()
+                self.__proc = None
 
     @property
     def status(self) -> HostStatusEnum:

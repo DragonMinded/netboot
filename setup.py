@@ -2,7 +2,7 @@ import os
 from setuptools import setup
 
 
-VERSION = "0.5.0"
+VERSION = "0.5.1"
 
 
 if 'FULL_INSTALLATION' in os.environ:

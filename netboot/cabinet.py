@@ -241,6 +241,7 @@ class Cabinet:
             self.__outlet.setState(True)
         elif state == CabinetPowerStateEnum.POWER_OFF:
             self.__outlet.setState(False)
+            self.__host.alive = False
 
     @property
     def controllable(self) -> bool:
