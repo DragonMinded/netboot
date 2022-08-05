@@ -52,6 +52,10 @@ def cabinet_to_dict(cab: Cabinet, dirmanager: DirectoryManager) -> Dict[str, Any
         outlet['read_community'] = "public"
     if 'write_community' not in outlet:
         outlet['write_community'] = "private"
+    if 'username' not in outlet:
+        outlet['username'] = "admin"
+    if 'password' not in outlet:
+        outlet['password'] = "admin"
 
     return {
         'ip': cab.ip,
@@ -474,22 +478,22 @@ def updateoutlet(ip: str) -> Dict[str, Any]:
     # into it, but that couples the outlet implementations to the frontend.
     # Sigh, all software sucks, lmao.
     config: Optional[Dict[str, object]] = None
-    outlet = request.json.get('outlet', {})
-    if outlet.get('type', 'none') == 'none':
+    data = request.json.get('outlet', {})
+    if data.get('type', 'none') == 'none':
         # This is a disabled outlet.
         config = None
-    elif outlet.get('type') == 'snmp':
+    elif data.get('type') == 'snmp':
         # SNMP configuration
         try:
-            host = str(outlet['host']) if 'host' in outlet else None
-            query_oid = str(outlet['query_oid']) if 'query_oid' in outlet else None
-            query_on_value = int(outlet['query_on_value']) if 'query_on_value' in outlet else None
-            query_off_value = int(outlet['query_off_value']) if 'query_off_value' in outlet else None
-            update_oid = str(outlet['update_oid']) if 'update_oid' in outlet else None
-            update_on_value = int(outlet['update_on_value']) if 'update_on_value' in outlet else None
-            update_off_value = int(outlet['update_off_value']) if 'update_off_value' in outlet else None
-            read_community = str(outlet['read_community']) if 'read_community' in outlet else None
-            write_community = str(outlet['write_community']) if 'write_community' in outlet else None
+            host = str(data['host']) if 'host' in data else None
+            query_oid = str(data['query_oid']) if 'query_oid' in data else None
+            query_on_value = int(data['query_on_value']) if 'query_on_value' in data else None
+            query_off_value = int(data['query_off_value']) if 'query_off_value' in data else None
+            update_oid = str(data['update_oid']) if 'update_oid' in data else None
+            update_on_value = int(data['update_on_value']) if 'update_on_value' in data else None
+            update_off_value = int(data['update_off_value']) if 'update_off_value' in data else None
+            read_community = str(data['read_community']) if 'read_community' in data else None
+            write_community = str(data['write_community']) if 'write_community' in data else None
         except (TypeError, ValueError):
             host = None
             query_oid = None
@@ -524,20 +528,47 @@ def updateoutlet(ip: str) -> Dict[str, Any]:
                 'read_community': read_community,
                 'write_community': write_community,
             }
-    elif outlet.get('type') == 'ap7900':
+    elif data.get('type') == 'ap7900':
         # AP7900 configuration.
         try:
-            host = str(outlet['host']) if 'host' in outlet else None
-            outlet = int(outlet['outlet']) if 'outlet' in outlet else None
+            host = str(data['host']) if 'host' in data else None
+            outlet = int(data['outlet']) if 'outlet' in data else None
+            read_community = str(data['read_community']) if 'read_community' in data else None
+            write_community = str(data['write_community']) if 'write_community' in data else None
         except (TypeError, ValueError):
             host = None
             outlet = None
+            read_community = None
+            write_community = None
 
-        if host is not None and outlet is not None:
+        if host is not None and outlet is not None and read_community is not None and write_community is not None:
             config = {
                 'type': 'ap7900',
                 'host': host,
                 'outlet': outlet,
+                'read_community': read_community,
+                'write_community': write_community,
+            }
+    elif data.get('type') == 'np-02b':
+        # NP-02B configuration.
+        try:
+            host = str(data['host']) if 'host' in data else None
+            outlet = int(data['outlet']) if 'outlet' in data else None
+            username = str(data['username']) if 'username' in data else None
+            password = str(data['password']) if 'password' in data else None
+        except (TypeError, ValueError) as e:
+            host = None
+            outlet = None
+            username = None
+            password = None
+
+        if host is not None and outlet is not None and username is not None and password is not None:
+            config = {
+                'type': 'np-02b',
+                'host': host,
+                'outlet': outlet,
+                'username': username,
+                'password': password,
             }
 
     cabman = app.config['CabinetManager']
@@ -545,7 +576,7 @@ def updateoutlet(ip: str) -> Dict[str, Any]:
     cabman.update_cabinet(
         ip,
         outlet=config,
-        controllable=request.json['controllable'],
+        controllable=bool(request.json['controllable']),
     )
     serialize_app(app)
     return cabinet_to_dict(cabman.cabinet(ip), dirman)

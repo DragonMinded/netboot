@@ -597,6 +597,14 @@ Vue.component('outletconfig', {
                         this.invalid_update_off_value = true;
                     }
                 }
+
+                if (cabinet.outlet.type == 'np-02b') {
+                    if (/^[1-2]$/.test(this.cabinet.outlet.outlet)) {
+                        this.invalid_outlet = false;
+                    } else {
+                        this.invalid_outlet = true;
+                    }
+                }
             }
 
             if (
@@ -637,7 +645,8 @@ Vue.component('outletconfig', {
                         <input v-model="cabinet.outlet.host" />
                         <span class="errorindicator" v-if="invalid_ip">invalid IP address</span>
                     </dd>
-                    <dt v-if="cabinet.outlet.type == 'ap7900'">Outlet Number</dt><dd v-if="cabinet.outlet.type == 'ap7900'">
+                    <dt v-if="cabinet.outlet.type == 'ap7900' || cabinet.outlet.type =='np-02b'">Outlet Number</dt>
+                    <dd v-if="cabinet.outlet.type == 'ap7900' || cabinet.outlet.type =='np-02b'">
                         <input v-model="cabinet.outlet.outlet" />
                         <span class="errorindicator" v-if="invalid_outlet">invalid outlet</span>
                     </dd>
@@ -665,11 +674,21 @@ Vue.component('outletconfig', {
                         <input v-model="cabinet.outlet.update_off_value" />
                         <span class="errorindicator" v-if="invalid_update_off_value">invalid update off value</span>
                     </dd>
-                    <dt v-if="cabinet.outlet.type == 'snmp'">Read Community</dt><dd v-if="cabinet.outlet.type == 'snmp'">
+                    <dt v-if="cabinet.outlet.type == 'snmp' || cabinet.outlet.type == 'ap7900'">Read Community</dt>
+                    <dd v-if="cabinet.outlet.type == 'snmp' || cabinet.outlet.type == 'ap7900'">
                         <input v-model="cabinet.outlet.read_community" />
                     </dd>
-                    <dt v-if="cabinet.outlet.type == 'snmp'">Write Community</dt><dd v-if="cabinet.outlet.type == 'snmp'">
+                    <dt v-if="cabinet.outlet.type == 'snmp' || cabinet.outlet.type == 'ap7900'">Write Community</dt>
+                    <dd v-if="cabinet.outlet.type == 'snmp' || cabinet.outlet.type == 'ap7900'">
                         <input v-model="cabinet.outlet.write_community" />
+                    </dd>
+                    <dt v-if="cabinet.outlet.type == 'np-02b'">Username</dt>
+                    <dd v-if="cabinet.outlet.type == 'np-02b'">
+                        <input v-model="cabinet.outlet.username" />
+                    </dd>
+                    <dt v-if="cabinet.outlet.type == 'np-02b'">Password</dt>
+                    <dd v-if="cabinet.outlet.type == 'np-02b'">
+                        <input v-model="cabinet.outlet.password" />
                     </dd>
                     <dt v-if="cabinet.outlet.type != 'none'">User Controllable</dt><dd v-if="cabinet.outlet.type != 'none'">
                         <input id="controllable" type="checkbox" v-model="cabinet.controllable" />

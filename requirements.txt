@@ -11,3 +11,4 @@ dragoncurses
 pysnmplib
 cachetools
 types-cachetools
+types-requests
