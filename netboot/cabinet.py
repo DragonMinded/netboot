@@ -116,18 +116,21 @@ class Cabinet:
                     return int(data)
                 except (TypeError, ValueError):
                     return None
-        except FileNotFoundError:
+        except (FileNotFoundError, PermissionError):
             return None
 
     def __set_reboot_time(self, time: Optional[int]) -> None:
         if time is None:
             try:
                 os.remove(self.__statefile)
-            except FileNotFoundError:
-                return None
+            except (FileNotFoundError, PermissionError):
+                return
         else:
-            with open(self.__statefile, "wb") as fp:
-                fp.write(str(time).encode('utf-8'))
+            try:
+                with open(self.__statefile, "wb") as fp:
+                    fp.write(str(time).encode('utf-8'))
+            except (FileNotFoundError, PermissionError):
+                return
 
     def __repr__(self) -> str:
         with self.__lock:
@@ -280,7 +283,7 @@ class Cabinet:
                     # We need to check to see if we're recovering from a reboot sequence.
                     curtime = int(time.time())
                     waketime = self.__get_reboot_time()
-                    if waketime is not None and waketime >= curtime:
+                    if waketime is not None and curtime >= waketime:
                         # Time to wake up!
                         self.power_state = CabinetPowerStateEnum.POWER_ON
                         self.__set_reboot_time(None)
