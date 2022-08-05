@@ -341,7 +341,9 @@ class Cabinet:
             # passes.
             if current_state == CabinetStateEnum.STATE_SEND_CURRENT_GAME:
                 if self.__host.status == HostStatusEnum.STATUS_INACTIVE:
-                    raise Exception("State error, shouldn't be possible!")
+                    # Got interrupted mid-transfer by a power cycle that was user-requested.
+                    self.__print(f"Cabinet {self.ip} failed to send game, waiting for power on.")
+                    self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
                 elif self.__host.status == HostStatusEnum.STATUS_TRANSFERRING:
                     current, total = self.__host.progress
                     self.__state = (CabinetStateEnum.STATE_SEND_CURRENT_GAME, int(float(current * 100) / float(total)))
