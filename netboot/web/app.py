@@ -556,7 +556,7 @@ def updateoutlet(ip: str) -> Dict[str, Any]:
             outlet = int(data['outlet']) if 'outlet' in data else None
             username = str(data['username']) if 'username' in data else None
             password = str(data['password']) if 'password' in data else None
-        except (TypeError, ValueError) as e:
+        except (TypeError, ValueError):
             host = None
             outlet = None
             username = None
@@ -582,18 +582,29 @@ def updateoutlet(ip: str) -> Dict[str, Any]:
     return cabinet_to_dict(cabman.cabinet(ip), dirman)
 
 
+@app.route('/cabinets/<ip>/power')
+@jsonify
+def fetchpower(ip: str) -> Dict[str, Any]:
+    cabman = app.config['CabinetManager']
+    cabinet = cabman.cabinet(ip)
+    return {'power_state': cabinet.power_state.value}
+
+
 @app.route('/cabinets/<ip>/power/<state>', methods=['POST'])
 @jsonify
 def updatepower(ip: str, state: str) -> Dict[str, Any]:
-    if request.json is None:
-        raise Exception("Expected JSON data in request!")
+    admin_override = False
+    if request.json is not None:
+        if 'admin' in request.json and request.json['admin']:
+            admin_override = True
+
     if state not in {"on", "off"}:
         raise Exception("Expected valid state in request!")
 
     cabman = app.config['CabinetManager']
     dirman = app.config['DirectoryManager']
     cabinet = cabman.cabinet(ip)
-    if not cabinet.controllable:
+    if not admin_override and not cabinet.controllable:
         raise Exception("Cabinet control has been disabled!")
 
     cabinet.power_state = CabinetPowerStateEnum.POWER_ON if state == "on" else CabinetPowerStateEnum.POWER_OFF

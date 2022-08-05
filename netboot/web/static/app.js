@@ -468,7 +468,6 @@ Vue.component('cabinetconfig', {
                     <button v-on:click="query" :disabled="info.status == 'turned_off' || info.status == 'send_game' || info.status == 'startup' || info.status == 'wait_power_on'">Query Firmware Information</button>
                     <span class="queryindicator" v-if="querying"><img src="/static/loading-16.gif" width=16 height=16 /> querying...</span>
                 </div>
-                <!-- TODO: Outlet information here, including turning on/off outlet -->
             </div>
         </div>
     `,
@@ -539,6 +538,27 @@ Vue.component('outletconfig', {
     methods: {
         changed: function() {
             this.saved = false;
+        },
+        poweron: function() {
+            axios.post('/cabinets/' + this.cabinet.ip + '/power/on', {'admin': true}).then(result => {
+                if (!result.data.error) {
+                    this.cabinet.power_state = result.data.power_state;
+                }
+            });
+        },
+        poweroff: function() {
+            axios.post('/cabinets/' + this.cabinet.ip + '/power/off', {'admin': true}).then(result => {
+                if (!result.data.error) {
+                    this.cabinet.power_state = result.data.power_state;
+                }
+            });
+        },
+        refresh: function() {
+            axios.get('/cabinets/' + this.cabinet.ip + '/power').then(result => {
+                if (!result.data.error) {
+                    this.cabinet.power_state = result.data.power_state;
+                }
+            });
         },
         save: function() {
             this.invalid_ip = false;
@@ -625,6 +645,11 @@ Vue.component('outletconfig', {
             }
         },
     },
+    mounted: function() {
+        setInterval(function () {
+            this.refresh();
+        }.bind(this), 1000);
+    },
     template: `
         <div>
             <div class='outlet'>
@@ -700,6 +725,24 @@ Vue.component('outletconfig', {
                     <span class="savingindicator" v-if="saving"><img src="/static/loading-16.gif" width=16 height=16 /> saving...</span>
                     <span class="successindicator" v-if="saved">&check; saved</span>
                 </div>
+            </div>
+            <div class='outlet' v-if="cabinet.power_state != 'disabled'">
+                <h3>Smart Outlet Information</h3>
+                <div class="information top">
+                    Status information about the smart outlet configured above is shown here. If the outlet was detected
+                    properly, then the current state will be displayed alongside the ability to turn the outlet on or
+                    off. If the outlet was not detected, then the ability to turn the outlet on or off will be disabled.
+                </div>
+                <dl>
+                    <dt>Outlet Status</dt><dd>
+                        <span v-if="cabinet.power_state == 'disabled'">disabled</span>
+                        <span v-if="cabinet.power_state == 'unknown'">misconfigured or not found</span>
+                        <span v-if="cabinet.power_state == 'on'">on</span>
+                        <span v-if="cabinet.power_state == 'off'">off</span>
+                    </dd>
+                </dl>
+                <button v-if="cabinet.power_state == 'off'" v-on:click="poweron">Turn Cabinet On</button>
+                <button v-if="cabinet.power_state == 'on'" v-on:click="poweroff">Turn Cabinet Off</button>
             </div>
         </div>
     `,

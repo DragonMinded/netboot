@@ -29,7 +29,11 @@ class NP02BOutlet(OutletInterface):
         }
 
     def getState(self) -> Optional[bool]:
-        response = requests.get(f"http://{self.username}:{self.password}@{self.host}/cmd.cgi?$A5").content.decode('utf-8')
+        try:
+            response = requests.get(f"http://{self.username}:{self.password}@{self.host}/cmd.cgi?$A5", timeout=1.0).content.decode('utf-8')
+        except (requests.exceptions.ConnectTimeout, requests.exceptions.ConnectionError):
+            return None
+
         if '$' in response:
             return None
         if self.outlet == 1:
@@ -39,4 +43,7 @@ class NP02BOutlet(OutletInterface):
         return None
 
     def setState(self, state: bool) -> None:
-        requests.get(f"http://{self.username}:{self.password}@{self.host}/cmd.cgi?$A3 {self.outlet} {'1' if state else '0'}")
+        try:
+            requests.get(f"http://{self.username}:{self.password}@{self.host}/cmd.cgi?$A3 {self.outlet} {'1' if state else '0'}", timeout=1.0)
+        except (requests.exceptions.ConnectTimeout, requests.exceptions.ConnectionError):
+            pass
