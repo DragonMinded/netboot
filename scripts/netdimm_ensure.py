@@ -158,6 +158,8 @@ def main() -> int:
             print("starting up...        \r", end="")
         elif status == CabinetStateEnum.STATE_DISABLED:
             print("cabinet disabled...   \r", end="")
+        elif status == CabinetStateEnum.STATE_POWER_CYCLE:
+            print("cabinet rebooting...  \r", end="")
         elif status == CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON:
             print("waiting for cabinet...\r", end="")
         elif status == CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_OFF:

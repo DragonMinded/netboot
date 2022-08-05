@@ -1,5 +1,6 @@
 import ipaddress
 import os.path
+import tempfile
 import threading
 import time
 import yaml
@@ -25,6 +26,7 @@ class CabinetStateEnum(Enum):
     STATE_SEND_CURRENT_GAME = "send_game"
     STATE_CHECK_CURRENT_GAME = "check_game"
     STATE_WAIT_FOR_CABINET_POWER_OFF = "wait_power_off"
+    STATE_POWER_CYCLE = "power_cycle"
     STATE_DISABLED = "disabled"
 
 
@@ -45,6 +47,8 @@ class CabinetPowerStateEnum(Enum):
 
 
 class Cabinet:
+    REBOOT_LENGTH: int = 3
+
     def __init__(
         self,
         ip: str,
@@ -61,6 +65,7 @@ class Cabinet:
         time_hack: bool = False,
         enabled: bool = True,
         controllable: bool = True,
+        power_cycle: bool = False,
         quiet: bool = False,
     ) -> None:
         self.description: str = description
@@ -69,6 +74,7 @@ class Cabinet:
         self.settings: Dict[str, Optional[bytes]] = {rom: settings[rom] for rom in settings}
         self.srams: Dict[str, Optional[str]] = {rom: srams[rom] for rom in srams}
         self.quiet = quiet
+        self.power_cycle = power_cycle
         self.__enabled = enabled
         self.__host: Host = Host(ip, target=target, version=version, send_timeout=send_timeout, time_hack=time_hack, quiet=self.quiet)
         self.__lock: threading.Lock = threading.Lock()
@@ -78,6 +84,7 @@ class Cabinet:
         self.__outlet: Optional[OutletInterface] = self.__spawn_outlet_interface(outlet)
         self.__cache: TTLCache[str, object] = TTLCache(maxsize=10, ttl=2)
         self.__controllable: bool = controllable
+        self.__statefile: str = os.path.join(tempfile.gettempdir(), f"{ip}.reboot")
 
     def __spawn_outlet_interface(self, outlet: Optional[Dict[str, object]]) -> Optional[OutletInterface]:
         if outlet is None:
@@ -92,6 +99,35 @@ class Cabinet:
                 except TypeError:
                     return None
         return None
+
+    def __get_reboot_time(self) -> Optional[int]:
+        # We store the reboot time on the filesystem instead of in memory just in case
+        # we get rebooted or lose power mid-cycle. If we didn't store that, we would have
+        # no way of knowing the difference between a cabinet that was turned off on purpose
+        # and one that was turned off during a power cycle sequence that was interrupted.
+        # That would mean that if cabinet user control was disabled and somebody sent a game
+        # and we crashed or something, then the cabinet has the chance of just turning off.
+        if not os.path.isfile(self.__statefile):
+            return None
+        try:
+            with open(self.__statefile, "rb") as fp:
+                data = fp.read().decode('utf-8')
+                try:
+                    return int(data)
+                except (TypeError, ValueError):
+                    return None
+        except FileNotFoundError:
+            return None
+
+    def __set_reboot_time(self, time: Optional[int]) -> None:
+        if time is None:
+            try:
+                os.remove(self.__statefile)
+            except FileNotFoundError:
+                return None
+        else:
+            with open(self.__statefile, "wb") as fp:
+                fp.write(str(time).encode('utf-8'))
 
     def __repr__(self) -> str:
         with self.__lock:
@@ -240,6 +276,15 @@ class Cabinet:
                 if current_state != CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON:
                     self.__print(f"Cabinet {self.ip} has been turned off.")
                     self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
+                elif self.power_cycle:
+                    # We need to check to see if we're recovering from a reboot sequence.
+                    curtime = int(time.time())
+                    waketime = self.__get_reboot_time()
+                    if waketime is not None and waketime >= curtime:
+                        # Time to wake up!
+                        self.power_state = CabinetPowerStateEnum.POWER_ON
+                        self.__set_reboot_time(None)
+                        self.__print(f"Cabinet {self.ip} has finished power cycling, waiting for power on.")
                 return
 
             # Wait for cabinet to power on state, transition to sending game
@@ -315,7 +360,16 @@ class Cabinet:
                     self.__print(f"Cabinet {self.ip} turned off, waiting for power on.")
                     self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
                 elif self.__current_filename != self.__new_filename:
-                    self.__print(f"Cabinet {self.ip} changed game to {self.__new_filename}, waiting for power on.")
+                    if self.power_cycle:
+                        self.__print(f"Cabinet {self.ip} changed game to {self.__new_filename}, waiting for power cycle.")
+                        self.__host.wipe()
+
+                        curtime = int(time.time())
+                        self.__set_reboot_time(curtime + self.REBOOT_LENGTH)
+                        self.power_state = CabinetPowerStateEnum.POWER_OFF
+                    else:
+                        self.__print(f"Cabinet {self.ip} changed game to {self.__new_filename}, waiting for power on.")
+
                     self.__current_filename = self.__new_filename
                     self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
                 else:
@@ -351,7 +405,15 @@ class Cabinet:
                     self.__print(f"Cabinet {self.ip} turned off, waiting for power on.")
                     self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
                 elif self.__current_filename != self.__new_filename:
-                    self.__print(f"Cabinet {self.ip} changed game to {self.__new_filename}, waiting for power on.")
+                    if self.power_cycle:
+                        self.__print(f"Cabinet {self.ip} changed game to {self.__new_filename}, waiting for power cycle.")
+                        self.__host.wipe()
+
+                        curtime = int(time.time())
+                        self.__set_reboot_time(curtime + self.REBOOT_LENGTH)
+                        self.power_state = CabinetPowerStateEnum.POWER_OFF
+                    else:
+                        self.__print(f"Cabinet {self.ip} changed game to {self.__new_filename}, waiting for power on.")
                     self.__current_filename = self.__new_filename
                     self.__state = (CabinetStateEnum.STATE_WAIT_FOR_CABINET_POWER_ON, 0)
                 return
@@ -366,7 +428,11 @@ class Cabinet:
         """
         with self.__lock:
             if self.power_state == CabinetPowerStateEnum.POWER_OFF:
-                return (CabinetStateEnum.STATE_TURNED_OFF, 0)
+                waketime = self.__get_reboot_time()
+                if waketime is None:
+                    return (CabinetStateEnum.STATE_TURNED_OFF, 0)
+                else:
+                    return (CabinetStateEnum.STATE_POWER_CYCLE, 0)
             elif self.__enabled:
                 return self.__state
             else:
@@ -446,6 +512,7 @@ class CabinetManager:
                 version=NetDimmVersionEnum(str(cab['version'])) if 'version' in cab else None,
                 enabled=(True if 'disabled' not in cab else (not cab['disabled'])),
                 controllable=(True if 'controllable' not in cab else bool(cab['controllable'])),
+                power_cycle=(False if 'power_cycle' not in cab else bool(cab['power_cycle'])),
                 time_hack=(False if 'time_hack' not in cab else bool(cab['time_hack'])),
                 send_timeout=(None if 'send_timeout' not in cab else int(cab['send_timeout'])),
             )
@@ -484,6 +551,7 @@ class CabinetManager:
                 'settings': {rom: [x for x in (settings or [])] for (rom, settings) in cab.settings.items()},
                 'srams': cab.srams,
                 'controllable': cab.controllable,
+                'power_cycle': cab.power_cycle,
             }
             if not cab.enabled:
                 data[cab.ip]['disabled'] = True
@@ -544,6 +612,7 @@ class CabinetManager:
         send_timeout: Union[Optional[int], EmptyObject] = empty,
         time_hack: Optional[bool] = None,
         controllable: Optional[bool] = None,
+        power_cycle: Optional[bool] = None,
         enabled: Optional[bool] = None,
     ) -> None:
         with self.__lock:
@@ -575,6 +644,8 @@ class CabinetManager:
                 existing_cab.time_hack = time_hack
             if controllable is not None:
                 existing_cab.controllable = controllable
+            if power_cycle is not None:
+                existing_cab.power_cycle = power_cycle
             if not isinstance(send_timeout, EmptyObject):
                 existing_cab.send_timeout = send_timeout
 

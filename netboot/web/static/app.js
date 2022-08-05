@@ -42,6 +42,7 @@ Vue.component('state', {
             <span v-if="status == 'startup' || status == 'wait_power_on'">waiting for cabinet</span>
             <span v-if="status == 'disabled'">disabled</span>
             <span v-if="status == 'wait_power_off'">running game</span>
+            <span v-if="status == 'power_cycle'">rebooting cabinet</span>
             <span v-if="status == 'check_game'">verifying game crc</span>
             <span v-if="status == 'send_game'">sending game ({{ progress }}% complete)</span>
         </span>
@@ -119,8 +120,8 @@ Vue.component('cabinet', {
                 <dt>Status</dt><dd><state v-bind:status="cabinet.status" v-bind:progress="cabinet.progress"></state></dd>
             </dl>
             <div class="configure">
-                <button v-if="cabinet.controllable && cabinet.power_state == 'off'" v-on:click="poweron">Turn Cabinet On</button>
-                <button v-if="cabinet.controllable && cabinet.power_state == 'on'" v-on:click="poweroff">Turn Cabinet Off</button>
+                <button v-if="cabinet.controllable && cabinet.power_state == 'off'" :disabled="cabinet.status == 'power_cycle'" v-on:click="poweron">Turn Cabinet On</button>
+                <button v-if="cabinet.controllable && cabinet.power_state == 'on'" :disabled="cabinet.status == 'power_cycle'" v-on:click="poweroff">Turn Cabinet Off</button>
                 <a class="button" v-if="admin" v-bind:href="'config/cabinet/' + cabinet.ip">Configure Cabinet</a>
             </div>
         </div>
@@ -465,7 +466,7 @@ Vue.component('cabinetconfig', {
                     <dd v-if="info.available">{{ info.memavail }} MB</dd>
                 </dl>
                 <div class="query">
-                    <button v-on:click="query" :disabled="info.status == 'turned_off' || info.status == 'send_game' || info.status == 'startup' || info.status == 'wait_power_on'">Query Firmware Information</button>
+                    <button v-on:click="query" :disabled="info.status == 'turned_off' || info.status == 'power_cycle' || info.status == 'send_game' || info.status == 'startup' || info.status == 'wait_power_on'">Query Firmware Information</button>
                     <span class="queryindicator" v-if="querying"><img src="/static/loading-16.gif" width=16 height=16 /> querying...</span>
                 </div>
             </div>
@@ -634,10 +635,14 @@ Vue.component('outletconfig', {
             ) {
                 this.saving = true;
                 this.saved = false;
-                axios.post('/cabinets/' + this.cabinet.ip + '/outlet', {outlet: this.cabinet.outlet, controllable: this.cabinet.controllable}).then(result => {
+                axios.post(
+                    '/cabinets/' + this.cabinet.ip + '/outlet',
+                    {outlet: this.cabinet.outlet, controllable: this.cabinet.controllable, power_cycle: this.cabinet.power_cycle}
+                ).then(result => {
                     if (!result.data.error) {
                         this.cabinet.outlet = result.data.outlet;
                         this.cabinet.controllable = result.data.controllable;
+                        this.cabinet.power_cycle = result.data.power_cycle;
                         this.saved = true;
                         this.saving = false;
                     }
@@ -718,6 +723,10 @@ Vue.component('outletconfig', {
                     <dt v-if="cabinet.outlet.type != 'none'">User Controllable</dt><dd v-if="cabinet.outlet.type != 'none'">
                         <input id="controllable" type="checkbox" v-model="cabinet.controllable" />
                         <label for="controllable">allow users to turn cabinet on or off</label>
+                    </dd>
+                    <dt v-if="cabinet.outlet.type != 'none'">Power Cycle on Load</dt><dd v-if="cabinet.outlet.type != 'none'">
+                        <input id="power_cycle" type="checkbox" v-model="cabinet.power_cycle" />
+                        <label for="power_cycle">power cycle the cabinet when loading a new game</label>
                     </dd>
                 </dl>
                 <div class="update">

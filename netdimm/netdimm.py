@@ -266,6 +266,12 @@ class NetDimm:
             # set time limit to specified number of minutes.
             self.__set_time_limit(limit)
 
+    def wipe_current_game(self) -> None:
+        with self.connection():
+            # Wipe the CRC information and file size of the current game, so that on next
+            # reboot the cabinet will not attempt to CRC check or boot the game.
+            self.__upload(1, 0xffff0000, b"\0" * 32, False)
+
     def peek(self, addr: int, type: PeekPokeTypeEnum) -> int:
         with self.connection():
             return self.__host_peek(addr, type)

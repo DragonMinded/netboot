@@ -311,6 +311,18 @@ class Host:
             # Now, apply the CRC algorithm over it.
             return NetDimm.crc(data)
 
+    def wipe(self) -> None:
+        with self.__lock:
+            if self.__proc is not None:
+                # Host is actively transferring, can't do anything.
+                return
+
+            try:
+                netdimm = NetDimm(self.ip, version=self.version, timeout=5)
+                netdimm.wipe_current_game()
+            except NetDimmException:
+                pass
+
     def info(self) -> Optional[NetDimmInfo]:
         with self.__lock:
             if self.__proc is not None:

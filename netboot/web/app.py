@@ -76,6 +76,7 @@ def cabinet_to_dict(cab: Cabinet, dirmanager: DirectoryManager) -> Dict[str, Any
         'power_state': cab.power_state.value,
         'outlet': outlet,
         'time_hack': cab.time_hack,
+        'power_cycle': cab.power_cycle,
         'send_timeout': cab.send_timeout,
     }
 
@@ -438,6 +439,7 @@ def createcabinet(ip: str) -> Dict[str, Any]:
         version=NetDimmVersionEnum(request.json['version']),
         enabled=True,
         time_hack=request.json['time_hack'],
+        power_cycle=request.json['power_cycle'],
         send_timeout=request.json['send_timeout'] or None,
     )
     cabman.add_cabinet(new_cabinet)
@@ -577,6 +579,7 @@ def updateoutlet(ip: str) -> Dict[str, Any]:
         ip,
         outlet=config,
         controllable=bool(request.json['controllable']),
+        power_cycle=bool(request.json['power_cycle']),
     )
     serialize_app(app)
     return cabinet_to_dict(cabman.cabinet(ip), dirman)
