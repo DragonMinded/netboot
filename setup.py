@@ -2,7 +2,7 @@ import os
 from setuptools import setup
 
 
-VERSION = "0.5.1"
+VERSION = "0.5.2"
 
 
 if 'FULL_INSTALLATION' in os.environ:
@@ -27,8 +27,6 @@ if 'FULL_INSTALLATION' in os.environ:
             'netboot.web',
             'netboot.web.static',
             'netboot.web.templates',
-            # Outlet management package.
-            'outlet',
         ],
         install_requires=[
             req for req in open('requirements.txt').read().split('\n') if len(req) > 0
