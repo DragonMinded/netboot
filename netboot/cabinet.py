@@ -12,7 +12,7 @@ from naomi import NaomiSettingsPatcher
 from netdimm import NetDimmInfo, NetDimmException, NetDimmVersionEnum, NetDimmTargetEnum, CRCStatusEnum
 from netboot.hostutils import Host, HostStatusEnum, SettingsEnum
 from netboot.log import log
-from outlet import OutletInterface, ALL_OUTLET_CLASSES
+from smartoutlet import OutletInterface, ALL_OUTLET_CLASSES
 
 
 class CabinetException(Exception):

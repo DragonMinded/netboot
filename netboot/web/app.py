@@ -6,11 +6,11 @@ from functools import wraps
 from typing import Callable, Dict, List, Any, Optional, cast
 
 from flask import Flask, Response, request, render_template, make_response, jsonify as flask_jsonify
-from werkzeug.routing import PathConverter  # type: ignore
+from werkzeug.routing import PathConverter
 from netdimm import NetDimm, NetDimmVersionEnum, NetDimmTargetEnum
 from naomi import NaomiRomRegionEnum
 from netboot import Cabinet, CabinetRegionEnum, CabinetPowerStateEnum, CabinetManager, DirectoryManager, PatchManager, SRAMManager, SettingsManager
-from outlet import ALL_OUTLET_CLASSES
+from smartoutlet import ALL_OUTLET_CLASSES
 
 
 current_directory: str = os.path.abspath(os.path.dirname(__file__))
@@ -22,7 +22,7 @@ app = Flask(
 )
 
 
-class EverythingConverter(PathConverter):  # type: ignore
+class EverythingConverter(PathConverter):
     regex = '.*?'
 
 
@@ -52,6 +52,8 @@ def cabinet_to_dict(cab: Cabinet, dirmanager: DirectoryManager) -> Dict[str, Any
         outlet['read_community'] = "public"
     if 'write_community' not in outlet:
         outlet['write_community'] = "private"
+    if 'community' not in outlet:
+        outlet['community'] = "public"
     if 'username' not in outlet:
         outlet['username'] = "admin"
     if 'password' not in outlet:
@@ -439,7 +441,7 @@ def createcabinet(ip: str) -> Dict[str, Any]:
         version=NetDimmVersionEnum(request.json['version']),
         enabled=True,
         time_hack=request.json['time_hack'],
-        power_cycle=request.json['power_cycle'],
+        power_cycle=False,
         send_timeout=request.json['send_timeout'] or None,
     )
     cabman.add_cabinet(new_cabinet)
@@ -550,6 +552,24 @@ def updateoutlet(ip: str) -> Dict[str, Any]:
                 'outlet': outlet,
                 'read_community': read_community,
                 'write_community': write_community,
+            }
+    elif data.get('type') == 'np-02':
+        # NP-02 configuration.
+        try:
+            host = str(data['host']) if 'host' in data else None
+            outlet = int(data['outlet']) if 'outlet' in data else None
+            community = str(data['community']) if 'community' in data else None
+        except (TypeError, ValueError):
+            host = None
+            outlet = None
+            community = None
+
+        if host is not None and outlet is not None and community is not None:
+            config = {
+                'type': 'np-02',
+                'host': host,
+                'outlet': outlet,
+                'community': community,
             }
     elif data.get('type') == 'np-02b':
         # NP-02B configuration.

@@ -8,7 +8,7 @@ pillow
 PyYAML
 arcadeutils
 dragoncurses
-pysnmplib
+smartoutlet
 cachetools
 types-cachetools
 types-requests

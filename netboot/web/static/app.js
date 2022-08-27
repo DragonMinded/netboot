@@ -619,7 +619,7 @@ Vue.component('outletconfig', {
                     }
                 }
 
-                if (cabinet.outlet.type == 'np-02b') {
+                if (cabinet.outlet.type == 'np-02' || cabinet.outlet.type == 'np-02b') {
                     if (/^[1-2]$/.test(this.cabinet.outlet.outlet)) {
                         this.invalid_outlet = false;
                     } else {
@@ -675,8 +675,8 @@ Vue.component('outletconfig', {
                         <input v-model="cabinet.outlet.host" />
                         <span class="errorindicator" v-if="invalid_ip">invalid IP address</span>
                     </dd>
-                    <dt v-if="cabinet.outlet.type == 'ap7900' || cabinet.outlet.type =='np-02b'">Outlet Number</dt>
-                    <dd v-if="cabinet.outlet.type == 'ap7900' || cabinet.outlet.type =='np-02b'">
+                    <dt v-if="cabinet.outlet.type == 'ap7900' || cabinet.outlet.type =='np-02' || cabinet.outlet.type =='np-02b'">Outlet Number</dt>
+                    <dd v-if="cabinet.outlet.type == 'ap7900' || cabinet.outlet.type =='np-02' || cabinet.outlet.type =='np-02b'">
                         <input v-model="cabinet.outlet.outlet" />
                         <span class="errorindicator" v-if="invalid_outlet">invalid outlet</span>
                     </dd>
@@ -711,6 +711,10 @@ Vue.component('outletconfig', {
                     <dt v-if="cabinet.outlet.type == 'snmp' || cabinet.outlet.type == 'ap7900'">Write Community</dt>
                     <dd v-if="cabinet.outlet.type == 'snmp' || cabinet.outlet.type == 'ap7900'">
                         <input v-model="cabinet.outlet.write_community" />
+                    </dd>
+                    <dt v-if="cabinet.outlet.type == 'np-02'">Write Community</dt>
+                    <dd v-if="cabinet.outlet.type == 'np-02'">
+                        <input v-model="cabinet.outlet.community" />
                     </dd>
                     <dt v-if="cabinet.outlet.type == 'np-02b'">Username</dt>
                     <dd v-if="cabinet.outlet.type == 'np-02b'">
