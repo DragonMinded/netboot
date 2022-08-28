@@ -370,7 +370,7 @@ Vue.component('cabinetconfig', {
             }
         },
         refresh: function() {
-            axios.get('/cabinets/' + this.cabinet.ip).then(result => {
+            axios.get('/cabinets/' + this.cabinet.ip, {timeout: 975}).then(result => {
                 if (!result.data.error) {
                     this.info.status = result.data.status;
                     this.info.progress = result.data.progress;
@@ -555,7 +555,7 @@ Vue.component('outletconfig', {
             });
         },
         refresh: function() {
-            axios.get('/cabinets/' + this.cabinet.ip + '/power').then(result => {
+            axios.get('/cabinets/' + this.cabinet.ip + '/power', {timeout: 975}).then(result => {
                 if (!result.data.error) {
                     this.cabinet.power_state = result.data.power_state;
                 }
@@ -1047,7 +1047,7 @@ Vue.component('cabinetlist', {
     },
     methods: {
         refresh: function() {
-            axios.get('/cabinets').then(result => {
+            axios.get('/cabinets', {timeout: 975}).then(result => {
                 if (!result.data.error) {
                     if (this.allowRefresh) {
                         this.cabinets = result.data.cabinets;
@@ -1084,7 +1084,7 @@ Vue.component('roms', {
     },
     methods: {
         refresh: function() {
-            axios.get('/roms').then(result => {
+            axios.get('/roms', {timeout: 4975}).then(result => {
                 if (!result.data.error) {
                     this.roms = result.data.roms;
                 }
@@ -1134,7 +1134,7 @@ Vue.component('patches', {
     },
     methods: {
         refresh: function() {
-            axios.get('/patches').then(result => {
+            axios.get('/patches', {timeout: 4975}).then(result => {
                 if (!result.data.error) {
                     this.patches = result.data.patches;
                 }
@@ -1162,7 +1162,7 @@ Vue.component('srams', {
     },
     methods: {
         refresh: function() {
-            axios.get('/srams').then(result => {
+            axios.get('/srams', {timeout: 4975}).then(result => {
                 if (!result.data.error) {
                     this.srams = result.data.srams;
                 }
@@ -1190,7 +1190,7 @@ Vue.component('definitions', {
     },
     methods: {
         refresh: function() {
-            axios.get('/settings').then(result => {
+            axios.get('/settings', {timeout: 4975}).then(result => {
                 if (!result.data.error) {
                     this.settings = result.data.settings;
                 }
