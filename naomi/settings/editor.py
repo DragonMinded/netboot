@@ -198,7 +198,7 @@ class SettingsComponent(Component):
                     if i + 1 < len(self.__inputs):
                         self.__inputs[i + 1].focus = True
 
-    def __click_select(self, component: Component, button: str) -> bool:
+    def __click_select(self, component: Component, button: Buttons) -> bool:
         if button == Buttons.LEFT:
             if isinstance(component, ClickableSelectInputComponent):
                 if not component.visible:
