@@ -12,6 +12,7 @@ from dragoncurses.component import (
     ButtonComponent,
     BorderComponent,
     ListComponent,
+    TabComponent,
 )
 from dragoncurses.context import RenderContext, BoundingRectangle
 from dragoncurses.scene import Scene
@@ -33,111 +34,6 @@ from settings import Settings, ReadOnlyCondition
 class ClickableSelectInputComponent(ClickableComponent, SelectInputComponent):
     def __repr__(self) -> str:
         return "ClickableSelectInputComponent(selected={}, options={}, focused={})".format(repr(self.selected), repr(self.options), "True" if self.focus else "False")
-
-
-class TabComponent(Component):
-
-    def __init__(self, tabs: List[Tuple[str, Component]]) -> None:
-        super().__init__()
-        self.__buttons = [
-            ButtonComponent(
-                name,
-                formatted=True,
-                centered=True,
-            ).on_click(lambda component, button: self.__change_tab(component))
-            for name, _ in tabs
-        ]
-        self.__borders = [
-            BorderComponent(
-                component,
-                style=(
-                    BorderComponent.SINGLE if DragonCursesSettings.enable_unicode
-                    else BorderComponent.ASCII
-                ),
-            )
-            for _, component in tabs
-        ]
-        self.__tabs = tabs
-        self.__selected = 0
-        self.__drawn = False
-        self.__highlight()
-
-    def __highlight(self) -> None:
-        for i, button in enumerate(self.__buttons):
-            button.invert = i == self.__selected
-
-    def __change_tab(self, component: Component) -> bool:
-        for i, btn in enumerate(self.__buttons):
-            if btn is component:
-                self.__selected = i
-                self.__drawn = False
-                self.__highlight()
-
-                return True
-        return False
-
-    @property
-    def dirty(self) -> bool:
-        if not self.__drawn:
-            return True
-        for component in [*self.__buttons, *self.__borders]:
-            if component.dirty:
-                return True
-        return False
-
-    def attach(self, scene: "Scene", settings: Dict[str, Any]) -> None:
-        for component in [*self.__buttons, *self.__borders]:
-            component._attach(scene, settings)
-
-    def detach(self) -> None:
-        for component in [*self.__buttons, *self.__borders]:
-            component._detach()
-
-    def tick(self) -> None:
-        for component in [*self.__buttons, *self.__borders]:
-            component.tick()
-
-    def handle_input(self, event: "InputEvent") -> Union[bool, DeferredInput]:
-        if isinstance(event, KeyboardInputEvent):
-            if event.character == Keys.TAB:
-                self.__selected = (self.__selected + 1) % len(self.__buttons)
-                self.__drawn = False
-                self.__highlight()
-
-                return True
-
-        for component in [*self.__buttons, self.__borders[self.__selected]]:
-            if component._handle_input(event):
-                return True
-        return False
-
-    def render(self, context: RenderContext) -> None:
-        # Bookkeeping please!
-        self.__drawn = True
-        context.clear()
-
-        # First, draw the tab buttons.
-        for i, button in enumerate(self.__buttons):
-            button._render(
-                context,
-                BoundingRectangle(
-                    top=context.bounds.top,
-                    bottom=context.bounds.top + 3,
-                    left=context.bounds.left + (22 * i),
-                    right=context.bounds.left + (22 * i) + 21,
-                ),
-            )
-
-        # Now, draw the actual component that is selected.
-        self.__borders[self.__selected]._render(
-            context,
-            BoundingRectangle(
-                top=context.bounds.top + 3,
-                bottom=context.bounds.bottom,
-                left=context.bounds.left,
-                right=context.bounds.right,
-            ),
-        )
 
 
 class SettingsComponent(Component):
