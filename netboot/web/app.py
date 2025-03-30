@@ -22,13 +22,6 @@ app = Flask(
 )
 
 
-class EverythingConverter(PathConverter):
-    regex = '.*?'
-
-
-app.url_map.converters['filename'] = EverythingConverter
-
-
 def jsonify(func: Callable[..., Dict[str, Any]]) -> Callable[..., Response]:
     @wraps(func)
     def decoratedfunction(*args: Any, **kwargs: Any) -> Response:
@@ -141,7 +134,7 @@ def systemconfig() -> Response:
     )
 
 
-@app.route('/config/rom/<filename:filename>')
+@app.route('/config/rom/<path:filename>')
 def romconfig(filename: str) -> Response:
     dirman = app.config['DirectoryManager']
     directory, name = os.path.split(filename)
@@ -213,7 +206,7 @@ def roms() -> Dict[str, Any]:
     }
 
 
-@app.route('/roms/<filename:filename>', methods=['POST'])
+@app.route('/roms/<path:filename>', methods=['POST'])
 @jsonify
 def updaterom(filename: str) -> Dict[str, Any]:
     dirman = app.config['DirectoryManager']
@@ -248,7 +241,7 @@ def recalculateallpatches() -> Dict[str, Any]:
     return {}
 
 
-@app.route('/patches/<filename:filename>')
+@app.route('/patches/<path:filename>')
 @jsonify
 def applicablepatches(filename: str) -> Dict[str, Any]:
     patchman = app.config['PatchManager']
@@ -275,7 +268,7 @@ def applicablepatches(filename: str) -> Dict[str, Any]:
     }
 
 
-@app.route('/settings/<filename:filename>')
+@app.route('/settings/<path:filename>')
 @jsonify
 def applicablesettings(filename: str) -> Dict[str, Any]:
     settingsman = app.config['SettingsManager']
@@ -302,7 +295,7 @@ def applicablesettings(filename: str) -> Dict[str, Any]:
     }
 
 
-@app.route('/patches/<filename:filename>', methods=['DELETE'])
+@app.route('/patches/<path:filename>', methods=['DELETE'])
 def recalculateapplicablepatches(filename: str) -> Response:
     patchman = app.config['PatchManager']
     patchman.recalculate(filename)
@@ -344,7 +337,7 @@ def recalculateallsrams() -> Dict[str, Any]:
     return {}
 
 
-@app.route('/srams/<filename:filename>')
+@app.route('/srams/<path:filename>')
 @jsonify
 def applicablesrams(filename: str) -> Dict[str, Any]:
     sramman = app.config['SRAMManager']
@@ -371,7 +364,7 @@ def applicablesrams(filename: str) -> Dict[str, Any]:
     }
 
 
-@app.route('/srams/<filename:filename>', methods=['DELETE'])
+@app.route('/srams/<path:filename>', methods=['DELETE'])
 def recalculateapplicablesrams(filename: str) -> Response:
     sramman = app.config['SRAMManager']
     sramman.recalculate(filename)
