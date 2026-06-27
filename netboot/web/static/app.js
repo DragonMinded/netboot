@@ -40,7 +40,7 @@ Vue.component('state', {
         <span>
             <span v-if="status == 'turned_off'">turned off</span>
             <span v-if="status == 'startup' || status == 'wait_power_on'">waiting for cabinet</span>
-            <span v-if="status == 'disabled'">disabled</span>
+            <span v-if="status == 'disabled'">management disabled</span>
             <span v-if="status == 'wait_power_off'">running game</span>
             <span v-if="status == 'power_cycle'">rebooting cabinet</span>
             <span v-if="status == 'check_game'">verifying game crc</span>
@@ -103,6 +103,7 @@ Vue.component('cabinet', {
         <div class='cabinet'>
             <h3>{{ cabinet.description }}</h3>
             <dl>
+                <dt v-if="admin">IP Address</dt><dd v-if="admin">{{ cabinet.ip }}</dd>
                 <dt>Game</dt>
                 <dd>
                     <span v-if="!selecting">{{ cabinet.game }}</span>
