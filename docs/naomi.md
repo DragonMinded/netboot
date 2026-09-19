@@ -148,7 +148,7 @@ The maple command for reading/writing to the MIE EEPROM is `0x86`. A valid respo
 Send an `0x86` command with the subcommand `0x01` to schedule a read. The MIE will respond with a `0x87` response, subresponse `0x02` to say that it is reading. Then, loop while sending a normal status request (`0x01` command) until the bottom byte in the response is `0xFD`. While its still working, the bottom byte in the response will be `0xFC`. Once the MIE reports that it is done, issue a `0x03` subcommand to request the entire EEPROM. The response will be 128 bytes containing the entire EEPROM contents. So, for example:
 
 Send the following to the MIE:
-* `80000001XXXXXXXX0100208600000001` - Transfer descriptor with end of transfer bit set, one byte of data payload, with response to `0xXXXXXXXX` in memory. Send to address `0x20` (MIE) the command `0x86` subcommand `0x01` to start a read. The MIE will response with `0220008700000002` to acknowlege the read request.
+* `80000001XXXXXXXX0100208600000001` - Transfer descriptor with end of transfer bit set, one byte of data payload, with response to `0xXXXXXXXX` in memory. Send to address `0x20` (MIE) the command `0x86` subcommand `0x01` to start a read. The MIE will respond with `0220008700000002` to acknowledge the read request.
 
 Send the following to the MIE:
 * `80000000XXXXXXXX00002001` - Transfer descriptor with end of transfer bit set, zero bytes of data payload, with response to `0xXXXXXXXX` in memory. Send to address `0x20` the command `0x01` which is a standard status request. The MIE will respond with `002000FC` if it is still working or `002000FD` if it is done.
@@ -193,7 +193,7 @@ The MIE handles control input from the JVS interface along with all of the above
 
 Send the following to the MIE:
 
-* `80000001XXXXXXXX0100208600000015` - Transfer descriptor with end of transfer bit set, one byte of data payload, with response to `0xXXXXXXXX` in memory. Send to address `0x20` (MIE) the command `0x86` subcommand `0x15` to start a control read. The MIE will response with `0E200087YYYYYY16...` to acknowlege the control read request. The YY bits in the response as well as the next 13 words will contain various values representing pressed buttons as well as any analog controls. Test/Service are also in this bitmask.
+* `80000001XXXXXXXX0100208600000015` - Transfer descriptor with end of transfer bit set, one byte of data payload, with response to `0xXXXXXXXX` in memory. Send to address `0x20` (MIE) the command `0x86` subcommand `0x15` to start a control read. The MIE will respond with `0E200087YYYYYY16...` to acknowledge the control read request. The YY bits in the response as well as the next 13 words will contain various values representing pressed buttons as well as any analog controls. Test/Service are also in this bitmask.
 
 ## Making Force System Settings Hacks
 
